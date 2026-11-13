@@ -1,0 +1,7 @@
+node_modules/
+website/build/
+website/.docusaurus/
+website/.cache/
+*.tsbuildinfo
+npm-debug.log*
+.DS_Store
