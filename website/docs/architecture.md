@@ -9,7 +9,7 @@ description: 用一次任务理解 UI、Agent 与 Android / Linux 执行通道�
 
 沿用导读里的例子：读取 `items.csv`，整理数据，填入演示 App，把结果写到 `result.txt`。
 
-下面是计划实现的应用结构，代码将在后续章节逐步完成。
+第 1 章已跑通 React → Kotlin 的设备信息读取。下面的完整任务结构仍按后续章节逐步实现。
 
 ```text
 用户任务 → UI → Agent → 执行层

@@ -2,13 +2,16 @@
 
 面向 React / TypeScript 开发者，学习让 Agent 在 Android 手机上操作 App、处理文件和执行命令。
 
-教程站已上线；Android 应用尚未实现，应用开发章节按计划推进。
+教程站已上线，第 1 章的 React → Kotlin 设备信息示例已在 Android 模拟器中跑通。其余应用能力按章节推进。
 
 ## 阅读教程
 
 - [课程导读](https://kkkhs.github.io/pocketrun/)
 - [系统概览](https://kkkhs.github.io/pocketrun/architecture/)
 - [第 0 章：运行与发布教程站](https://kkkhs.github.io/pocketrun/chapter-0/)
+- [第 1 章：让界面调用 Kotlin](website/docs/chapter-1.md)
+
+Android 示例在 [`app/`](app/README.md)，与下面的教程站使用独立依赖。
 
 ## 本地运行
 

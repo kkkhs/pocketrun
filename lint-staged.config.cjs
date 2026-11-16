@@ -1,6 +1,10 @@
-// ponytail: check the whole tutorial site; split staged scopes when app code is added.
 module.exports = {
-  '*': () => [
+  '{app/**/*,.github/workflows/app.yml,.nvmrc,lint-staged.config.cjs}': () => [
+    'npm --prefix app run lint',
+    'npm --prefix app run typecheck',
+    'npm --prefix app test -- --runInBand',
+  ],
+  '{website/**/*,README.md,.github/workflows/pages.yml,.nvmrc,lint-staged.config.cjs}': () => [
     'npm --prefix website run test:toolchain',
     'npm --prefix website run typecheck',
     'npm --prefix website run build',

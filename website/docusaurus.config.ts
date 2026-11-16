@@ -53,6 +53,7 @@ const config: Config = {
       ],
     },
     prism: {
+      additionalLanguages: ['java', 'kotlin'],
       theme: prismThemes.github,
       darkTheme: prismThemes.dracula,
     },
