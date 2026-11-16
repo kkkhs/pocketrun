@@ -1,0 +1,54 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 620 380" role="img" aria-labelledby="pr-task-title pr-task-desc" class="pr-task-diagram">
+  <title id="pr-task-title">课程目标任务：从 CSV 到 App，再保存结果</title>
+  <desc id="pr-task-desc">计划中的完整任务分四步：Linux 文件工具读取 items.csv，命令整理数据，Android 工具填写演示 App，最后保存 result.txt 并检查结果。第1章仅完成设备信息读取，图中的完整任务将在后续章节实现。</desc>
+  <style>
+    .pr-task-diagram { --app: #2a78d6; --shell: #eb6834; --ink: var(--ifm-font-color-base, #1c1e21); --muted: var(--ifm-color-emphasis-700, #606770); --border: var(--ifm-color-emphasis-300, #dadde1); --panel: var(--ifm-background-surface-color, #fff); font-family: system-ui, -apple-system, "Segoe UI", sans-serif; }
+    html[data-theme="dark"] .pr-task-diagram { --app: #3987e5; --shell: #d95926; }
+    .pr-task-diagram .card { fill: var(--panel); stroke: var(--border); stroke-width: 1.5; }
+    .pr-task-diagram .edge { fill: none; stroke: var(--muted); stroke-width: 2; }
+    .pr-task-diagram .heading { fill: var(--ink); font-size: 25px; font-weight: 650; }
+    .pr-task-diagram .body { fill: var(--ink); font-size: 22px; }
+    .pr-task-diagram .label { fill: var(--muted); font-size: 19px; }
+  </style>
+  <defs>
+    <marker id="pr-task-arrow" markerWidth="9" markerHeight="8" refX="8" refY="4" orient="auto"><path d="M0 0 9 4 0 8Z" fill="var(--muted)"/></marker>
+  </defs>
+  <text x="20" y="29" class="label">课程目标 · 后续实现</text>
+  <path d="M270 111 H350" class="edge" marker-end="url(#pr-task-arrow)"/>
+  <path d="M475 167 V213" class="edge" marker-end="url(#pr-task-arrow)"/>
+  <path d="M350 269 H270" class="edge" marker-end="url(#pr-task-arrow)"/>
+  <g data-node="read">
+    <title>第一步：读取工作目录中的演示 CSV 文件。</title>
+    <rect x="20" y="55" width="250" height="112" rx="10" class="card"/>
+    <rect x="20" y="65" width="4" height="92" rx="2" fill="var(--app)"/>
+    <text x="42" y="92" class="heading">1  读取文件</text>
+    <text x="42" y="124" class="body">items.csv</text>
+    <text x="42" y="151" class="label">Linux 文件工具</text>
+  </g>
+  <g data-node="transform">
+    <title>第二步：使用命令整理演示数据。</title>
+    <rect x="350" y="55" width="250" height="112" rx="10" class="card"/>
+    <rect x="350" y="65" width="4" height="92" rx="2" fill="var(--app)"/>
+    <text x="372" y="92" class="heading">2  整理数据</text>
+    <text x="372" y="124" class="body">转换、检查</text>
+    <text x="372" y="151" class="label">Linux 命令</text>
+  </g>
+  <g data-node="operate">
+    <title>第三步：在目标虚拟屏里填写演示 App。</title>
+    <rect x="350" y="213" width="250" height="112" rx="10" class="card"/>
+    <rect x="350" y="223" width="4" height="92" rx="2" fill="var(--shell)"/>
+    <text x="372" y="250" class="heading">3  填写 App</text>
+    <text x="372" y="282" class="body">观察、输入</text>
+    <text x="372" y="309" class="label">Android 工具</text>
+  </g>
+  <g data-node="save">
+    <title>第四步：保存结果文件，供用户核对。</title>
+    <rect x="20" y="213" width="250" height="112" rx="10" class="card"/>
+    <rect x="20" y="223" width="4" height="92" rx="2" fill="var(--app)"/>
+    <text x="42" y="250" class="heading">4  保存结果</text>
+    <text x="42" y="282" class="body">result.txt</text>
+    <text x="42" y="309" class="label">Linux 文件工具</text>
+  </g>
+  <circle cx="28" cy="360" r="5" fill="var(--app)"/><text x="42" y="367" class="label">文件与命令</text>
+  <rect x="253" y="355" width="10" height="10" rx="2" fill="var(--shell)"/><text x="274" y="367" class="label">App 操作</text>
+</svg>

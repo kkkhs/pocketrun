@@ -6,22 +6,33 @@ description: 做一个按钮，把 Android 原生信息送回 React 界面。
 ---
 
 import deviceScreenshot from './assets/chapter-1-device.png';
+import beforeScreenshot from './assets/chapter-1-before.png';
+import NativeCallFlow from './assets/native-call-flow.svg';
+import figureStyles from '@site/src/css/tutorial-figures.module.css';
 
 这一章只做一件事：点击“检查设备”，显示 Android 版本、API Level、ABI 和当前 App UID。
 
-<img src={deviceScreenshot} alt="PocketRun 在 Android 模拟器中显示设备信息" width="280" />
+<div style={{display: 'flex', gap: '1.5rem', flexWrap: 'wrap', margin: '1.25rem 0'}}>
+  <figure style={{margin: 0, flex: '0 1 280px', minWidth: 0, maxWidth: '100%'}}>
+    <figcaption><strong>点击前</strong></figcaption>
+    <img src={beforeScreenshot} alt="点击前：按钮下方显示尚未读取设备信息" width="280" />
+  </figure>
+  <figure style={{margin: 0, flex: '0 1 280px', minWidth: 0, maxWidth: '100%'}}>
+    <figcaption><strong>调用成功后</strong></figcaption>
+    <img src={deviceScreenshot} alt="点击后：显示 Android 16、API 36、arm64-v8a 和 App UID" width="280" />
+  </figure>
+</div>
 
-这是本章实际运行画面的内容区域。UID 由 Android 分配，你的设备上不必是 `10150`。
+两张图来自同一次模拟器验证，均截取内容区域。UID 由 Android 分配，你的设备上不必是 `10150`。
 
 ## 一次点击怎么走
 
-```text
-React 按钮 → TurboModule → Kotlin → Android 系统
-    ↑                                    │
-    └─────── Promise 返回设备信息 ─────────┘
-```
-
-Codegen 在**构建期**根据 TypeScript 接口生成连接代码，不在每次点击时运行。
+<figure style={{margin: '1.25rem 0'}}>
+  <div style={{overflowX: 'auto'}} tabIndex={0} role="region" aria-label="原生调用的构建期与运行期流程图，可横向查看">
+    <NativeCallFlow className={`pr-native-diagram ${figureStyles.diagram}`} role="img" aria-labelledby="pr-native-title" aria-describedby="pr-native-desc" style={{display: 'block', width: '100%', minWidth: 600, height: 'auto'}} />
+  </div>
+  <figcaption>Codegen 在构建期生成接口；点击按钮时，调用的是已经接好的原生模块。</figcaption>
+</figure>
 
 React 负责显示和交互，Kotlin 读取系统信息。**调用原生方法不会改变 App 的身份**，也不会授予 shell 或 root 权限。
 

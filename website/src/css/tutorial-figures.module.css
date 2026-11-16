@@ -1,0 +1,14 @@
+.diagram {
+  --app: #2a78d6;
+  --shell: #eb6834;
+  --ink: var(--ifm-font-color-base);
+  --muted: var(--ifm-color-emphasis-700);
+  --border: var(--ifm-color-emphasis-300);
+  --panel: var(--ifm-background-surface-color);
+  font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
+}
+
+:global(html[data-theme='dark']) .diagram {
+  --app: #3987e5;
+  --shell: #d95926;
+}

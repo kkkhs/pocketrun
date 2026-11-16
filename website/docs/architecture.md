@@ -5,18 +5,21 @@ title: 一次任务如何在手机上执行
 description: 用一次任务理解 UI、Agent 与 Android / Linux 执行通道。
 ---
 
+import ExecutionDomains from './assets/execution-domains.svg';
+import figureStyles from '@site/src/css/tutorial-figures.module.css';
+
 ## 一次任务怎么走
 
 沿用导读里的例子：读取 `items.csv`，整理数据，填入演示 App，把结果写到 `result.txt`。
 
 第 1 章已跑通 React → Kotlin 的设备信息读取。下面的完整任务结构仍按后续章节逐步实现。
 
-```text
-用户任务 → UI → Agent → 执行层
-                         ├─ Android：观察、启动、操作 App
-                         └─ Linux：文件、命令
-执行结果 → Agent / UI → 用户检查
-```
+<figure style={{margin: '1.25rem 0'}}>
+  <div style={{overflowX: 'auto'}} tabIndex={0} role="region" aria-label="模块与权限架构图，可横向查看">
+    <ExecutionDomains className={`pr-domains-diagram ${figureStyles.diagram}`} role="img" aria-labelledby="pr-domains-title" aria-describedby="pr-domains-desc" style={{display: 'block', width: '100%', minWidth: 640, height: 'auto'}} />
+  </div>
+  <figcaption>上面看职责，下面看执行身份。宽图可横向查看；Agent 宿主仍需在对应章节验证。</figcaption>
+</figure>
 
 Agent 决定下一步做什么；执行层检查请求并执行。**模型提出动作，不授予权限。**
 

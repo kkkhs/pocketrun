@@ -6,6 +6,9 @@ title: 从这里开始
 description: 从一个手机任务出发，学习构建 Android AI 助手。
 ---
 
+import TaskFlow from './assets/task-flow.svg';
+import figureStyles from '@site/src/css/tutorial-figures.module.css';
+
 PocketRun 要把 Android 手机变成 Agent 的执行环境：操作 App、处理文件、执行命令，并把结果交给用户检查。
 
 这套教程面向熟悉 React / TypeScript 的开发者。我们会从 UI 开始，逐步接上 Android 原生能力和 Linux 命令环境。
@@ -16,7 +19,12 @@ PocketRun 要把 Android 手机变成 Agent 的执行环境：操作 App、处�
 
 > 读取工作目录里的 `items.csv`，整理数据，填入演示 App，再把处理结果保存到 `result.txt`。
 
-完成任务不只看一条“成功”消息，还要检查三件事：文件是否读对、App 是否填对、结果是否保存。
+<figure style={{margin: '1.25rem 0', maxWidth: 680}}>
+  <TaskFlow className={`pr-task-diagram ${figureStyles.diagram}`} role="img" aria-labelledby="pr-task-title" aria-describedby="pr-task-desc" style={{display: 'block', width: '100%', height: 'auto'}} />
+  <figcaption>这是后续章节要串起的完整任务。先分别做出每一段，再交给 Agent 调用。</figcaption>
+</figure>
+
+最后检查三件事：文件是否读对、App 是否填对、结果是否保存。
 
 **动作要有可观察的结果。** 后续每章都会给出运行步骤、通过条件和失败时的停止方式。
 
