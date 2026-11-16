@@ -1,0 +1,49 @@
+name: Check Android app
+
+on:
+  push:
+    branches: [main]
+    paths: ['app/**', '.nvmrc', '.github/workflows/app.yml', 'lint-staged.config.cjs']
+  pull_request:
+    branches: [main]
+    paths: ['app/**', '.nvmrc', '.github/workflows/app.yml', 'lint-staged.config.cjs']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  android:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: app
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7.0.1
+      - name: Setup Node
+        uses: actions/setup-node@v7.1.0
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+          cache-dependency-path: app/package-lock.json
+      - name: Setup Java
+        uses: actions/setup-java@v6.3.0
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: gradle
+          cache-dependency-path: |
+            app/android/**/*.gradle
+            app/android/gradle/wrapper/gradle-wrapper.properties
+      - name: Install dependencies
+        run: npm ci --registry=https://registry.npmjs.org
+      - name: Check TypeScript and lint
+        run: npm run typecheck && npm run lint
+      - name: Test UI states
+        run: npm test -- --runInBand
+      - name: Audit high-severity dependencies
+        run: npm audit --audit-level=high --registry=https://registry.npmjs.org
+      - name: Build Android debug APK
+        working-directory: app/android
+        run: ./gradlew :app:assembleDebug -PreactNativeArchitectures=arm64-v8a --max-workers=2 --no-daemon --console=plain
