@@ -8,13 +8,25 @@ import com.facebook.react.module.model.ReactModuleInfoProvider
 
 class DeviceInfoPackage : BaseReactPackage() {
   override fun getModule(name: String, reactContext: ReactApplicationContext): NativeModule? =
-      if (name == DeviceInfoModule.NAME) DeviceInfoModule(reactContext) else null
+      when (name) {
+        DeviceInfoModule.NAME -> DeviceInfoModule(reactContext)
+        AdbModule.NAME -> AdbModule(reactContext)
+        else -> null
+      }
 
   override fun getReactModuleInfoProvider() = ReactModuleInfoProvider {
     mapOf(
         DeviceInfoModule.NAME to ReactModuleInfo(
             DeviceInfoModule.NAME,
             DeviceInfoModule.NAME,
+            false,
+            false,
+            false,
+            true,
+        ),
+        AdbModule.NAME to ReactModuleInfo(
+            AdbModule.NAME,
+            AdbModule.NAME,
             false,
             false,
             false,

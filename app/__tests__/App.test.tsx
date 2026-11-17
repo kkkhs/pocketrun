@@ -9,6 +9,7 @@ jest.mock(
   'react-native-safe-area-context',
   () => require('react-native-safe-area-context/jest/mock').default,
 );
+jest.mock('../AdbPanel', () => 'AdbPanel');
 jest.mock('../specs/NativePocketRunDevice', () => ({
   __esModule: true,
   default: { getDeviceInfo: jest.fn() },
@@ -27,7 +28,7 @@ let screen: ReactTestRenderer.ReactTestRenderer;
 const button = () =>
   screen.root.find(
     node =>
-      node.props.accessibilityRole === 'button' &&
+      node.props.accessibilityLabel === '检查设备' &&
       typeof node.props.onPress === 'function',
   );
 

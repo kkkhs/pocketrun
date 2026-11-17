@@ -36,4 +36,10 @@ The Gradle wrapper is licensed under Apache License 2.0. Its full license is inc
 
 Generated Android resources retain any Android Open Source Project notices in their source files. Apache License 2.0 is also available at <https://www.apache.org/licenses/LICENSE-2.0>.
 
+## Embedded ADB client
+
+The chapter 2 ADB client includes source adapted from RikkaApps/Shizuku commit `b844bc491f1790c72328e1a8e5b2349f8978f0ea` under Apache License 2.0. The complete source provenance and local changes are in [`android/adb/UPSTREAM.md`](android/adb/UPSTREAM.md). Its license is at `android/adb/LICENSE` and is also packaged in the APK.
+
+Native and crypto dependencies keep their own licenses; the APK packages the relevant Shizuku, BoringSSL, Conscrypt, LLVM libc++ and Bouncy Castle notices under `android/adb/src/main/assets/third-party/`. They are not collectively relicensed as Apache-2.0.
+
 Other dependencies retain their own licenses in the installed packages. `android/app/debug.keystore` is the template's public development signing key, not a production signing credential.
