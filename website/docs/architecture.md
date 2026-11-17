@@ -1,6 +1,6 @@
 ---
-sidebar_position: 2
-sidebar_label: 系统概览
+sidebar_position: 90
+sidebar_label: 参考：系统概览
 title: 一次任务如何在手机上执行
 description: 用一次任务理解 UI、Agent 与 Android / Linux 执行通道。
 ---
@@ -12,7 +12,7 @@ import figureStyles from '@site/src/css/tutorial-figures.module.css';
 
 沿用导读里的例子：读取 `items.csv`，整理数据，填入演示 App，把结果写到 `result.txt`。
 
-第 1 章已跑通 React → Kotlin；第 2 章已完成 App 自有 ADB 配对、连接和 shell UID 检查。下面的完整任务结构仍按后续章节逐步实现。
+第 1 章已跑通 React → Kotlin；第 2 章取得本机 ADB 启动入口；第 3 章已启动 UID 2000 的 `app_process` 后端并交换 Binder。下面的手机控制与 Linux 结构仍按后续章节逐步实现。
 
 <figure style={{margin: '1.25rem 0'}}>
   <div style={{overflowX: 'auto'}} tabIndex={0} role="region" aria-label="模块与权限架构图，可横向查看">
@@ -37,9 +37,9 @@ React 的组件和状态管理经验可以复用。Kotlin 承接原生调用；�
 
 ### Android：操作 App
 
-第 2 章已经让应用通过自己的 ADB 连接，在用户确认无线调试授权后检查到 **shell UID 2000**。第 3 章会沿这条连接启动 shell 后端；实际身份和能力仍要在每台设备上检查。
+第 2 章让应用通过自己的 ADB 连接取得 shell 启动入口。第 3 章沿这条连接启动 `app_process` 后端，核对到 **shell UID 2000**，随后断开 ADB 仍能通过 typed Binder `ping`。
 
-普通应用通过 Binder 请求后端执行受约束的操作，再接收结构化结果。
+普通应用通过 Binder 请求后端执行受约束的操作，再接收结构化结果。实际身份和能力仍要在每台设备上检查。
 
 界面任务围绕 VirtualDisplay 和本次 `displayId` 组织：App 启动、输入、画面捕获与 UI 树读取都要对应目标显示，观察结果再交回 Agent。
 

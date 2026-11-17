@@ -8,12 +8,23 @@ export type AdbStatus = {
   uid: number;
 };
 
+export type BackendInfo = {
+  running: boolean;
+  uid: number;
+  pid: number;
+  reply: string;
+};
+
 export interface Spec extends TurboModule {
   pair(port: number, code: string): Promise<void>;
   connect(port: number): Promise<number>;
   probe(): Promise<number>;
   disconnect(): Promise<void>;
   getStatus(): Promise<AdbStatus>;
+  startBackend(): Promise<BackendInfo>;
+  pingBackend(): Promise<BackendInfo>;
+  stopBackend(): Promise<void>;
+  getBackendStatus(): Promise<BackendInfo>;
 }
 
 export default TurboModuleRegistry.get<Spec>('PocketRunAdb');

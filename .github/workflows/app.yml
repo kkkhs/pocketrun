@@ -46,4 +46,4 @@ jobs:
         run: npm audit --audit-level=high --registry=https://registry.npmjs.org
       - name: Build Android APKs and device test APK
         working-directory: app/android
-        run: ./gradlew :adb:testDebugUnitTest :app:assembleDebug :app:assembleRelease :app:assembleDebugAndroidTest -PreactNativeArchitectures=arm64-v8a --max-workers=2 --no-daemon --console=plain
+        run: ./gradlew :adb:testDebugUnitTest :app:testDebugUnitTest :app:assembleDebug :app:assembleRelease :app:assembleDebugAndroidTest -PreactNativeArchitectures=arm64-v8a --max-workers=2 --no-daemon --console=plain

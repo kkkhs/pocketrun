@@ -1,0 +1,56 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 820 600" role="img" aria-labelledby="pr-roadmap-title pr-roadmap-desc" class="pr-roadmap-diagram">
+  <title id="pr-roadmap-title">PocketRun 从界面桥接到 Agent 的四阶段学习路线</title>
+  <desc id="pr-roadmap-desc">第一阶段用前三章依次建立 React 到 Kotlin、App 自有 ADB、app_process Binder 后端。第二阶段在后端上加入虚拟屏和观察操作。第三阶段在普通 App 身份下加入文件、进程、PRoot 和 PTY。第四阶段把受约束工具接给 Agent，加入上下文、记忆和恢复。</desc>
+  <style>
+    .pr-roadmap-diagram { --app: #2a78d6; --shell: #eb6834; --ink: var(--ifm-font-color-base, #1c1e21); --muted: var(--ifm-color-emphasis-700, #606770); --border: var(--ifm-color-emphasis-300, #dadde1); --panel: var(--ifm-background-surface-color, #fff); font-family: system-ui, -apple-system, "Segoe UI", sans-serif; }
+    html[data-theme="dark"] .pr-roadmap-diagram { --app: #3987e5; --shell: #d95926; }
+    .pr-roadmap-diagram .card { fill: var(--panel); stroke: var(--border); stroke-width: 1.5; }
+    .pr-roadmap-diagram .edge { fill: none; stroke: var(--muted); stroke-width: 2; }
+    .pr-roadmap-diagram .heading { fill: var(--ink); font-size: 23px; font-weight: 650; }
+    .pr-roadmap-diagram .body { fill: var(--ink); font-size: 18px; }
+    .pr-roadmap-diagram .label { fill: var(--muted); font-size: 16px; }
+  </style>
+  <defs><marker id="pr-roadmap-arrow" markerWidth="9" markerHeight="8" refX="8" refY="4" orient="auto"><path d="M0 0 9 4 0 8Z" fill="var(--muted)"/></marker></defs>
+
+  <g data-phase="identity">
+    <rect x="20" y="20" width="780" height="136" rx="12" class="card"/>
+    <rect x="20" y="32" width="5" height="112" rx="2" fill="var(--app)"/>
+    <text x="45" y="57" class="heading">第一阶段 · 搭通两种身份</text>
+    <text x="45" y="88" class="label">每章只加一层，当前进行到这里</text>
+    <text x="45" y="126" class="body">1 React → Kotlin（App UID）</text>
+    <text x="308" y="126" class="body">2 App → ADB（启动钥匙）</text>
+    <text x="570" y="126" class="body">3 Binder → shell 后端</text>
+  </g>
+  <path d="M410 156 V184" class="edge" marker-end="url(#pr-roadmap-arrow)"/>
+
+  <g data-phase="android">
+    <rect x="20" y="184" width="780" height="102" rx="12" class="card"/>
+    <rect x="795" y="196" width="5" height="78" rx="2" fill="var(--shell)"/>
+    <text x="45" y="224" class="heading">第二阶段 · 看见并操作 Android App</text>
+    <text x="45" y="258" class="body">4 创建目标虚拟屏</text>
+    <text x="308" y="258" class="body">5 截图、UI 树与定向输入</text>
+    <text x="645" y="258" class="label">shell 后端</text>
+  </g>
+  <path d="M410 286 V314" class="edge" marker-end="url(#pr-roadmap-arrow)"/>
+
+  <g data-phase="linux">
+    <rect x="20" y="314" width="780" height="102" rx="12" class="card"/>
+    <rect x="20" y="326" width="5" height="78" rx="2" fill="var(--app)"/>
+    <text x="45" y="354" class="heading">第三阶段 · 处理文件和命令</text>
+    <text x="45" y="388" class="body">6 工作目录与进程管道</text>
+    <text x="335" y="388" class="body">7 PRoot / Alpine</text>
+    <text x="585" y="388" class="body">8 PTY 交互终端</text>
+  </g>
+  <path d="M410 416 V444" class="edge" marker-end="url(#pr-roadmap-arrow)"/>
+
+  <g data-phase="agent">
+    <rect x="20" y="444" width="780" height="136" rx="12" class="card"/>
+    <text x="45" y="484" class="heading">第四阶段 · 让 Agent 安全地使用工具</text>
+    <text x="45" y="522" class="body">9 工具契约与宿主</text>
+    <text x="280" y="522" class="body">10 单任务上下文</text>
+    <text x="520" y="522" class="body">11 真实 Agent 闭环</text>
+    <text x="45" y="558" class="body">12 跨任务记忆</text>
+    <text x="280" y="558" class="body">13 完整任务与恢复</text>
+    <text x="600" y="558" class="label">模型提议，执行层校验</text>
+  </g>
+</svg>

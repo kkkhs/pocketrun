@@ -10,6 +10,7 @@ jest.mock(
   () => require('react-native-safe-area-context/jest/mock').default,
 );
 jest.mock('../AdbPanel', () => 'AdbPanel');
+jest.mock('../BackendPanel', () => 'BackendPanel');
 jest.mock('../specs/NativePocketRunDevice', () => ({
   __esModule: true,
   default: { getDeviceInfo: jest.fn() },
