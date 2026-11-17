@@ -7,6 +7,7 @@ description: 从一个手机任务出发，学习构建 Android AI 助手。
 ---
 
 import TaskFlow from './assets/task-flow.svg';
+import CourseRoadmap from './assets/course-roadmap.svg';
 import figureStyles from '@site/src/css/tutorial-figures.module.css';
 
 PocketRun 要把 Android 手机变成 Agent 的执行环境：操作 App、处理文件、执行命令，并把结果交给用户检查。
@@ -28,21 +29,28 @@ PocketRun 要把 Android 手机变成 Agent 的执行环境：操作 App、处�
 
 **动作要有可观察的结果。** 后续每章都会给出运行步骤、通过条件和失败时的停止方式。
 
-## 从哪开始
+## 先沿一条主线走
 
-教程站和前两章已上线：第 1 章跑通 React → Kotlin，第 2 章完成 App 自有 ADB 配对、连接和 shell UID 检查。shell 后端、手机控制、Linux 和 Agent 能力按后续章节推进。
+前三章只解决一个问题：**普通 App 怎样得到一个可以安全调用的 shell 后端？**
 
-1. 读[系统概览](architecture.md)，了解 UI、Agent 和执行层的分工。
-2. [第 0 章](chapter-0.md)讲网站与更新流程。
-3. [第 1 章](chapter-1.md)做出第一个 Android App，并让 React 调用 Kotlin。
-4. [第 2 章](chapter-2.md)让 App 在系统无线调试中配对和连接。
+<figure style={{margin: '1.25rem 0'}}>
+  <div style={{overflowX: 'auto'}} tabIndex={0} role="region" aria-label="四阶段课程路线图，可横向查看">
+    <CourseRoadmap className={`pr-roadmap-diagram ${figureStyles.diagram}`} role="img" aria-labelledby="pr-roadmap-title" aria-describedby="pr-roadmap-desc" style={{display: 'block', width: '100%', minWidth: 660, height: 'auto'}} />
+  </div>
+  <figcaption>先搭通身份和通信，再增加手机控制、Linux，最后才接 Agent。</figcaption>
+</figure>
+
+按这个顺序开始：
+
+1. [第 1 章](chapter-1.md)：React 调 Kotlin，先看清普通 App UID。
+2. [第 2 章](chapter-2.md)：App 自己连接本机 ADB，拿到 shell 启动入口。
+3. [第 3 章](chapter-3.md)：用 ADB 启动后端，再改用 Binder 通信。
+
+[系统概览](architecture.md)是一张全局参考图，不必先读懂所有模块。[第 0 章](chapter-0.md)只讲教程站工程与发布，也不是 Android 主线的前置。
 
 <details>
-<summary>完整学习路线</summary>
+<summary>查看第 4—13 章</summary>
 
-- 第 1 章：React 调用 Kotlin，读取设备信息。
-- 第 2 章：App 自有 ADB 配对与连接。
-- 第 3 章：shell 后端与 Binder 通信。
 - 第 4 章：创建虚拟屏、启动演示 App。
 - 第 5 章：截图、UI 树与定向输入。
 - 第 6 章：工作目录与命令管道。
@@ -54,7 +62,7 @@ PocketRun 要把 Android 手机变成 Agent 的执行环境：操作 App、处�
 - 第 12 章：可查看、纠正和删除的记忆。
 - 第 13 章：完整任务与故障恢复。
 
-第 3—13 章尚未实现。UI、取消和资源清理会随每章一起完善。
+第 4—13 章尚未实现。每次只增加一层，并在引入资源的同一章验证取消、死亡和清理。
 
 </details>
 

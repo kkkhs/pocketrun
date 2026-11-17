@@ -1,5 +1,5 @@
 ---
-sidebar_position: 5
+sidebar_position: 3
 sidebar_label: 第 2 章：App 自有 ADB
 title: 第 2 章：让 App 自己连接 ADB
 description: 在 Android 无线调试中完成本机配对、连接、身份检查和断开。
@@ -11,6 +11,12 @@ import AdbPairConnectFlow from './assets/adb-pair-connect-flow.svg';
 import figureStyles from '@site/src/css/tutorial-figures.module.css';
 
 这一章完成一条真实链路：PocketRun 在系统无线调试中配对，连接本机 `adbd`，执行固定的 `id -u`，把 **shell UID 2000** 显示回 React 界面。
+
+**主线位置：** 上一章的普通 App UID → **本章：ADB 启动钥匙** → 下一章：`app_process` shell 后端与 Binder。
+
+普通 App 调多少次 Kotlin / JNI 都不会变成 shell。本章让 App 像电脑上的 `adb` 客户端一样，连接**同一台手机**的 `adbd`；电脑只用于开发安装，不在运行链路里。
+
+这条连接的用途不是长期传每个动作，而是让下一章能启动 UID 2000 的独立后端。
 
 <div style={{display: 'flex', gap: '1.5rem', flexWrap: 'wrap', margin: '1.25rem 0', alignItems: 'flex-start'}}>
   <figure style={{margin: 0, flex: '0 1 360px', minWidth: 0, maxWidth: '100%'}}>
@@ -68,9 +74,9 @@ app/
         └── AdbModule.kt             # 状态、超时、取消和固定探测命令
 ```
 
-### TypeScript 只声明五个动作
+### 第 2 章只声明五个动作
 
-`NativePocketRunAdb.ts` 是前端调用约定：
+`NativePocketRunAdb.ts` 在本章先加入下面五个动作；第 3 章会在同一模块上继续增加“启动后端”方法：
 
 ```ts
 export interface Spec extends TurboModule {

@@ -1,6 +1,6 @@
 ---
-sidebar_position: 3
-sidebar_label: 第 0 章：工程与发布
+sidebar_position: 91
+sidebar_label: 参考：工程与发布
 title: 第 0 章：运行与发布教程站
 description: 从现有仓库运行网站，检查修改，再通过 PR 发布一次更新。
 ---
@@ -48,8 +48,8 @@ npm run serve -- --host 127.0.0.1 --port 3000 --no-open
 
 现在检查页面：
 
-- 首页是导读，侧栏与前后篇导航能进入另外两篇。
-- 直接打开并刷新 `/pocketrun/architecture/`、`/pocketrun/chapter-0/`，页面正常。
+- 首页是导读，侧栏先列第 1—3 章主线，再列系统概览与工程发布参考。
+- 直接打开并刷新 `/pocketrun/chapter-3/`、`/pocketrun/architecture/`、`/pocketrun/chapter-0/`，页面正常。
 - CSS / JS 没有 404；切到手机宽度后，正文和导航可读，代码块不撑开整页。
 
 日常写作可以热更新：
@@ -109,7 +109,7 @@ PR 只运行检查，不上传 Pages 产物、不部署。合并到自己的 `ma
 
 1. PR 的检查通过，且没有部署步骤执行。
 2. 合并后的 Actions 完成部署。
-3. 首页和两篇深链能打开，手机宽度可读、静态资源正常。
+3. 首页、章节和参考页深链能打开，手机宽度可读、静态资源正常。
 4. 页面上确实出现本次新文案，再记录提交和 Actions 运行。
 
 **绿色状态不能代替页面验证。** 以自己的站点上出现新文案为准。

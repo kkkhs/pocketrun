@@ -1,5 +1,5 @@
 ---
-sidebar_position: 4
+sidebar_position: 2
 sidebar_label: 第 1 章：React 调用 Kotlin
 title: 第 1 章：让界面调用 Kotlin
 description: 做一个按钮，把 Android 原生信息送回 React 界面。
@@ -12,6 +12,10 @@ import NativeModuleLookup from './assets/native-module-lookup.svg';
 import figureStyles from '@site/src/css/tutorial-figures.module.css';
 
 这一章只做一件事：点击“检查设备”，显示 Android 版本、API Level、ABI 和当前 App UID。
+
+**主线位置：** React 界面 → **本章：Kotlin 原生模块（App UID）** → 下一章：经用户授权的 ADB 入口。
+
+现在不处理 shell 权限。先确认“界面能调用 Android，但调用后仍是普通 App 身份”。
 
 <div style={{display: 'flex', gap: '1.5rem', flexWrap: 'wrap', margin: '1.25rem 0'}}>
   <figure style={{margin: 0, flex: '0 1 280px', minWidth: 0, maxWidth: '100%'}}>

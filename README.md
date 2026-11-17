@@ -2,15 +2,16 @@
 
 面向 React / TypeScript 开发者，学习让 Agent 在 Android 手机上操作 App、处理文件和执行命令。
 
-教程站已上线：第 1 章跑通 React → Kotlin，第 2 章完成 App 自有无线 ADB 配对、连接和 shell UID 检查。其余应用能力按章节推进。
+教程站已上线：第 1 章跑通 React → Kotlin，第 2 章取得 App 自有 ADB 启动入口，第 3 章完成 UID 2000 的 `app_process` 后端与 Binder 通信。其余应用能力按章节推进。
 
 ## 阅读教程
 
 - [课程导读](https://kkkhs.github.io/pocketrun/)
-- [系统概览](https://kkkhs.github.io/pocketrun/architecture/)
-- [第 0 章：运行与发布教程站](https://kkkhs.github.io/pocketrun/chapter-0/)
 - [第 1 章：让界面调用 Kotlin](website/docs/chapter-1.md)
 - [第 2 章：让 App 自己连接 ADB](website/docs/chapter-2.md)
+- [第 3 章：启动 shell 后端](website/docs/chapter-3.md)
+- [参考：系统概览](https://kkkhs.github.io/pocketrun/architecture/)
+- [参考：运行与发布教程站](https://kkkhs.github.io/pocketrun/chapter-0/)
 
 Android 示例在 [`app/`](app/README.md)，与下面的教程站使用独立依赖。
 
