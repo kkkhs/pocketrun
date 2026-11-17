@@ -215,4 +215,4 @@ adb -s "$SERIAL" shell am instrument -w \
 
 ## 本章代码
 
-<!-- CHAPTER_3_PR -->
+- [PR #6：shell 后端、Binder 通信与第 3 章](https://github.com/kkkhs/pocketrun/pull/6)
