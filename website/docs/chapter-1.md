@@ -332,3 +332,4 @@ adb -s "$SERIAL" logcat -d -s PocketRunDevice:I '*:S'
 
 - [PR #2：设备信息原生模块与第 1 章](https://github.com/kkkhs/pocketrun/pull/2)
 - [PR #3：调用流程图与前后截图](https://github.com/kkkhs/pocketrun/pull/3)
+- [PR #4：模块注册、查找与前端联动说明](https://github.com/kkkhs/pocketrun/pull/4)
