@@ -8,6 +8,7 @@ description: 做一个按钮，把 Android 原生信息送回 React 界面。
 import deviceScreenshot from './assets/chapter-1-device.png';
 import beforeScreenshot from './assets/chapter-1-before.png';
 import NativeCallFlow from './assets/native-call-flow.svg';
+import NativeModuleLookup from './assets/native-module-lookup.svg';
 import figureStyles from '@site/src/css/tutorial-figures.module.css';
 
 这一章只做一件事：点击“检查设备”，显示 Android 版本、API Level、ABI 和当前 App UID。
@@ -154,9 +155,11 @@ export interface Spec extends TurboModule {
 export default TurboModuleRegistry.get<Spec>('PocketRunDevice');
 ```
 
-`package.json` 的 `codegenConfig` 指向 `specs/`。Gradle 构建时生成 `NativePocketRunDeviceSpec`，Kotlin 实现继承它。生成文件留在 `build/`，不手改、不提交。
+这个文件做两件事：`Spec` 描述方法和返回值；最后一行按名字取得原生模块。前端 import 的默认值，就是最后一行的结果。
 
-这里用 `get` 而不是 `getEnforcing`：模块缺失时拿到 `null`，按钮可以显示错误；不会在页面加载前直接抛错。
+**Android 不会在点击时读取这个 `.ts` 文件。** 构建时，Codegen 按 `package.json` 中的 `codegenConfig` 生成 `NativePocketRunDeviceSpec` 等接口；运行时，手机执行编译后的 JavaScript 和原生代码。
+
+生成文件留在 `build/`，不手改、不提交。这里用 `get`：找不到模块时返回 `null`，由页面显示错误；顶层 `getEnforcing` 则会直接抛错。
 
 ### Kotlin 读取系统信息
 
@@ -174,9 +177,62 @@ val result = Arguments.createMap().apply {
 promise.resolve(result)
 ```
 
-`DeviceInfoPackage` 把名字 `PocketRunDevice` 对应到这个实现，`MainApplication` 把 Package 加入列表。三个位置的名称必须一致。
+### 启动时，先把模块登记好
 
-React 只需等待结果：
+Kotlin 类写好后，RN 还不知道去哪里找它。`MainApplication.kt` 在创建 ReactHost 时加入我们的 Package：
+
+```kotlin
+PackageList(this).packages.apply {
+  add(DeviceInfoPackage())
+}
+```
+
+Package 像一份模块目录，向 RN 提供两样东西：
+
+| 方法 | 告诉 RN 什么 |
+| --- | --- |
+| `getReactModuleInfoProvider()` | 我提供名为 `PocketRunDevice` 的 TurboModule |
+| `getModule(name, context)` | 请求这个名字时，返回 `DeviceInfoModule` 实例 |
+
+当前创建方法很短：
+
+```kotlin
+override fun getModule(name: String, reactContext: ReactApplicationContext): NativeModule? =
+    if (name == DeviceInfoModule.NAME) DeviceInfoModule(reactContext) else null
+```
+
+其中 `DeviceInfoModule.NAME` 的值是 `"PocketRunDevice"`。RN 管理模块的创建和复用，不需要页面每点一次就创建一个 Kotlin 对象。
+
+### 前端按名字拿到代理
+
+<figure style={{margin: '1.25rem 0'}}>
+  <div style={{overflowX: 'auto'}} tabIndex={0} role="region" aria-label="原生模块注册与按名查找图，可横向查看">
+    <NativeModuleLookup className={`pr-lookup-diagram ${figureStyles.diagram}`} role="img" aria-labelledby="pr-lookup-title" aria-describedby="pr-lookup-desc" style={{display: 'block', width: '100%', minWidth: 640, height: 'auto'}} />
+  </div>
+  <figcaption>先登记名字和提供方法，再按名字查找。图中的目录与缓存由 React Native 管理。</figcaption>
+</figure>
+
+`App.tsx` 的 import 会执行接口文件中的默认导出：
+
+```ts
+import NativePocketRunDevice from './specs/NativePocketRunDevice';
+// 默认导出执行：TurboModuleRegistry.get<Spec>('PocketRunDevice')
+```
+
+RN 根据 `PocketRunDevice` 找到 Package，再取得原生实例。JS 拿到的是**可调用代理**，不是 Kotlin 对象本身，也不是一份 `Spec` 类型。
+
+需要对应的是运行时注册名，不是所有类名、文件名：
+
+| 名称 | 用途 |
+| --- | --- |
+| `PocketRunDevice` | JS 查找名、Package 登记名、原生模块名，三者必须对应 |
+| `DeviceInfoModule` / `DeviceInfoPackage` | Kotlin 类名，分别负责实现和提供模块 |
+| `NativePocketRunDeviceSpec` | Codegen 生成的基类，供 Kotlin 继承 |
+| `PocketRunSpecs` | Codegen 库名，用于组织生成文件，不是查找键 |
+
+### 点击后，结果怎样回到界面
+
+按钮调用代理上的 `getDeviceInfo()`，最终进入 Kotlin 的同名方法。`promise.resolve(result)` 会使 JS 的 Promise 完成，然后 React 更新界面：
 
 ```ts
 if (!NativePocketRunDevice) {
@@ -186,7 +242,9 @@ const info = await NativePocketRunDevice.getDeviceInfo();
 setInfo(info);
 ```
 
-完整实现还处理加载、失败和重试：加载时禁用按钮，失败时显示错误，重试成功后清掉旧错误。没有为了演示加载效果加入人工延时。
+加载时禁用按钮，失败时显示错误，重试成功后清掉旧错误。
+
+若提示模块未注册，先检查 Package 是否加入、注册名是否对应。修改 Spec 或 Kotlin 后要重新构建并安装 APK；只刷新 Metro 不会更新原生代码。
 
 ## 构建并实际点一次
 
@@ -269,3 +327,8 @@ adb -s "$SERIAL" logcat -d -s PocketRunDevice:I '*:S'
 练习：沿着这五个文件找出按钮、接口、Kotlin 实现和注册位置。下一章将引入 ADB；届时要区分普通 App 身份和 shell 后端身份。
 
 参考：[原生模块](https://reactnative.dev/docs/turbo-native-modules-introduction)、[Codegen](https://reactnative.dev/docs/the-new-architecture/using-codegen)、[Android 开发环境](https://reactnative.dev/docs/set-up-your-environment)。
+
+## 本章代码
+
+- [PR #2：设备信息原生模块与第 1 章](https://github.com/kkkhs/pocketrun/pull/2)
+- [PR #3：调用流程图与前后截图](https://github.com/kkkhs/pocketrun/pull/3)
