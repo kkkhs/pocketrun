@@ -1,0 +1,62 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 490" role="img" aria-labelledby="pr-lookup-title pr-lookup-desc" class="pr-lookup-diagram">
+  <title id="pr-lookup-title">先登记原生模块，再由前端按名字查找</title>
+  <desc id="pr-lookup-desc">启动ReactHost时，MainApplication加入DeviceInfoPackage，React Native读取其元数据，把PocketRunDevice这个名字关联到模块提供方法。前端导入TypeScript模块时执行TurboModuleRegistry.get，React Native按名字查找，必要时调用Package.getModule取得DeviceInfoModule，并向JavaScript返回代理；已创建的实例由React Native管理和复用。按钮之后通过代理调用getDeviceInfo，而不是重新读取Spec源文件。</desc>
+  <style>
+    .pr-lookup-diagram .card { fill: var(--panel); stroke: var(--border); stroke-width: 1.5; }
+    .pr-lookup-diagram .edge { fill: none; stroke: var(--muted); stroke-width: 2; }
+    .pr-lookup-diagram .heading { fill: var(--ink); font-size: 21px; font-weight: 650; }
+    .pr-lookup-diagram .body { fill: var(--ink); font-size: 19px; }
+    .pr-lookup-diagram .label { fill: var(--muted); font-size: 18px; }
+  </style>
+  <defs>
+    <marker id="pr-lookup-arrow" markerWidth="9" markerHeight="8" refX="8" refY="4" orient="auto"><path d="M0 0 9 4 0 8Z" fill="var(--muted)"/></marker>
+  </defs>
+  <text x="20" y="30" class="heading">① 启动 ReactHost：登记可用模块</text>
+  <path d="M250 118 H285" class="edge" marker-end="url(#pr-lookup-arrow)"/>
+  <path d="M515 118 H550" class="edge" marker-end="url(#pr-lookup-arrow)"/>
+  <path d="M665 174 V206 Q665 214 657 214 H408 Q400 214 400 222 V278" class="edge" stroke-dasharray="6 5" marker-end="url(#pr-lookup-arrow)"/>
+  <text x="462" y="203" class="label">查找时读取这份目录</text>
+  <g data-node="application">
+    <rect x="20" y="62" width="230" height="112" rx="10" class="card"/>
+    <text x="38" y="100" class="heading">MainApplication</text>
+    <text x="38" y="132" class="body">加入 Package</text>
+    <text x="38" y="160" class="label">交给 ReactHost</text>
+  </g>
+  <g data-node="package">
+    <rect x="285" y="62" width="230" height="112" rx="10" class="card"/>
+    <text x="303" y="100" class="heading">DeviceInfoPackage</text>
+    <text x="303" y="132" class="body">提供模块元数据</text>
+    <text x="303" y="160" class="label">提供 getModule()</text>
+  </g>
+  <g data-node="registry">
+    <rect x="550" y="62" width="230" height="112" rx="10" class="card"/>
+    <text x="568" y="100" class="heading">RN 的模块目录</text>
+    <text x="568" y="132" class="body">PocketRunDevice</text>
+    <text x="568" y="160" class="label">名字 → 模块提供者</text>
+  </g>
+  <text x="20" y="252" class="heading">② 前端 import：按名字取得代理</text>
+  <path d="M250 334 H285" class="edge" marker-end="url(#pr-lookup-arrow)"/>
+  <path d="M515 334 H550" class="edge" marker-end="url(#pr-lookup-arrow)"/>
+  <path d="M665 390 V418 Q665 426 657 426 H143 Q135 426 135 418 V390" class="edge" marker-end="url(#pr-lookup-arrow)"/>
+  <g data-node="lookup">
+    <rect x="20" y="278" width="230" height="112" rx="10" class="card"/>
+    <text x="38" y="316" class="heading">JS：Registry.get</text>
+    <text x="38" y="348" class="body">PocketRunDevice</text>
+    <text x="38" y="376" class="label">Spec 只提供类型约定</text>
+  </g>
+  <g data-node="resolve">
+    <rect x="285" y="278" width="230" height="112" rx="10" class="card"/>
+    <text x="303" y="316" class="heading">RN 按名字查找</text>
+    <text x="303" y="348" class="body">调用 Package</text>
+    <text x="303" y="376" class="label">已有实例则复用</text>
+  </g>
+  <g data-node="native">
+    <rect x="550" y="278" width="230" height="112" rx="10" class="card"/>
+    <rect x="550" y="288" width="4" height="92" rx="2" fill="var(--app)"/>
+    <text x="568" y="316" class="heading">DeviceInfoModule</text>
+    <text x="568" y="348" class="body">真正的 Kotlin 实现</text>
+    <text x="568" y="376" class="label">包含 getDeviceInfo()</text>
+  </g>
+  <text x="400" y="454" class="body" text-anchor="middle">向 JS 返回可调用代理；找不到模块则返回 null</text>
+  <text x="400" y="481" class="label" text-anchor="middle">按钮调用代理方法后，Promise 把 Kotlin 的结果送回 React。</text>
+</svg>
