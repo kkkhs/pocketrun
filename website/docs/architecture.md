@@ -12,7 +12,7 @@ import figureStyles from '@site/src/css/tutorial-figures.module.css';
 
 沿用导读里的例子：读取 `items.csv`，整理数据，填入演示 App，把结果写到 `result.txt`。
 
-第 1 章已跑通 React → Kotlin 的设备信息读取。下面的完整任务结构仍按后续章节逐步实现。
+第 1 章已跑通 React → Kotlin；第 2 章已完成 App 自有 ADB 配对、连接和 shell UID 检查。下面的完整任务结构仍按后续章节逐步实现。
 
 <figure style={{margin: '1.25rem 0'}}>
   <div style={{overflowX: 'auto'}} tabIndex={0} role="region" aria-label="模块与权限架构图，可横向查看">
@@ -37,7 +37,7 @@ React 的组件和状态管理经验可以复用。Kotlin 承接原生调用；�
 
 ### Android：操作 App
 
-应用通过自己的 ADB 连接，在设备用户确认调试授权后启动 shell 后端。量产设备上通常是 **shell UID 2000**，实际身份和能力仍要在设备上检查。
+第 2 章已经让应用通过自己的 ADB 连接，在用户确认无线调试授权后检查到 **shell UID 2000**。第 3 章会沿这条连接启动 shell 后端；实际身份和能力仍要在每台设备上检查。
 
 普通应用通过 Binder 请求后端执行受约束的操作，再接收结构化结果。
 

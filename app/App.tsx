@@ -13,6 +13,7 @@ import {
   SafeAreaProvider,
   useSafeAreaInsets,
 } from 'react-native-safe-area-context';
+import AdbPanel from './AdbPanel';
 import NativePocketRunDevice, {
   type DeviceInfo,
 } from './specs/NativePocketRunDevice';
@@ -75,6 +76,7 @@ function DeviceScreen() {
 
         <Pressable
           accessibilityRole="button"
+          accessibilityLabel="检查设备"
           accessibilityState={{ disabled: loading, busy: loading }}
           disabled={loading}
           onPress={readDeviceInfo}
@@ -122,6 +124,7 @@ function DeviceScreen() {
         <Text style={[styles.description, { color: colors.muted }]}>
           UID 是当前应用进程的身份。原生桥接不会让应用获得 shell 或 root 权限。
         </Text>
+        <AdbPanel colors={colors} />
       </ScrollView>
     </View>
   );

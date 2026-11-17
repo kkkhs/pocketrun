@@ -30,11 +30,12 @@ PocketRun 要把 Android 手机变成 Agent 的执行环境：操作 App、处�
 
 ## 从哪开始
 
-教程站已上线；第 1 章的设备信息按钮已完成本地构建与模拟器验证。手机控制、Linux 和 Agent 能力按后续章节推进。
+教程站和前两章已上线：第 1 章跑通 React → Kotlin，第 2 章完成 App 自有 ADB 配对、连接和 shell UID 检查。shell 后端、手机控制、Linux 和 Agent 能力按后续章节推进。
 
 1. 读[系统概览](architecture.md)，了解 UI、Agent 和执行层的分工。
 2. [第 0 章](chapter-0.md)讲网站与更新流程。
-3. 从[第 1 章](chapter-1.md)开始，做出第一个 Android App。
+3. [第 1 章](chapter-1.md)做出第一个 Android App，并让 React 调用 Kotlin。
+4. [第 2 章](chapter-2.md)让 App 在系统无线调试中配对和连接。
 
 <details>
 <summary>完整学习路线</summary>
@@ -53,7 +54,7 @@ PocketRun 要把 Android 手机变成 Agent 的执行环境：操作 App、处�
 - 第 12 章：可查看、纠正和删除的记忆。
 - 第 13 章：完整任务与故障恢复。
 
-第 2—13 章尚未实现。UI、取消和资源清理会随每章一起完善。
+第 3—13 章尚未实现。UI、取消和资源清理会随每章一起完善。
 
 </details>
 
