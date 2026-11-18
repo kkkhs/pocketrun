@@ -1,0 +1,72 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 610" role="img" aria-labelledby="pr-vd-title pr-vd-desc" class="pr-vd-diagram">
+  <title id="pr-vd-title">从 TypeScript 到 shell 后端创建 VirtualDisplay 并启动 Demo Activity</title>
+  <desc id="pr-vd-desc">React TypeScript 界面通过 TurboModule 调用同一 App 进程里的 Kotlin AdbModule。Kotlin 通过 Binder 调用 UID 2000 的 shell 后端。后端创建 ImageReader 和 Surface，再创建带 displayId 的 VirtualDisplay，并用固定 am start --display 命令把 Demo Activity 启动到该显示。释放时后端先释放 VirtualDisplay，再关闭 ImageReader；旧 displayId 失效。</desc>
+  <style>
+    .pr-vd-diagram { --app: #2a78d6; --shell: #eb6834; --ink: var(--ifm-font-color-base, #1c1e21); --muted: var(--ifm-color-emphasis-700, #606770); --border: var(--ifm-color-emphasis-300, #dadde1); --panel: var(--ifm-background-surface-color, #fff); font-family: system-ui, -apple-system, "Segoe UI", sans-serif; }
+    html[data-theme="dark"] .pr-vd-diagram { --app: #3987e5; --shell: #d95926; }
+    .pr-vd-diagram .card { fill: var(--panel); stroke: var(--border); stroke-width: 1.5; }
+    .pr-vd-diagram .edge { fill: none; stroke: var(--muted); stroke-width: 2; }
+    .pr-vd-diagram .heading { fill: var(--ink); font-size: 22px; font-weight: 650; }
+    .pr-vd-diagram .body { fill: var(--ink); font-size: 18px; }
+    .pr-vd-diagram .label { fill: var(--muted); font-size: 16px; }
+  </style>
+  <defs><marker id="pr-vd-arrow" markerWidth="9" markerHeight="8" refX="8" refY="4" orient="auto"><path d="M0 0 9 4 0 8Z" fill="var(--muted)"/></marker></defs>
+
+  <text x="22" y="31" class="heading">调用路径</text>
+  <text x="134" y="31" class="label">语言层和进程边界分开看</text>
+  <g data-node="ts">
+    <rect x="22" y="58" width="190" height="104" rx="10" class="card"/>
+    <text x="44" y="98" class="heading">React / TS</text>
+    <text x="44" y="132" class="body">按钮与状态</text>
+  </g>
+  <path d="M212 110 H260" class="edge" marker-end="url(#pr-vd-arrow)"/>
+  <text x="236" y="96" class="label" text-anchor="middle">TurboModule</text>
+  <g data-node="app-kotlin">
+    <rect x="260" y="58" width="220" height="104" rx="10" class="card"/>
+    <rect x="260" y="68" width="4" height="84" rx="2" fill="var(--app)"/>
+    <text x="282" y="98" class="heading">App Kotlin</text>
+    <text x="282" y="132" class="body">App UID · Binder proxy</text>
+  </g>
+  <path d="M480 110 H528" class="edge" marker-end="url(#pr-vd-arrow)"/>
+  <text x="504" y="96" class="label" text-anchor="middle">Binder</text>
+  <g data-node="backend">
+    <rect x="528" y="58" width="350" height="104" rx="10" class="card"/>
+    <rect x="874" y="68" width="4" height="84" rx="2" fill="var(--shell)"/>
+    <text x="550" y="98" class="heading">shell 后端 Kotlin</text>
+    <text x="550" y="132" class="body">app_process · UID 2000 · 资源所有者</text>
+  </g>
+
+  <path d="M703 162 V214" class="edge" marker-end="url(#pr-vd-arrow)"/>
+  <text x="720" y="193" class="label">createDemoDisplay()</text>
+  <g data-node="reader">
+    <rect x="528" y="214" width="350" height="112" rx="10" class="card"/>
+    <text x="550" y="253" class="heading">ImageReader</text>
+    <text x="550" y="287" class="body">720 × 1280 · RGBA · Surface</text>
+  </g>
+  <path d="M528 270 H470" class="edge" marker-end="url(#pr-vd-arrow)"/>
+  <text x="499" y="256" class="label" text-anchor="middle">Surface</text>
+  <g data-node="display">
+    <rect x="150" y="214" width="320" height="112" rx="10" class="card"/>
+    <text x="172" y="253" class="heading">VirtualDisplay</text>
+    <text x="172" y="287" class="body">OWN_CONTENT_ONLY · displayId &gt; 0</text>
+  </g>
+  <path d="M310 326 V382" class="edge" marker-end="url(#pr-vd-arrow)"/>
+  <text x="328" y="359" class="label">固定 am start --display</text>
+  <g data-node="demo">
+    <rect x="150" y="382" width="320" height="112" rx="10" class="card"/>
+    <text x="172" y="421" class="heading">DisplayDemoActivity</text>
+    <text x="172" y="455" class="body">task 属于同一个 displayId</text>
+  </g>
+
+  <path d="M470 438 H620" class="edge" stroke-dasharray="6 5" marker-end="url(#pr-vd-arrow)"/>
+  <g data-node="result">
+    <rect x="620" y="382" width="258" height="112" rx="10" class="card"/>
+    <text x="642" y="421" class="heading">返回 App</text>
+    <text x="642" y="455" class="body">{ active, displayId }</text>
+  </g>
+
+  <text x="22" y="548" class="heading">释放路径</text>
+  <path d="M150 574 H878" class="edge" marker-end="url(#pr-vd-arrow)"/>
+  <text x="514" y="568" class="body" text-anchor="middle">releaseDisplay() → VirtualDisplay.release() → ImageReader.close() → displayId = -1</text>
+  <text x="450" y="604" class="label" text-anchor="middle">演示 Activity 拒绝回落到默认屏；旧 ID 不再出现在系统显示列表。</text>
+</svg>

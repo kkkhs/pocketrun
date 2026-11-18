@@ -36,20 +36,18 @@ npm ci --registry=https://registry.npmjs.org
 npm run test:toolchain
 npm run typecheck
 npm run build
-npm audit --audit-level=high --registry=https://registry.npmjs.org
+npm run audit:ci
 npm run serve -- --host 127.0.0.1 --port 3000 --no-open
 ```
 
-前四项检查分别覆盖工具链、TypeScript、MDX / 链接和高危依赖，都应退出 `0`。任一项失败，先排错再提交。
-
-现有审计仍显示 5 个 low 条目，官方记录和安装警告见下方折叠说明。
+前四项检查分别覆盖工具链、TypeScript、MDX / 链接和依赖审计策略，都应退出 `0`。`audit:ci` 仍阻止所有未豁免的 high / critical 公告；当前唯一临时例外、截止日期和适用边界见下方折叠说明。任一项失败，先排错再提交。
 
 构建产物在 `website/build/`。打开 `http://127.0.0.1:3000/pocketrun/`；按 `Ctrl+C` 结束预览。端口被占用时换一个空闲端口。
 
 现在检查页面：
 
-- 首页是导读，侧栏先列第 1—3 章主线，再列系统概览与工程发布参考。
-- 直接打开并刷新 `/pocketrun/chapter-3/`、`/pocketrun/architecture/`、`/pocketrun/chapter-0/`，页面正常。
+- 首页是导读，侧栏先列第 1—4 章主线，再列系统概览与工程发布参考。
+- 直接打开并刷新 `/pocketrun/chapter-4/`、`/pocketrun/architecture/`、`/pocketrun/chapter-0/`，页面正常。
 - CSS / JS 没有 404；切到手机宽度后，正文和导航可读，代码块不撑开整页。
 
 日常写作可以热更新：
@@ -87,7 +85,7 @@ cd website
 npm run test:toolchain
 npm run typecheck
 npm run build
-npm audit --audit-level=high --registry=https://registry.npmjs.org
+npm run audit:ci
 cd ..
 git status
 git diff --check
@@ -163,6 +161,15 @@ PR 只运行检查，不上传 Pages 产物、不部署。合并到自己的 `ma
 
 npm 11 可能提示 `@swc/core`、`core-js`、`fsevents` 的 `allow-scripts` 警告。默认情况下，未审查脚本仍可运行；警告不表示已阻止执行。需要调整策略时，逐项核对脚本用途。
 
+2026-11-18，npm 新增 [GHSA-fc5q-39xc-vjpf](https://github.com/advisories/GHSA-fc5q-39xc-vjpf)：所有已发布 picomatch 版本（截至 4.0.7）都被标为 high，且暂无修复版本。触发条件是把攻击者控制的 repeated-extglob **pattern** 交给 picomatch；PocketRun 只在构建 / 测试工具中使用仓库固定的 glob pattern，不接受远程 pattern 输入。
+
+`scripts/audit-ci.cjs` 因此只临时排除这一条精确 source / URL / range，仍会阻止任何其他 high / critical 根公告；公告字段变化也会失败。例外在 **2026-12-18** 自动过期，届时必须重新检查修复版本，不能永久静默忽略。原始 `npm audit` 仍可用于查看全部传播节点。
+
 </details>
 
 从空目录搭同类网站可参考[Docusaurus 官方安装指南](https://docusaurus.io/docs/installation)；本项目使用 classic TypeScript 模板。另见[TypeScript 支持](https://docusaurus.io/docs/typescript-support)、[部署与 baseUrl](https://docusaurus.io/docs/deployment)、[GitHub Pages 工作流](https://docs.github.com/en/pages/getting-started-with-github-pages/using-custom-workflows-with-github-pages)。
+
+## 本章代码
+
+- [PR #1：教程阅读与发布流程](https://github.com/kkkhs/pocketrun/pull/1)
+- [Release `chapter-0`：本章结束时的源码快照](https://github.com/kkkhs/pocketrun/releases/tag/chapter-0)

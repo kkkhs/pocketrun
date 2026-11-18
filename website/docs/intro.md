@@ -45,13 +45,13 @@ PocketRun 要把 Android 手机变成 Agent 的执行环境：操作 App、处�
 1. [第 1 章](chapter-1.md)：React 调 Kotlin，先看清普通 App UID。
 2. [第 2 章](chapter-2.md)：App 自己连接本机 ADB，拿到 shell 启动入口。
 3. [第 3 章](chapter-3.md)：用 ADB 启动后端，再改用 Binder 通信。
+4. [第 4 章](chapter-4.md)：让 shell 后端创建虚拟屏，把 Demo 路由到目标 `displayId`。
 
 [系统概览](architecture.md)是一张全局参考图，不必先读懂所有模块。[第 0 章](chapter-0.md)只讲教程站工程与发布，也不是 Android 主线的前置。
 
 <details>
-<summary>查看第 4—13 章</summary>
+<summary>查看第 5—13 章</summary>
 
-- 第 4 章：创建虚拟屏、启动演示 App。
 - 第 5 章：截图、UI 树与定向输入。
 - 第 6 章：工作目录与命令管道。
 - 第 7 章：接入 PRoot / Alpine。
@@ -62,7 +62,7 @@ PocketRun 要把 Android 手机变成 Agent 的执行环境：操作 App、处�
 - 第 12 章：可查看、纠正和删除的记忆。
 - 第 13 章：完整任务与故障恢复。
 
-第 4—13 章尚未实现。每次只增加一层，并在引入资源的同一章验证取消、死亡和清理。
+第 5—13 章尚未实现。每次只增加一层，并在引入资源的同一章验证取消、死亡和清理。
 
 </details>
 

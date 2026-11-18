@@ -28,19 +28,27 @@ object PrivilegedBackendMain {
         Log.i(TAG, "Starting shell backend Binder exchange")
         Looper.prepareMainLooper()
         val handler = Handler(Looper.getMainLooper())
-        val backend = BackendBinder(options.appUid, handler)
+        val backend = BackendBinder(options.appUid, options.packageName, handler)
         val client = try {
             exchange(options, backend)
         } catch (error: Exception) {
+            backend.close()
             Log.e(TAG, "Binder exchange failed", error)
             return
         }
         val clientDeath = IBinder.DeathRecipient { handler.post { Looper.getMainLooper().quitSafely() } }
-        runCatching { client.linkToDeath(clientDeath, 0) }.getOrElse { return }
+        runCatching { client.linkToDeath(clientDeath, 0) }.getOrElse {
+            backend.close()
+            return
+        }
 
         // ponytail: exit with the App for now; add persistent re-attach in the recovery chapter.
-        Looper.loop()
-        runCatching { client.unlinkToDeath(clientDeath, 0) }
+        try {
+            Looper.loop()
+        } finally {
+            backend.close()
+            runCatching { client.unlinkToDeath(clientDeath, 0) }
+        }
     }
 
     private fun exchange(options: Options, backend: IPrivilegedBackend): IBinder {
@@ -124,9 +132,11 @@ object PrivilegedBackendMain {
 
     private class BackendBinder(
         private val appUid: Int,
+        packageName: String,
         private val handler: Handler,
     ) : IPrivilegedBackend.Stub() {
         private val stopping = AtomicBoolean(false)
+        private val displaySession = VirtualDisplaySession(packageName)
 
         override fun getUid(): Int {
             enforceClient()
@@ -143,11 +153,31 @@ object PrivilegedBackendMain {
             return "pong"
         }
 
+        override fun createDemoDisplay(): Int {
+            enforceClient()
+            return displaySession.createDemoDisplay()
+        }
+
+        override fun getDisplayId(): Int {
+            enforceClient()
+            return displaySession.getDisplayId()
+        }
+
+        override fun releaseDisplay() {
+            enforceClient()
+            displaySession.close()
+        }
+
         override fun shutdown() {
             enforceClient()
             if (stopping.compareAndSet(false, true)) {
+                displaySession.close()
                 handler.post { Looper.getMainLooper().quitSafely() }
             }
+        }
+
+        fun close() {
+            displaySession.close()
         }
 
         private fun enforceClient() {
@@ -164,7 +194,10 @@ object PrivilegedBackendMain {
         val appUid: Int,
         val userId: Int,
     ) {
+        val packageName: String get() = authority.removeSuffix(AUTHORITY_SUFFIX)
+
         companion object {
+            private const val AUTHORITY_SUFFIX = ".binder_exchange"
             fun parse(args: Array<String>): Options {
                 require(args.size == 8) { "后端启动参数数量无效。" }
                 val values = args.toList().chunked(2).associate { (key, value) -> key to value }
@@ -173,7 +206,12 @@ object PrivilegedBackendMain {
                 val appUid = checkNotNull(values["--app-uid"]).toInt()
                 val userId = checkNotNull(values["--user"]).toInt()
                 require(Regex("[A-Za-z0-9_-]{43}").matches(token)) { "后端 token 无效。" }
-                require(Regex("[A-Za-z0-9_.]+").matches(authority)) { "后端 authority 无效。" }
+                require(Regex("[A-Za-z0-9_.]+").matches(authority) && authority.endsWith(AUTHORITY_SUFFIX)) {
+                    "后端 authority 无效。"
+                }
+                require(Regex("[A-Za-z0-9_.]+").matches(authority.removeSuffix(AUTHORITY_SUFFIX))) {
+                    "后端 package 无效。"
+                }
                 require(appUid > 0 && userId >= 0) { "后端身份无效。" }
                 return Options(token, authority, appUid, userId)
             }

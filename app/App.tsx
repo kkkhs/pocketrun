@@ -15,6 +15,7 @@ import {
 } from 'react-native-safe-area-context';
 import AdbPanel from './AdbPanel';
 import BackendPanel from './BackendPanel';
+import DisplayPanel from './DisplayPanel';
 import NativePocketRunDevice, {
   type DeviceInfo,
 } from './specs/NativePocketRunDevice';
@@ -127,6 +128,7 @@ function DeviceScreen() {
         </Text>
         <AdbPanel colors={colors} />
         <BackendPanel colors={colors} />
+        <DisplayPanel colors={colors} />
       </ScrollView>
     </View>
   );

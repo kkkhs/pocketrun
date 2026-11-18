@@ -91,6 +91,18 @@ class AdbModule(private val context: ReactApplicationContext) : NativePocketRunA
         promise.resolve(backendMap(backend.status()))
     }
 
+    override fun createDemoDisplay(promise: Promise) {
+        runBackendAction(promise) { displayMap(backend.createDemoDisplay()) }
+    }
+
+    override fun getDisplayStatus(promise: Promise) {
+        runBackendAction(promise) { displayMap(backend.displayStatus()) }
+    }
+
+    override fun releaseDisplay(promise: Promise) {
+        runBackendAction(promise) { displayMap(backend.releaseDisplay()) }
+    }
+
     private fun checkedPort(port: Double): Int {
         require(port.isFinite() && port in 1.0..65535.0 && port % 1.0 == 0.0) {
             "请输入 1～65535 的整数端口。"
@@ -316,6 +328,12 @@ class AdbModule(private val context: ReactApplicationContext) : NativePocketRunA
             putInt("uid", info.uid)
             putInt("pid", info.pid)
             putString("reply", info.reply)
+        }
+
+    private fun displayMap(info: PrivilegedBackendController.DisplayInfo): WritableMap =
+        Arguments.createMap().apply {
+            putBoolean("active", info.active)
+            putInt("displayId", info.displayId)
         }
 
     companion object { const val NAME = "PocketRunAdb" }

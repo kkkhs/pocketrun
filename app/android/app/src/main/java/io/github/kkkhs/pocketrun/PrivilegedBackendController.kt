@@ -17,6 +17,7 @@ import java.util.concurrent.TimeoutException
 
 class PrivilegedBackendController(private val context: Context) : Closeable {
     data class Info(val running: Boolean, val uid: Int, val pid: Int, val reply: String)
+    data class DisplayInfo(val active: Boolean, val displayId: Int)
 
     private val lock = Any()
     private var service: IPrivilegedBackend? = null
@@ -87,12 +88,7 @@ class PrivilegedBackendController(private val context: Context) : Closeable {
     }
 
     fun ping(): Info = synchronized(lock) {
-        val current = service ?: throw IllegalStateException("请先启动 shell 后端。")
-        if (serviceBinder?.isBinderAlive != true) {
-            clearLocked()
-            throw IllegalStateException("shell 后端已经退出。")
-        }
-        pingLocked(current)
+        pingLocked(requireServiceLocked())
     }
 
     fun status(): Info = synchronized(lock) {
@@ -102,6 +98,24 @@ class PrivilegedBackendController(private val context: Context) : Closeable {
             clearLocked()
             stoppedInfo()
         }
+    }
+
+    fun createDemoDisplay(): DisplayInfo = synchronized(lock) {
+        val current = requireServiceLocked()
+        val id = current.createDemoDisplay()
+        DisplayInfo(true, id)
+    }
+
+    fun displayStatus(): DisplayInfo = synchronized(lock) {
+        val current = requireServiceLocked()
+        val id = current.displayId
+        DisplayInfo(id > 0, id)
+    }
+
+    fun releaseDisplay(): DisplayInfo = synchronized(lock) {
+        val current = requireServiceLocked()
+        current.releaseDisplay()
+        DisplayInfo(false, -1)
     }
 
     fun cancelStart() {
@@ -138,6 +152,15 @@ class PrivilegedBackendController(private val context: Context) : Closeable {
     override fun close() {
         cancelStart()
         runCatching { stop() }
+    }
+
+    private fun requireServiceLocked(): IPrivilegedBackend {
+        val current = service ?: throw IllegalStateException("请先启动 shell 后端。")
+        if (serviceBinder?.isBinderAlive != true) {
+            clearLocked()
+            throw IllegalStateException("shell 后端已经退出。")
+        }
+        return current
     }
 
     private fun pingLocked(current: IPrivilegedBackend): Info {

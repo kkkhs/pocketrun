@@ -45,7 +45,7 @@ test('starts the shell backend and shows its Binder identity', async () => {
   expect(adb.startBackend).toHaveBeenCalledTimes(1);
   expect(JSON.stringify(screen.toJSON())).toContain('后端 UID：2000');
   expect(JSON.stringify(screen.toJSON())).toContain('PID：4321');
-  expect(control('检查 Binder 后端').props.disabled).toBe(false);
+  expect(control('通过 Binder 检查 shell 后端').props.disabled).toBe(false);
 });
 
 test('checks the retained Binder without opening another ADB connection', async () => {
@@ -58,7 +58,7 @@ test('checks the retained Binder without opening another ADB connection', async 
   });
   adb.pingBackend.mockResolvedValueOnce(running);
   await ReactTestRenderer.act(async () => {
-    await control('检查 Binder 后端').props.onPress();
+    await control('通过 Binder 检查 shell 后端').props.onPress();
   });
   expect(adb.pingBackend).toHaveBeenCalledTimes(1);
   expect(JSON.stringify(screen.toJSON())).toContain('Binder pong');
@@ -75,7 +75,7 @@ test('shows backend death and ignores a result after unmount', async () => {
   adb.pingBackend.mockRejectedValueOnce(new Error('shell 后端已经退出。'));
   adb.getBackendStatus.mockResolvedValueOnce(stopped);
   await ReactTestRenderer.act(async () => {
-    await control('检查 Binder 后端').props.onPress();
+    await control('通过 Binder 检查 shell 后端').props.onPress();
   });
   expect(JSON.stringify(screen.toJSON())).toContain('shell 后端已经退出');
 
