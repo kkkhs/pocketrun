@@ -257,4 +257,5 @@ adb -s "$SERIAL" shell am instrument -w \
 ## 本章源码
 
 - [PR #6：shell 后端、Binder 通信与第 3 章](https://github.com/kkkhs/pocketrun/pull/6)
+- [PR #10：前序章节的任务主线与图解](https://github.com/kkkhs/pocketrun/pull/10)
 - [Release `chapter-3`：本章结束时的源码快照](https://github.com/kkkhs/pocketrun/releases/tag/chapter-3)

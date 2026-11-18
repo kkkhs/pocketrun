@@ -256,4 +256,5 @@ adb -s "$SERIAL" shell am instrument -w \
 ## 本章代码
 
 - [PR #5：App 自有 ADB 配对、连接与第 2 章](https://github.com/kkkhs/pocketrun/pull/5)
+- [PR #10：前序章节的任务主线与图解](https://github.com/kkkhs/pocketrun/pull/10)
 - [Release `chapter-2`：本章结束时的源码快照](https://github.com/kkkhs/pocketrun/releases/tag/chapter-2)

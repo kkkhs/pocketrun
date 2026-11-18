@@ -197,4 +197,5 @@ npm 11 可能提示 `@swc/core`、`core-js`、`fsevents` 的 `allow-scripts` 警
 ## 本章代码
 
 - [PR #1：教程阅读与发布流程](https://github.com/kkkhs/pocketrun/pull/1)
+- [PR #10：前序章节的任务主线与图解](https://github.com/kkkhs/pocketrun/pull/10)
 - [Release `chapter-0`：本章结束时的源码快照](https://github.com/kkkhs/pocketrun/releases/tag/chapter-0)
