@@ -305,4 +305,5 @@ instrumentation 覆盖真实 TLS ADB、UID 2000 `app_process`、Binder、ImageRe
 
 ## 本章代码
 
+- [PR #8：截图、UI 树、定向输入与第 5 章](https://github.com/kkkhs/pocketrun/pull/8)
 - [Release `chapter-5`：本章结束时的源码快照](https://github.com/kkkhs/pocketrun/releases/tag/chapter-5)
