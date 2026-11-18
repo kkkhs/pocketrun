@@ -332,4 +332,5 @@ unset PAIR_CODE PAIR_PORT
 练习：点击按钮后，如果 `injectText()` 返回 `true`，但新 UI 树的输入值仍为空，你会直接宣布完成，还是继续观察并报告未确认？为什么？
 
 - [PR #8：第 5 章实现](https://github.com/kkkhs/pocketrun/pull/8)
+- [PR #9：任务主线与分层图解](https://github.com/kkkhs/pocketrun/pull/9)
 - [Release `chapter-5`：本章结束时的源码快照](https://github.com/kkkhs/pocketrun/releases/tag/chapter-5)
