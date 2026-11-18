@@ -223,5 +223,5 @@ cd android
 
 ## 本章代码
 
-<!-- CHAPTER_4_PR -->
+- [PR #7：VirtualDisplay、Demo 路由与第 4 章](https://github.com/kkkhs/pocketrun/pull/7)
 - [Release `chapter-4`：本章结束时的源码快照](https://github.com/kkkhs/pocketrun/releases/tag/chapter-4)
