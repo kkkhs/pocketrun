@@ -11,6 +11,7 @@ class DeviceInfoPackage : BaseReactPackage() {
       when (name) {
         DeviceInfoModule.NAME -> DeviceInfoModule(reactContext)
         AdbModule.NAME -> AdbModule(reactContext)
+        WorkspaceModule.NAME -> WorkspaceModule(reactContext)
         else -> null
       }
 
@@ -27,6 +28,14 @@ class DeviceInfoPackage : BaseReactPackage() {
         AdbModule.NAME to ReactModuleInfo(
             AdbModule.NAME,
             AdbModule.NAME,
+            false,
+            false,
+            false,
+            true,
+        ),
+        WorkspaceModule.NAME to ReactModuleInfo(
+            WorkspaceModule.NAME,
+            WorkspaceModule.NAME,
             false,
             false,
             false,

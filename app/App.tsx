@@ -16,6 +16,7 @@ import {
 import AdbPanel from './AdbPanel';
 import BackendPanel from './BackendPanel';
 import DisplayPanel from './DisplayPanel';
+import WorkspacePanel from './WorkspacePanel';
 import NativePocketRunDevice, {
   type DeviceInfo,
 } from './specs/NativePocketRunDevice';
@@ -129,6 +130,7 @@ function DeviceScreen() {
         <AdbPanel colors={colors} />
         <BackendPanel colors={colors} />
         <DisplayPanel colors={colors} />
+        <WorkspacePanel colors={colors} />
       </ScrollView>
     </View>
   );

@@ -2,7 +2,7 @@
 
 面向 React / TypeScript 开发者，学习让 Agent 在 Android 手机上操作 App、处理文件和执行命令。
 
-教程站已上线至第 5 章：第 1 章跑通 React → Kotlin，第 2 章取得 App 自有 ADB 启动入口，第 3 章完成 UID 2000 的 `app_process` 后端与 Binder 通信，第 4 章创建演示 VirtualDisplay 并验证 `displayId` 路由，第 5 章从同一显示读取截图和 UI 树、定向输入并重新观察结果。后续能力按章节推进。
+教程站已上线至第 5 章：第 1 章跑通 React → Kotlin，第 2 章取得 App 自有 ADB 启动入口，第 3 章完成 UID 2000 的 `app_process` 后端与 Binder 通信，第 4 章创建演示 VirtualDisplay 并验证 `displayId` 路由，第 5 章从同一显示读取截图和 UI 树、定向输入并重新观察结果。后续能力按章节推进。本地第 6 章正在开发，已有云真机文件、命令与生命周期专项记录，但真实产品界面及完整验收尚未完成，未发布。
 
 ## 阅读教程
 
@@ -12,6 +12,7 @@
 - [第 3 章：启动 shell 后端](website/docs/chapter-3.md)
 - [第 4 章：把 Demo App 放进虚拟屏](website/docs/chapter-4.md)
 - [第 5 章：看见界面，再操作它](website/docs/chapter-5.md)
+- [第 6 章：工作目录与命令管道（本地开发草稿，未全面验收）](website/docs/chapter-6.md)
 - [章节源码快照](https://github.com/kkkhs/pocketrun/releases)
 - [参考：系统概览](https://kkkhs.github.io/pocketrun/architecture/)
 - [参考：运行与发布教程站](https://kkkhs.github.io/pocketrun/chapter-0/)
