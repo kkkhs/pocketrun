@@ -5,8 +5,14 @@ import android.os.Binder
 import android.os.DeadObjectException
 import android.os.IBinder
 import android.os.Process
+import android.net.Uri
 import android.util.Base64
+import android.system.Os
+import android.system.OsConstants
+import org.json.JSONArray
+import org.json.JSONObject
 import java.io.Closeable
+import java.io.File
 import java.security.SecureRandom
 import java.util.concurrent.CancellationException
 import java.util.concurrent.CompletableFuture
@@ -18,6 +24,21 @@ import java.util.concurrent.TimeoutException
 class PrivilegedBackendController(private val context: Context) : Closeable {
     data class Info(val running: Boolean, val uid: Int, val pid: Int, val reply: String)
     data class DisplayInfo(val active: Boolean, val displayId: Int)
+    data class ScreenshotInfo(
+        val displayId: Int,
+        val width: Int,
+        val height: Int,
+        val frameTimestampNanos: String,
+        val uri: String,
+    )
+    data class UiTreeInfo(
+        val displayId: Int,
+        val status: String,
+        val truncated: Boolean,
+        val nodeCount: Int,
+        val json: String,
+    )
+    private data class QuerySession(val service: IPrivilegedBackend, val binder: IBinder, val generation: Long)
 
     private val lock = Any()
     private var service: IPrivilegedBackend? = null
@@ -27,6 +48,8 @@ class PrivilegedBackendController(private val context: Context) : Closeable {
     private var deathSignal: CountDownLatch? = null
     private var lastInfo = stoppedInfo()
     private var pendingToken: String? = null
+    private var generation = 0L
+    private var cacheFile: File? = null
 
     fun start(runCommand: (String) -> String): Info {
         synchronized(lock) {
@@ -103,19 +126,136 @@ class PrivilegedBackendController(private val context: Context) : Closeable {
     fun createDemoDisplay(): DisplayInfo = synchronized(lock) {
         val current = requireServiceLocked()
         val id = current.createDemoDisplay()
+        require(id > 0) { "后端返回了无效 displayId。" }
+        invalidateQueriesLocked()
         DisplayInfo(true, id)
     }
 
     fun displayStatus(): DisplayInfo = synchronized(lock) {
         val current = requireServiceLocked()
         val id = current.displayId
+        if (id <= 0) invalidateQueriesLocked()
         DisplayInfo(id > 0, id)
     }
 
     fun releaseDisplay(): DisplayInfo = synchronized(lock) {
+        invalidateQueriesLocked()
         val current = requireServiceLocked()
         current.releaseDisplay()
         DisplayInfo(false, -1)
+    }
+
+    fun captureScreenshot(expectedDisplayId: Int, expectedGeneration: Long = queryGeneration()): ScreenshotInfo {
+        val snapshot = querySession(expectedDisplayId, expectedGeneration)
+        val memory = snapshot.service.captureScreenshot(expectedDisplayId)
+            ?: error("后端没有返回截图。")
+        val packet = memory.use { ScreenshotCodec.fromSharedMemory(it, expectedDisplayId) }
+        require(packet.displayId == expectedDisplayId) { "截图 displayId 已失效。" }
+        require(packet.width == DISPLAY_WIDTH && packet.height == DISPLAY_HEIGHT && packet.frameTimestampNanos > 0) {
+            "截图尺寸或时间戳无效。"
+        }
+        require(packet.jpeg.size in 1..ScreenshotCodec.MAX_JPEG_BYTES) { "截图超过 2 MiB。" }
+        return synchronized(lock) {
+            checkSessionLocked(snapshot)
+            val file = File.createTempFile("pocketrun-frame-", ".jpg", context.cacheDir)
+            try {
+                Os.chmod(file.absolutePath, OsConstants.S_IRUSR or OsConstants.S_IWUSR)
+                file.outputStream().use { it.write(packet.jpeg) }
+                val info = ScreenshotInfo(packet.displayId, packet.width, packet.height,
+                    packet.frameTimestampNanos.toString(), Uri.fromFile(file).toString())
+                deleteCacheLocked()
+                cacheFile = file
+                info
+            } catch (error: Throwable) {
+                file.delete()
+                throw error
+            }
+        }
+    }
+
+    fun dumpUiTree(expectedDisplayId: Int, expectedGeneration: Long = queryGeneration()): UiTreeInfo {
+        val snapshot = querySession(expectedDisplayId, expectedGeneration)
+        val bytes = snapshot.service.dumpUiTree(expectedDisplayId) ?: error("后端没有返回 UI 树。")
+        require(bytes.size <= UiTreeCodec.MAX_TREE_BYTES) { "UI 树数据过大。" }
+        val tree = UiTreeCodec.decode(bytes, expectedDisplayId)
+        require(tree.displayId == expectedDisplayId) { "UI 树 displayId 已失效。" }
+        val nodes = JSONArray()
+        for (node in tree.nodes) {
+            nodes.put(JSONObject().apply {
+                put("parentIndex", node.parentIndex)
+                put("windowId", node.windowId)
+                put("depth", node.depth)
+                put("className", node.className)
+                put("packageName", node.packageName)
+                put("viewId", node.viewId)
+                put("text", node.text)
+                put("contentDescription", node.contentDescription)
+                put("bounds", JSONObject().apply {
+                    put("left", node.left)
+                    put("top", node.top)
+                    put("right", node.right)
+                    put("bottom", node.bottom)
+                })
+                put("flags", JSONObject().apply {
+                    put("clickable", node.clickable)
+                    put("editable", node.editable)
+                    put("enabled", node.enabled)
+                    put("focused", node.focused)
+                })
+            })
+        }
+        val json = JSONObject().apply {
+            put("displayId", tree.displayId)
+            put("status", tree.status.wire)
+            put("truncated", tree.truncated)
+            put("nodes", nodes)
+        }.toString()
+        require(json.toByteArray(Charsets.UTF_8).size <= MAX_JSON_BYTES) { "UI 树 JSON 过大。" }
+        return synchronized(lock) {
+            checkSessionLocked(snapshot)
+            UiTreeInfo(tree.displayId, tree.status.wire, tree.truncated, tree.nodes.size, json)
+        }
+    }
+
+    fun injectTap(expectedDisplayId: Int, x: Int, y: Int, expectedGeneration: Long = queryGeneration()): Boolean {
+        require(x in 0 until DISPLAY_WIDTH && y in 0 until DISPLAY_HEIGHT) { "点击坐标超出虚拟屏。" }
+        val snapshot = querySession(expectedDisplayId, expectedGeneration)
+        val result = snapshot.service.injectTap(expectedDisplayId, x, y)
+        synchronized(lock) { checkSessionLocked(snapshot) }
+        return result
+    }
+
+    fun injectText(expectedDisplayId: Int, text: String, expectedGeneration: Long = queryGeneration()): Boolean {
+        require(text.length in 1..64 && text.all { it in ' '..'~' }) { "仅允许最多 64 个可打印 ASCII 字符。" }
+        val snapshot = querySession(expectedDisplayId, expectedGeneration)
+        val result = snapshot.service.injectText(expectedDisplayId, text)
+        synchronized(lock) { checkSessionLocked(snapshot) }
+        return result
+    }
+
+    fun invalidateQueries() = synchronized(lock) { invalidateQueriesLocked() }
+
+    fun queryGeneration(): Long = synchronized(lock) { generation }
+
+    private fun querySession(expectedDisplayId: Int, expectedGeneration: Long): QuerySession = synchronized(lock) {
+        require(expectedDisplayId > 0) { "expectedDisplayId 必须为正整数。" }
+        check(generation == expectedGeneration) { "虚拟屏操作已取消。" }
+        QuerySession(requireServiceLocked(), checkNotNull(serviceBinder), generation)
+    }
+
+    private fun checkSessionLocked(snapshot: QuerySession) {
+        check(service === snapshot.service && serviceBinder === snapshot.binder &&
+            snapshot.binder.isBinderAlive && generation == snapshot.generation) { "后端或虚拟屏已失效，结果已丢弃。" }
+    }
+
+    private fun deleteCacheLocked() {
+        cacheFile?.delete()
+        cacheFile = null
+    }
+
+    private fun invalidateQueriesLocked() {
+        generation++
+        deleteCacheLocked()
     }
 
     fun cancelStart() {
@@ -128,6 +268,7 @@ class PrivilegedBackendController(private val context: Context) : Closeable {
     }
 
     fun stop() {
+        invalidateQueries()
         cancelStart()
         val snapshot = synchronized(lock) {
             val current = service ?: return
@@ -150,8 +291,10 @@ class PrivilegedBackendController(private val context: Context) : Closeable {
     }
 
     override fun close() {
+        invalidateQueries()
         cancelStart()
         runCatching { stop() }
+        synchronized(lock) { clearLocked() }
     }
 
     private fun requireServiceLocked(): IPrivilegedBackend {
@@ -177,6 +320,7 @@ class PrivilegedBackendController(private val context: Context) : Closeable {
     )
 
     private fun clearLocked() {
+        invalidateQueriesLocked()
         val binder = serviceBinder
         val recipient = deathRecipient
         if (binder != null && recipient != null && binder.isBinderAlive) {
@@ -207,6 +351,9 @@ class PrivilegedBackendController(private val context: Context) : Closeable {
 
     companion object {
         private const val UID_PER_USER = 100_000
+        private const val DISPLAY_WIDTH = 720
+        private const val DISPLAY_HEIGHT = 1280
+        private const val MAX_JSON_BYTES = 2 * 1024 * 1024
         private fun stoppedInfo() = Info(false, -1, -1, "")
     }
 }

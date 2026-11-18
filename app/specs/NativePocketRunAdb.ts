@@ -20,6 +20,22 @@ export type DisplayInfo = {
   displayId: number;
 };
 
+export type ScreenshotInfo = {
+  displayId: number;
+  width: number;
+  height: number;
+  frameTimestampNanos: string;
+  uri: string;
+};
+
+export type UiTreeInfo = {
+  displayId: number;
+  status: string;
+  truncated: boolean;
+  nodeCount: number;
+  json: string;
+};
+
 export interface Spec extends TurboModule {
   pair(port: number, code: string): Promise<void>;
   connect(port: number): Promise<number>;
@@ -33,6 +49,10 @@ export interface Spec extends TurboModule {
   createDemoDisplay(): Promise<DisplayInfo>;
   getDisplayStatus(): Promise<DisplayInfo>;
   releaseDisplay(): Promise<DisplayInfo>;
+  captureScreenshot(expectedDisplayId: number): Promise<ScreenshotInfo>;
+  dumpUiTree(expectedDisplayId: number): Promise<UiTreeInfo>;
+  injectTap(expectedDisplayId: number, x: number, y: number): Promise<boolean>;
+  injectText(expectedDisplayId: number, text: string): Promise<boolean>;
 }
 
 export default TurboModuleRegistry.get<Spec>('PocketRunAdb');

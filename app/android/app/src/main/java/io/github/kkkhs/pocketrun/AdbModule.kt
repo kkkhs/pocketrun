@@ -24,6 +24,7 @@ class AdbModule(private val context: ReactApplicationContext) : NativePocketRunA
     private val backend = PrivilegedBackendController(context)
     private var active: Operation? = null
     private var backendBusy = false
+    private var backendGeneration = 0L
     private var connection: AdbClient? = null
     private var connectionTransport: AdbTransport? = null
     private var connectionPort = 0
@@ -101,6 +102,44 @@ class AdbModule(private val context: ReactApplicationContext) : NativePocketRunA
 
     override fun releaseDisplay(promise: Promise) {
         runBackendAction(promise) { displayMap(backend.releaseDisplay()) }
+    }
+
+    override fun captureScreenshot(expectedDisplayId: Double, promise: Promise) {
+        runDisplayAction(expectedDisplayId, promise) { id, epoch -> screenshotMap(backend.captureScreenshot(id, epoch)) }
+    }
+
+    override fun dumpUiTree(expectedDisplayId: Double, promise: Promise) {
+        runDisplayAction(expectedDisplayId, promise) { id, epoch -> uiTreeMap(backend.dumpUiTree(id, epoch)) }
+    }
+
+    override fun injectTap(expectedDisplayId: Double, x: Double, y: Double, promise: Promise) {
+        runDisplayAction(expectedDisplayId, promise) { id, epoch ->
+            backend.injectTap(id, checkedInteger(x, 0, 719, "x"), checkedInteger(y, 0, 1279, "y"), epoch)
+        }
+    }
+
+    override fun injectText(expectedDisplayId: Double, text: String, promise: Promise) {
+        runDisplayAction(expectedDisplayId, promise) { id, epoch ->
+            require(text.length in 1..64 && text.all { it in ' '..'~' }) { "仅允许最多 64 个可打印 ASCII 字符。" }
+            backend.injectText(id, text, epoch)
+        }
+    }
+
+    private fun runDisplayAction(expectedDisplayId: Double, promise: Promise, action: (Int, Long) -> Any?) {
+        try {
+            val id = checkedInteger(expectedDisplayId, 1, Int.MAX_VALUE, "expectedDisplayId")
+            val epoch = backend.queryGeneration()
+            runBackendAction(promise, bounded = true) { action(id, epoch) }
+        } catch (error: Exception) {
+            promise.reject("E_ADB_INPUT", error.message)
+        }
+    }
+
+    private fun checkedInteger(value: Double, minimum: Int, maximum: Int, name: String): Int {
+        require(value.isFinite() && value >= minimum.toDouble() && value <= maximum.toDouble() && value % 1.0 == 0.0) {
+            "$name 必须是 $minimum～$maximum 的有限整数。"
+        }
+        return value.toInt()
     }
 
     private fun checkedPort(port: Double): Int {
@@ -248,7 +287,7 @@ class AdbModule(private val context: ReactApplicationContext) : NativePocketRunA
         return output.toString("UTF-8")
     }
 
-    private fun runBackendAction(promise: Promise, action: () -> Any?) {
+    private fun runBackendAction(promise: Promise, bounded: Boolean = false, action: () -> Any?) {
         synchronized(lock) {
             if (disposed) {
                 promise.reject("E_ADB_UNAVAILABLE", "模块已关闭。")
@@ -259,18 +298,42 @@ class AdbModule(private val context: ReactApplicationContext) : NativePocketRunA
                 return
             }
             backendBusy = true
+            val request = ++backendGeneration
+            var settled = false
+            val deadline = if (bounded) timer.schedule({
+                synchronized(lock) {
+                    if (!settled && !disposed && backendGeneration == request) {
+                        settled = true
+                        backendGeneration++
+                        backend.invalidateQueries()
+                        promise.reject("E_BACKEND_TIMEOUT", "虚拟屏操作超时；旧结果已丢弃，请等待后端结束当前操作。")
+                    }
+                }
+            }, 4, TimeUnit.SECONDS) else null
             worker.execute {
                 var result: Any? = null
                 var failure: Exception? = null
                 try {
                     result = action()
+                    if (bounded && !backend.status().running) error("shell 后端已经退出。")
                 } catch (error: Exception) {
                     failure = error
                 } finally {
-                    synchronized(lock) { backendBusy = false }
+                    deadline?.cancel(false)
+                    synchronized(lock) {
+                        backendBusy = false
+                        if (!settled) {
+                            settled = true
+                            if (disposed || backendGeneration != request) {
+                                promise.reject("E_BACKEND_CANCELLED", "后端操作已失效，结果已丢弃。")
+                            } else if (failure == null) {
+                                promise.resolve(result)
+                            } else {
+                                promise.reject("E_BACKEND_OPERATION", failure?.message ?: "shell 后端操作失败。")
+                            }
+                        }
+                    }
                 }
-                if (failure == null) promise.resolve(result)
-                else promise.reject("E_BACKEND_OPERATION", failure.message ?: "shell 后端操作失败。")
             }
         }
     }
@@ -311,6 +374,8 @@ class AdbModule(private val context: ReactApplicationContext) : NativePocketRunA
     override fun invalidate() {
         synchronized(lock) {
             disposed = true
+            backendGeneration++
+            backend.invalidateQueries()
             backend.cancelStart()
             active?.transport?.cancel()
             connection?.close()
@@ -334,6 +399,24 @@ class AdbModule(private val context: ReactApplicationContext) : NativePocketRunA
         Arguments.createMap().apply {
             putBoolean("active", info.active)
             putInt("displayId", info.displayId)
+        }
+
+    private fun screenshotMap(info: PrivilegedBackendController.ScreenshotInfo): WritableMap =
+        Arguments.createMap().apply {
+            putInt("displayId", info.displayId)
+            putInt("width", info.width)
+            putInt("height", info.height)
+            putString("frameTimestampNanos", info.frameTimestampNanos)
+            putString("uri", info.uri)
+        }
+
+    private fun uiTreeMap(info: PrivilegedBackendController.UiTreeInfo): WritableMap =
+        Arguments.createMap().apply {
+            putInt("displayId", info.displayId)
+            putString("status", info.status)
+            putBoolean("truncated", info.truncated)
+            putInt("nodeCount", info.nodeCount)
+            putString("json", info.json)
         }
 
     companion object { const val NAME = "PocketRunAdb" }

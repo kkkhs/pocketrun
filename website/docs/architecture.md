@@ -12,7 +12,7 @@ import figureStyles from '@site/src/css/tutorial-figures.module.css';
 
 沿用导读里的例子：读取 `items.csv`，整理数据，填入演示 App，把结果写到 `result.txt`。
 
-第 1 章已跑通 React → Kotlin；第 2 章取得本机 ADB 启动入口；第 3 章启动 UID 2000 的 `app_process` 后端并交换 Binder；第 4 章已创建 VirtualDisplay 并把固定 Demo 路由到目标 `displayId`。画面、输入与 Linux 结构仍按后续章节逐步实现。
+第 1 章已跑通 React → Kotlin；第 2 章取得本机 ADB 启动入口；第 3 章启动 UID 2000 的 `app_process` 后端并交换 Binder；第 4 章创建 VirtualDisplay 并把固定 Demo 路由到目标 `displayId`；第 5 章从同一显示读取截图和 UI 树，再定向输入并观察结果。Linux 结构仍按后续章节逐步实现。
 
 <figure style={{margin: '1.25rem 0'}}>
   <div style={{overflowX: 'auto'}} tabIndex={0} role="region" aria-label="模块与权限架构图，可横向查看">
@@ -41,7 +41,7 @@ React 的组件和状态管理经验可以复用。Kotlin 承接原生调用；�
 
 普通应用通过 Binder 请求后端执行受约束的操作，再接收结构化结果。实际身份和能力仍要在每台设备上检查。
 
-第 4 章已经由 shell 后端持有 ImageReader-backed VirtualDisplay，并用固定 `am start --display` 验证 Demo task 的显示归属。后续输入、画面捕获与 UI 树读取仍必须复用同一个有效 `displayId`，观察结果再交回 Agent。
+第 4 章由 shell 后端持有 ImageReader-backed VirtualDisplay，并用固定 `am start --display` 验证 Demo task 的显示归属。第 5 章继续复用同一个有效 `displayId`：ImageReader 返回目标截图，UiAutomation 返回有界 UI 树，IInputManager 将事件定向到目标显示与 App UID，再读取新截图和新树确认结果。
 
 ### Linux：处理文件和命令
 
