@@ -21,7 +21,17 @@ import figureStyles from '@site/src/css/tutorial-figures.module.css';
   <figcaption>上面看职责，下面看执行身份。宽图可横向查看；Agent 宿主仍需在对应章节验证。</figcaption>
 </figure>
 
-Agent 决定下一步做什么；执行层检查请求并执行。**模型提出动作，不授予权限。**
+把一次任务分成两部分看：**先准备会话，再执行操作。**
+
+```text
+会话准备：本机 ADB → 启动 shell 后端 → Binder 就绪 → 创建目标显示
+执行一轮：观察界面 → 确定目标 → 操作 → 再次观察，核对结果
+演示结束：释放目标显示 → 停止后端
+```
+
+层级与阶段不同：一轮中的每个请求都会经过 React → App Kotlin → Binder → shell 后端 → Android 系统能力。React 与 App Kotlin 在同一个 App 进程，后端是另一个 UID 2000 进程。[第 5 章](chapter-5.md)用一个填写输入框的例子，分别解释分层、步骤和代码。
+
+当前操作顺序由用户点击按钮驱动。后续 Agent 决定下一步做什么，执行层检查请求并执行。**模型提出动作，不授予权限。**
 
 ## 三个角色做什么
 

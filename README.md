@@ -11,7 +11,7 @@
 - [第 2 章：让 App 自己连接 ADB](website/docs/chapter-2.md)
 - [第 3 章：启动 shell 后端](website/docs/chapter-3.md)
 - [第 4 章：把 Demo App 放进虚拟屏](website/docs/chapter-4.md)
-- [第 5 章：截图、UI 树与定向输入](website/docs/chapter-5.md)
+- [第 5 章：看见界面，再操作它](website/docs/chapter-5.md)
 - [章节源码快照](https://github.com/kkkhs/pocketrun/releases)
 - [参考：系统概览](https://kkkhs.github.io/pocketrun/architecture/)
 - [参考：运行与发布教程站](https://kkkhs.github.io/pocketrun/chapter-0/)
