@@ -6,7 +6,9 @@ import android.os.Bundle
 import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
+import android.os.Parcel
 import android.os.Process
+import android.os.SharedMemory
 import android.util.Log
 import java.util.concurrent.atomic.AtomicBoolean
 
@@ -137,6 +139,24 @@ object PrivilegedBackendMain {
     ) : IPrivilegedBackend.Stub() {
         private val stopping = AtomicBoolean(false)
         private val displaySession = VirtualDisplaySession(packageName)
+        private val inTransaction = ThreadLocal<Boolean>()
+        private val captureReturnMemory = ThreadLocal<SharedMemory>()
+
+        override fun onTransact(code: Int, data: Parcel, reply: Parcel?, flags: Int): Boolean {
+            val previousTransaction = inTransaction.get()
+            val previousMemory = captureReturnMemory.get()
+            inTransaction.set(true)
+            captureReturnMemory.remove()
+            try {
+                return super.onTransact(code, data, reply, flags)
+            } finally {
+                // The generated Stub has already duplicated the FD into the reply Parcel.
+                // Close the shell-side return FD even when parcel writing throws.
+                captureReturnMemory.get()?.close()
+                if (previousMemory == null) captureReturnMemory.remove() else captureReturnMemory.set(previousMemory)
+                if (previousTransaction == null) inTransaction.remove() else inTransaction.set(previousTransaction)
+            }
+        }
 
         override fun getUid(): Int {
             enforceClient()
@@ -155,7 +175,7 @@ object PrivilegedBackendMain {
 
         override fun createDemoDisplay(): Int {
             enforceClient()
-            return displaySession.createDemoDisplay()
+            return asShell { displaySession.createDemoDisplay() }
         }
 
         override fun getDisplayId(): Int {
@@ -163,21 +183,54 @@ object PrivilegedBackendMain {
             return displaySession.getDisplayId()
         }
 
+        override fun captureScreenshot(expectedDisplayId: Int): SharedMemory {
+            enforceClient()
+            val memory = asShell { displaySession.captureScreenshot(expectedDisplayId) }
+            if (inTransaction.get() == true) captureReturnMemory.set(memory)
+            return memory
+        }
+
+        override fun dumpUiTree(expectedDisplayId: Int): ByteArray {
+            enforceClient()
+            return asShell { displaySession.dumpUiTree(expectedDisplayId) }
+        }
+
+        override fun injectTap(expectedDisplayId: Int, x: Int, y: Int): Boolean {
+            enforceClient()
+            return asShell { displaySession.injectTap(expectedDisplayId, x, y, appUid) }
+        }
+
+        override fun injectText(expectedDisplayId: Int, text: String): Boolean {
+            enforceClient()
+            return asShell { displaySession.injectText(expectedDisplayId, text, appUid) }
+        }
+
         override fun releaseDisplay() {
             enforceClient()
-            displaySession.close()
+            asShell { displaySession.close() }
         }
 
         override fun shutdown() {
             enforceClient()
             if (stopping.compareAndSet(false, true)) {
-                displaySession.close()
+                asShell { displaySession.terminate() }
                 handler.post { Looper.getMainLooper().quitSafely() }
             }
         }
 
         fun close() {
-            displaySession.close()
+            stopping.set(true)
+            displaySession.terminate()
+        }
+
+        private inline fun <T> asShell(action: () -> T): T {
+            val identity = Binder.clearCallingIdentity()
+            try {
+                check(Process.myUid() == Process.SHELL_UID) { "后端不是 shell UID 2000。" }
+                return action()
+            } finally {
+                Binder.restoreCallingIdentity(identity)
+            }
         }
 
         private fun enforceClient() {

@@ -215,7 +215,7 @@ cd android
 - 释放和后端死亡后都没有遗留显示、Demo task 或 shell 后端。
 - `audit:ci` 阻止所有未豁免 high / critical 公告；picomatch 的精确临时例外及 2026-12-18 截止日期记录在第 0 章，已有 moderate 条目继续如实保留。
 
-本章证明目标显示存在且路由正确。下一章会从同一个 ImageReader 读取帧，再围绕同一 `displayId` 加入 UI 树和定向输入。
+本章证明目标显示存在且路由正确。[第 5 章](chapter-5.md)继续从同一个 ImageReader 读取帧，并围绕同一 `displayId` 加入 UI 树、定向输入和结果确认。
 
 练习：解释为什么“创建了 VirtualDisplay”“Demo task 位于该 displayId”“已经看到虚拟屏画面”是三个不同的验收条件。
 
