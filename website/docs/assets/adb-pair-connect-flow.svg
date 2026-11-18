@@ -1,86 +1,42 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 860 590" role="img" aria-labelledby="pr-adb-title pr-adb-desc" class="pr-adb-diagram">
-  <title id="pr-adb-title">PocketRun 的本机 ADB 配对与连接流程</title>
-  <desc id="pr-adb-desc">React 界面通过 TurboModule 调用 Kotlin 的 AdbModule。配对路径使用配对端口、六位配对码和应用身份密钥完成 TLS 与 SPAKE2 交换；连接路径使用另一个连接端口建立 TLS ADB 流并执行固定命令 id -u，返回 shell UID 2000。两条路径都只访问 127.0.0.1。取消会关闭套接字，但不会撤销系统已保存的配对授权。</desc>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1020 286" role="img" aria-labelledby="pr-adb-title pr-adb-desc" class="pr-adb-diagram">
+  <title id="pr-adb-title">先授权和配对，再连接并探测 UID</title>
+  <desc id="pr-adb-desc">用户先开启系统无线调试。PocketRun 使用配对端口和六位码授权自己的 ADB 身份，再用另一个连接端口建立 TLS ADB transport，最后执行固定 id -u，验证返回 shell UID 2000。两次网络连接都只访问手机本机 127.0.0.1；App 自身 UID 不改变。断开关闭 transport，不撤销系统配对授权。</desc>
   <style>
-    .pr-adb-diagram { --app: #2a78d6; --shell: #eb6834; --ink: var(--ifm-font-color-base, #1c1e21); --muted: var(--ifm-color-emphasis-700, #606770); --border: var(--ifm-color-emphasis-300, #dadde1); --panel: var(--ifm-background-surface-color, #fff); font-family: system-ui, -apple-system, "Segoe UI", sans-serif; }
-    html[data-theme="dark"] .pr-adb-diagram { --app: #3987e5; --shell: #d95926; }
     .pr-adb-diagram .card { fill: var(--panel); stroke: var(--border); stroke-width: 1.5; }
     .pr-adb-diagram .edge { fill: none; stroke: var(--muted); stroke-width: 2; }
-    .pr-adb-diagram .heading { fill: var(--ink); font-size: 23px; font-weight: 650; }
-    .pr-adb-diagram .body { fill: var(--ink); font-size: 19px; }
-    .pr-adb-diagram .label { fill: var(--muted); font-size: 17px; }
+    .pr-adb-diagram .heading { fill: var(--ink); font-size: 24px; font-weight: 650; }
+    .pr-adb-diagram .body { fill: var(--ink); font-size: 20px; font-weight: 650; }
+    .pr-adb-diagram .label { fill: var(--muted); font-size: 16px; }
   </style>
-  <defs>
-    <marker id="pr-adb-arrow" markerWidth="9" markerHeight="8" refX="8" refY="4" orient="auto"><path d="M0 0 9 4 0 8Z" fill="var(--muted)"/></marker>
-  </defs>
-
-  <text x="24" y="31" class="heading">普通 App 进程</text>
-  <text x="224" y="31" class="label">界面与连接管理保持应用 UID</text>
-  <g data-node="react">
-    <rect x="24" y="58" width="210" height="104" rx="10" class="card"/>
-    <rect x="24" y="68" width="4" height="84" rx="2" fill="var(--app)"/>
-    <text x="46" y="98" class="heading">React 界面</text>
-    <text x="46" y="131" class="body">端口、配对码、状态</text>
+  <defs><marker id="pr-adb-arrow" markerWidth="9" markerHeight="8" refX="8" refY="4" orient="auto"><path d="M0 0 9 4 0 8Z" fill="var(--muted)"/></marker></defs>
+  <text x="510" y="34" class="heading" text-anchor="middle">怎样得到可用的 shell 启动入口？</text>
+  <g data-node="authorize">
+    <rect x="20" y="78" width="200" height="126" rx="10" class="card"/>
+    <text x="120" y="117" class="body" text-anchor="middle">开启系统调试</text>
+    <text x="120" y="152" class="label" text-anchor="middle">用户确认授权</text>
+    <text x="120" y="183" class="label" text-anchor="middle">不是 App 自行提权</text>
   </g>
-  <path d="M234 110 H286" class="edge" marker-end="url(#pr-adb-arrow)"/>
-  <text x="260" y="96" class="label" text-anchor="middle">TurboModule</text>
-  <g data-node="module">
-    <rect x="286" y="58" width="264" height="104" rx="10" class="card"/>
-    <rect x="286" y="68" width="4" height="84" rx="2" fill="var(--app)"/>
-    <text x="308" y="98" class="heading">Kotlin · AdbModule</text>
-    <text x="308" y="131" class="body">单工作线程 · 15 秒截止</text>
-  </g>
-  <g data-node="identity">
-    <rect x="602" y="58" width="234" height="104" rx="10" class="card"/>
-    <text x="624" y="98" class="heading">应用 ADB 身份</text>
-    <text x="624" y="131" class="body">RSA 密钥 · 加密保存</text>
-  </g>
-  <path d="M602 110 H550" class="edge" marker-end="url(#pr-adb-arrow)"/>
-
-  <path d="M418 162 V215" class="edge"/>
-  <circle cx="418" cy="215" r="5" fill="var(--muted)"/>
-  <path d="M418 215 H170 V266" class="edge" marker-end="url(#pr-adb-arrow)"/>
-  <path d="M418 215 H690 V266" class="edge" marker-end="url(#pr-adb-arrow)"/>
-
-  <text x="24" y="243" class="heading">配对一次</text>
+  <path d="M220 141 H280" class="edge" marker-end="url(#pr-adb-arrow)"/>
   <g data-node="pair">
-    <rect x="24" y="266" width="292" height="122" rx="10" class="card"/>
-    <text x="46" y="306" class="heading">配对端口 + 六位码</text>
-    <text x="46" y="340" class="body">TLS → SPAKE2 → PeerInfo</text>
-    <text x="46" y="369" class="label">配对码只在本次交换中使用</text>
+    <rect x="280" y="78" width="200" height="126" rx="10" class="card"/>
+    <text x="380" y="117" class="body" text-anchor="middle">配对 App 身份</text>
+    <text x="380" y="152" class="label" text-anchor="middle">配对端口 + 六位码</text>
+    <text x="380" y="183" class="label" text-anchor="middle">系统保存公钥</text>
   </g>
-  <path d="M316 327 H382" class="edge" marker-end="url(#pr-adb-arrow)"/>
-  <text x="349" y="313" class="label" text-anchor="middle">127.0.0.1</text>
-  <g data-node="pair-service">
-    <rect x="382" y="266" width="202" height="122" rx="10" class="card"/>
-    <rect x="580" y="276" width="4" height="102" rx="2" fill="var(--shell)"/>
-    <text x="404" y="306" class="heading">系统配对服务</text>
-    <text x="404" y="340" class="body">验证并保存公钥</text>
-    <text x="404" y="369" class="label">Android 无线调试</text>
-  </g>
-
-  <text x="620" y="243" class="heading">每次连接</text>
+  <path d="M480 141 H540" class="edge" marker-end="url(#pr-adb-arrow)"/>
   <g data-node="connect">
-    <rect x="620" y="266" width="216" height="122" rx="10" class="card"/>
-    <text x="642" y="306" class="heading">连接端口</text>
-    <text x="642" y="340" class="body">TLS ADB stream</text>
-    <text x="642" y="369" class="label">与配对端口不同</text>
+    <rect x="540" y="78" width="200" height="126" rx="10" class="card"/>
+    <text x="640" y="117" class="body" text-anchor="middle">建立 TLS 连接</text>
+    <text x="640" y="152" class="label" text-anchor="middle">连接端口 + 已配对身份</text>
+    <text x="640" y="183" class="label" text-anchor="middle">连接本机 adbd</text>
   </g>
-
-  <path d="M690 388 V433 H553" class="edge" marker-end="url(#pr-adb-arrow)"/>
-  <text x="649" y="423" class="label">127.0.0.1</text>
-  <g data-node="shell">
-    <rect x="307" y="433" width="246" height="104" rx="10" class="card"/>
-    <rect x="549" y="443" width="4" height="84" rx="2" fill="var(--shell)"/>
-    <text x="329" y="473" class="heading">adbd · shell 身份</text>
-    <text x="329" y="506" class="body">固定执行 id -u → 2000</text>
+  <path d="M740 141 H800" class="edge" marker-end="url(#pr-adb-arrow)"/>
+  <g data-node="probe">
+    <rect x="800" y="78" width="200" height="126" rx="10" class="card"/>
+    <text x="900" y="117" class="body" text-anchor="middle">探测执行身份</text>
+    <text x="900" y="152" class="label" text-anchor="middle">固定 id -u → 2000</text>
+    <text x="900" y="183" class="label" text-anchor="middle">Promise 返回数字</text>
   </g>
-  <path d="M307 485 H182" class="edge" marker-end="url(#pr-adb-arrow)"/>
-  <g data-node="result">
-    <rect x="24" y="433" width="158" height="104" rx="10" class="card"/>
-    <text x="46" y="473" class="heading">界面结果</text>
-    <text x="46" y="506" class="body">UID 2000</text>
-  </g>
-
-  <text x="430" y="573" class="label" text-anchor="middle">取消 / 超时：关闭本次套接字；断开连接不等于撤销 Android 保存的配对授权。</text>
+  <text x="510" y="243" class="body" text-anchor="middle">配对与连接都只访问手机本机 127.0.0.1；App UID 始终不变。</text>
+  <text x="510" y="272" class="label" text-anchor="middle">身份已配对时可跳过配对；结束时断开 transport，系统授权仍保留。</text>
 </svg>

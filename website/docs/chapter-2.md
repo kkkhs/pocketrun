@@ -10,13 +10,19 @@ import connectedScreenshot from './assets/chapter-2-connected.png';
 import AdbPairConnectFlow from './assets/adb-pair-connect-flow.svg';
 import figureStyles from '@site/src/css/tutorial-figures.module.css';
 
-这一章完成一条真实链路：PocketRun 在系统无线调试中配对，连接本机 `adbd`，执行固定的 `id -u`，把 **shell UID 2000** 显示回 React 界面。
+上一章，按钮已经能调用 Kotlin，也看到了普通 App UID。**再多调用几次 Kotlin / JNI，App 也不会变成 shell。**
 
-**主线位置：** 上一章的普通 App UID → **本章：ADB 启动钥匙** → 下一章：`app_process` shell 后端与 Binder。
+这一章只做一个任务：**让 PocketRun 自己连接同一台手机的 `adbd`，执行固定的 `id -u`，把 shell UID 2000 显示回 React。**
 
-普通 App 调多少次 Kotlin / JNI 都不会变成 shell。本章让 App 像电脑上的 `adb` 客户端一样，连接**同一台手机**的 `adbd`；电脑只用于开发安装，不在运行链路里。
+```text
+授权：开启无线调试，配对 App 身份
+连接：建立本机 TLS 通道 → 执行 id -u
+结束：断开当前连接
+```
 
-这条连接的用途不是长期传每个动作，而是让下一章能启动 UID 2000 的独立后端。
+App 像电脑上的 `adb` 客户端一样发请求，但**不是连电脑**。代码固定访问手机本机的 `127.0.0.1`；电脑只用于开发安装，不在这条运行链里。
+
+本章得到的只是下一章需要的 **shell 启动入口**。它还没有创建独立后端，也不负责长期承载截图、查树或输入。
 
 <div style={{display: 'flex', gap: '1.5rem', flexWrap: 'wrap', margin: '1.25rem 0', alignItems: 'flex-start'}}>
   <figure style={{margin: 0, flex: '0 1 360px', minWidth: 0, maxWidth: '100%'}}>
@@ -33,7 +39,9 @@ import figureStyles from '@site/src/css/tutorial-figures.module.css';
 
 本章只开放这一个身份检查，不提供任意命令。`app_process`、Binder 后端和受约束的系统工具从下一章开始。
 
-## 两个端口做两件事
+## 先取得系统授权
+
+只在自己拥有或明确获授权的 Android 11 及以上设备上练习。打开“开发者选项 → 无线调试”，按系统提示允许调试，再打开“使用配对码配对设备”。PocketRun 不会绕过这一步。
 
 Android 无线调试把配对和连接分开：
 
@@ -44,23 +52,66 @@ Android 无线调试把配对和连接分开：
 
 配对弹窗关闭后，配对码和配对端口会失效。连接端口也可能在无线调试重启后变化，所以不能把两者写死或互换。
 
-## 一次配对和连接怎么走
+## 在界面跑一遍
+
+1. 把配对弹窗中的端口和六位码填入 PocketRun，点“配对”。不要截图、记录或复用配对码。
+2. 回到无线调试主页，把 IP 地址后的端口填入“连接端口”。这里仅取端口；App 固定连本机，不连接截图中的其他地址。
+3. 点“连接”，结果应为 `UID：2000`。
+4. 再点“检查连接”，确认保留的连接还能打开第二条流。
+5. 点“取消 / 断开”，结果应变成“连接已关闭”。
+
+错误配对码、过期端口、关闭无线调试和超时都应返回错误，而不是一直停在忙碌状态。
+
+## 按阶段读代码
+
+图中是先后顺序，不是进程分层。配对成功只解决身份授权，连接成功后还要用固定命令确认执行身份。
 
 <figure style={{margin: '1.25rem 0'}}>
-  <div style={{overflowX: 'auto'}} tabIndex={0} role="region" aria-label="ADB 配对与连接流程图，可横向查看">
-    <AdbPairConnectFlow className={`pr-adb-diagram ${figureStyles.diagram}`} role="img" aria-labelledby="pr-adb-title" aria-describedby="pr-adb-desc" style={{display: 'block', width: '100%', minWidth: 700, height: 'auto'}} />
+  <div style={{overflowX: 'auto'}} tabIndex={0} role="region" aria-label="系统授权、配对、TLS 连接与固定探测的阶段顺序，可横向查看">
+    <AdbPairConnectFlow className={`pr-adb-diagram ${figureStyles.diagram}`} role="img" aria-labelledby="pr-adb-title" aria-describedby="pr-adb-desc" style={{display: 'block', width: '100%', minWidth: 820, height: 'auto'}} />
   </div>
-  <figcaption>配对保存公钥，连接建立执行通道。两条路径都固定访问本机 127.0.0.1。</figcaption>
+  <figcaption>先授权和配对，再建立 TLS 通道，最后探测 UID。身份已配对时可以跳过配对；断开不会撤销系统授权。</figcaption>
 </figure>
 
 这里有两个不同身份：
 
 - PocketRun 的 React、Kotlin 和密钥存储仍在普通 **App UID** 下运行。
-- 固定命令由系统 `adbd` 创建的流执行，本次模拟器返回 **shell UID 2000**。
+- 固定命令由系统 `adbd` 启动的 shell 进程执行，本次模拟器返回 **shell UID 2000**。
 
 ADB 连接没有把 App 进程变成 shell。下一章会在这条连接上启动独立后端，再通过受约束的 IPC 使用它。
 
-## 加入最小调用面
+### 配对 App 身份
+
+[AdbPanel.tsx](https://github.com/kkkhs/pocketrun/blob/main/app/AdbPanel.tsx) 收集配对端口和六位码，通过 TurboModule 调用 [AdbModule.pair()](https://github.com/kkkhs/pocketrun/blob/main/app/android/app/src/main/java/io/github/kkkhs/pocketrun/AdbModule.kt#L55)。Kotlin 用 App 的 ADB 身份与系统配对服务交换信息，让系统保存这把公钥。
+
+六位码认证本次交换，不是后续每条命令的密码。配对码无论成功或失败都会从 React state 清空，也不写入日志。
+
+### 建立 TLS 连接
+
+[AdbModule.connect()](https://github.com/kkkhs/pocketrun/blob/main/app/android/app/src/main/java/io/github/kkkhs/pocketrun/AdbModule.kt#L64) 使用**连接端口**和已经配对的身份建立 TLS ADB transport。TLS 保护连接中的数据；“已经加密”与“命令以哪个 UID 执行”仍是两件事。
+
+调用链是 `AdbPanel.tsx → NativePocketRunAdb.ts → AdbModule.kt → 嵌入的 ADB 客户端 → 本机 adbd`。React 和 App Kotlin 是同一 App 里的两个执行层；另一端是 Android 自己的 `adbd` 服务，不是我们实现的后端。
+
+### 探测执行身份
+
+连接入口建立通道后立即执行探测；“检查连接”则复用通道再探测一次。[AdbModule.probeUid()](https://github.com/kkkhs/pocketrun/blob/main/app/android/app/src/main/java/io/github/kkkhs/pocketrun/AdbModule.kt#L270) 只发送固定命令：
+
+```kotlin
+client.shellCommand("id -u") { chunk ->
+  require(output.size() + chunk.size <= 1024)
+  output.write(chunk)
+}
+```
+
+输出限制为 1024 字节，并且必须能解析成非负 UID。Promise 把数字送回 React；本章模拟器验证得到 2000。它证明的是 **这条命令的执行身份**，不是 App 的 UID 改了。
+
+### 断开并收尾
+
+[AdbModule.disconnect()](https://github.com/kkkhs/pocketrun/blob/main/app/android/app/src/main/java/io/github/kkkhs/pocketrun/AdbModule.kt#L341) 关闭 PocketRun 当前 transport，让阻塞的连接、TLS 握手或读取返回。React 清空状态不能替代底层关闭。
+
+**断开连接不等于撤销配对。** Android 保存的配对授权仍由系统管理，需要撤销时在无线调试的已配对设备列表中操作。
+
+## 对照调用约定
 
 本章新增的主要文件：
 
@@ -74,9 +125,7 @@ app/
         └── AdbModule.kt             # 状态、超时、取消和固定探测命令
 ```
 
-### 第 2 章只声明五个动作
-
-`NativePocketRunAdb.ts` 在本章先加入下面五个动作；第 3 章会在同一模块上继续增加“启动后端”方法：
+[NativePocketRunAdb.ts](https://github.com/kkkhs/pocketrun/blob/main/app/specs/NativePocketRunAdb.ts) 在第 2 章快照中先加入五个动作；第 3 章会在同一模块上继续增加“启动后端”方法：
 
 ```ts
 export interface Spec extends TurboModule {
@@ -94,7 +143,8 @@ export default TurboModuleRegistry.get<Spec>('PocketRunAdb');
 
 `AdbPanel.tsx` 分别保存两个端口和配对码。操作开始后禁用冲突按钮；配对码无论成功或失败都会从 React state 清空。
 
-### Kotlin 拥有连接
+<details>
+<summary>实现细节：工作队列、15 秒期限与取消</summary>
 
 网络、密钥和生命周期不放在 React state。`AdbModule` 使用一条工作线程保存当前操作和当前连接：
 
@@ -112,18 +162,12 @@ val deadline = timer.schedule({
 
 每个入口都会再次校验 Android 版本、整数端口、六位配对码和当前状态。前端按钮禁用只改善交互，不代替原生边界检查。
 
-连接成功后，模块只发送：
+React 使用递增序号忽略取消后才返回的旧 Promise，但这只能保护界面状态。真正的取消关闭 transport；单线程队列保证只有创建 `PairingContext` 的工作线程销毁 JNI 状态，避免“取消线程释放、工作线程仍在使用”的竞态。
 
-```kotlin
-client.shellCommand("id -u") { chunk ->
-  require(output.size() + chunk.size <= 1024)
-  output.write(chunk)
-}
-```
+</details>
 
-输出限制为 1024 字节，并且必须能解析成非负 UID。没有把命令字符串暴露给 JavaScript。
-
-## 嵌入经过固定的 ADB 源码
+<details>
+<summary>协议与来源：TLS、身份保存、上游 revision 和许可证</summary>
 
 `android/adb/` 使用 [RikkaApps/Shizuku](https://github.com/RikkaApps/Shizuku) 的 Android ADB 客户端子集，固定在提交 [`b844bc4`](https://github.com/RikkaApps/Shizuku/tree/b844bc491f1790c72328e1a8e5b2349f8978f0ea)。它直接编进 PocketRun，不要求用户另外安装 Shizuku App。
 
@@ -137,7 +181,7 @@ client.shellCommand("id -u") { chunk ->
 
 完整来源、改动和许可证位于 `app/android/adb/UPSTREAM.md`、`LICENSE` 与 `src/main/assets/third-party/`。对应 notice 也会打进 APK。
 
-### 身份怎样保存
+**身份怎样保存**
 
 第一次配对时，App 生成 2048 位软件 RSA 身份。私钥先用 Android Keystore 中的 AES-256-GCM 密钥加密，再写入 App 私有的 SharedPreferences。
 
@@ -145,27 +189,14 @@ client.shellCommand("id -u") { chunk ->
 
 六位配对码只参与本次配对交换，不写入偏好设置或日志。系统服务的临时 TLS 证书按所选上游实现接受；配对码认证本次交换，PocketRun 不把它描述成持久服务端证书固定。
 
-## 取消必须停掉底层工作
+</details>
 
-React 使用递增序号忽略取消后才返回的旧 Promise，但这只能保护界面状态。
+## 验证这条入口
 
-真正的取消发生在 Kotlin：关闭当前 transport，让阻塞的连接、TLS 握手或读取立即返回。单线程队列保证只有创建 `PairingContext` 的工作线程销毁 JNI 状态，避免“取消线程释放、工作线程仍在使用”的竞态。
+按钮显示 2000 是产品结果；协议、界面状态和真实 Android 行为要分别验证。下面保留本章历史记录，不把当前源码的新增测试算进旧快照。
 
-`取消 / 断开` 会关闭 PocketRun 的当前连接。Android 已保存的配对授权仍由系统设置管理；需要撤销时，在无线调试的已配对设备列表中操作。
-
-## 在自己的设备上跑通
-
-只在自己拥有或明确获授权的 Android 11 及以上设备上练习。打开“开发者选项 → 无线调试”，保持该页面可见。
-
-1. 点系统的“使用配对码配对设备”。
-2. 把弹窗中的端口和六位码填入 PocketRun，点“配对”。不要截图、记录或复用配对码。
-3. 回到无线调试主页，把 IP 地址后的端口填入“连接端口”。
-4. 点“连接”，结果应为 `UID：2000`；再点“检查连接”，确认保留的连接还能打开第二条流。
-5. 点“取消 / 断开”，结果应变成“连接已关闭”。
-
-错误配对码、过期端口、关闭无线调试和超时都应返回错误，而不是一直停在忙碌状态。
-
-## 构建与检查
+<details>
+<summary>实践命令：构建与专用模拟器协议测试</summary>
 
 在 `app/` 运行源码检查：
 
@@ -187,7 +218,7 @@ cd android
 
 `AdbTransportTest` 使用本机测试套接字验证读取截止时间、取消解阻塞、重复关闭和协议消息边界，不需要 Android 配对。
 
-### 可选：在专用模拟器跑真实协议测试
+**可选：在专用模拟器跑真实协议测试**
 
 设备测试会打开系统设置并新增 ADB 配对，只能在第 1 章创建的专用模拟器上运行。测试自身也会核对 AVD 名为 `pocketrun-ch1-api36`，不会接受真机或其他模拟器。
 
@@ -205,7 +236,7 @@ adb -s "$SERIAL" shell am instrument -w \
 
 测试在设备进程内读取当次六位码，不把它输出或传回主机。测试身份使用独立的 App 私有存储；它通过真实 TLS 配对、连接，并在同一连接上连续两次检查 `id -u == 2000`，最后关闭资源。
 
-## 本章验证结果
+</details>
 
 2026-11-17 的检查结果：
 
@@ -225,4 +256,5 @@ adb -s "$SERIAL" shell am instrument -w \
 ## 本章代码
 
 - [PR #5：App 自有 ADB 配对、连接与第 2 章](https://github.com/kkkhs/pocketrun/pull/5)
+- [PR #10：前序章节的任务主线与图解](https://github.com/kkkhs/pocketrun/pull/10)
 - [Release `chapter-2`：本章结束时的源码快照](https://github.com/kkkhs/pocketrun/releases/tag/chapter-2)
