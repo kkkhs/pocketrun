@@ -42,7 +42,7 @@ export default function BackendPanel({ colors }: { colors: Colors }) {
         ? '正在通过 ADB 启动后端，最多等待 15 秒…'
         : action === 'stop'
         ? '正在停止 shell 后端…'
-        : '正在通过 Binder 检查后端…',
+        : '正在通过 Binder 检查 shell 后端…',
     );
     try {
       if (!NativeAdb) throw new Error('ADB 原生模块未注册，请重新构建 APK。');
@@ -90,12 +90,12 @@ export default function BackendPanel({ colors }: { colors: Colors }) {
       <Text style={[styles.title, { color: colors.text }]}>第 3 章 · shell 后端</Text>
       <Text style={[styles.text, { color: colors.muted }]}>ADB 只负责启动；启动后，App 通过 Binder 与 UID 2000 的后端通信。</Text>
       {control('启动 shell 后端', 'start', busy || running)}
-      {control('检查 Binder 后端', 'ping', busy || !running)}
+      {control('通过 Binder 检查 shell 后端', 'ping', busy || !running)}
       {control('停止 shell 后端', 'stop', busy || !running)}
       <Text accessibilityLiveRegion="polite" style={[styles.text, { color: colors.text }]}>
         {message}
       </Text>
-      <Text style={[styles.text, { color: colors.muted }]}>可以先断开 ADB，再检查 Binder 后端；已建立的 Binder 不依赖 ADB 连接继续存在。</Text>
+      <Text style={[styles.text, { color: colors.muted }]}>可以先断开 ADB，再通过 Binder 检查 shell 后端；已建立的 Binder 不依赖 ADB 连接继续存在。</Text>
     </View>
   );
 }

@@ -16,7 +16,7 @@
     <rect x="20" y="20" width="780" height="136" rx="12" class="card"/>
     <rect x="20" y="32" width="5" height="112" rx="2" fill="var(--app)"/>
     <text x="45" y="57" class="heading">第一阶段 · 搭通两种身份</text>
-    <text x="45" y="88" class="label">每章只加一层，当前进行到这里</text>
+    <text x="45" y="88" class="label">每章只加一层：UI → 启动入口 → Binder 后端</text>
     <text x="45" y="126" class="body">1 React → Kotlin（App UID）</text>
     <text x="308" y="126" class="body">2 App → ADB（启动钥匙）</text>
     <text x="570" y="126" class="body">3 Binder → shell 后端</text>
@@ -29,7 +29,7 @@
     <text x="45" y="224" class="heading">第二阶段 · 看见并操作 Android App</text>
     <text x="45" y="258" class="body">4 创建目标虚拟屏</text>
     <text x="308" y="258" class="body">5 截图、UI 树与定向输入</text>
-    <text x="645" y="258" class="label">shell 后端</text>
+    <text x="645" y="258" class="label">当前：第 4 章</text>
   </g>
   <path d="M410 286 V314" class="edge" marker-end="url(#pr-roadmap-arrow)"/>
 

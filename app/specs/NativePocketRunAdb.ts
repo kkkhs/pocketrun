@@ -15,6 +15,11 @@ export type BackendInfo = {
   reply: string;
 };
 
+export type DisplayInfo = {
+  active: boolean;
+  displayId: number;
+};
+
 export interface Spec extends TurboModule {
   pair(port: number, code: string): Promise<void>;
   connect(port: number): Promise<number>;
@@ -25,6 +30,9 @@ export interface Spec extends TurboModule {
   pingBackend(): Promise<BackendInfo>;
   stopBackend(): Promise<void>;
   getBackendStatus(): Promise<BackendInfo>;
+  createDemoDisplay(): Promise<DisplayInfo>;
+  getDisplayStatus(): Promise<DisplayInfo>;
+  releaseDisplay(): Promise<DisplayInfo>;
 }
 
 export default TurboModuleRegistry.get<Spec>('PocketRunAdb');

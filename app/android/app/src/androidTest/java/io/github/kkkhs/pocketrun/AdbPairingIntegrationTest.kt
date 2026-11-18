@@ -1,6 +1,7 @@
 package io.github.kkkhs.pocketrun
 
 import android.content.Intent
+import android.hardware.display.DisplayManager
 import android.os.Binder
 import android.os.Bundle
 import android.provider.Settings
@@ -76,11 +77,29 @@ class AdbPairingIntegrationTest {
         assertEquals(2000, first.uid)
         assertTrue(first.pid > 0)
         assertEquals("pong", first.reply)
-        // The ADB client is closed above; this call must travel only through Binder.
+        // The ADB client is closed above; these calls must travel only through Binder.
         assertEquals(first.pid, backend.ping().pid)
+        val display = backend.createDemoDisplay()
+        assertTrue(display.active)
+        assertTrue(display.displayId > 0)
+        assertEquals(display.displayId, backend.displayStatus().displayId)
+        assertTrue("Virtual display was not registered", waitUntil { systemHasDisplay(display.displayId) })
+        assertTrue("Demo Activity was not routed to the virtual display", waitUntil {
+            demoActivityUsesDisplay(display.displayId)
+        })
 
+        backend.releaseDisplay()
+        assertEquals(-1, backend.displayStatus().displayId)
+        assertTrue("Released display is still registered", waitUntil { !systemHasDisplay(display.displayId) })
+        assertTrue("Demo Activity survived display release", waitUntil { !demoActivityIsRunning() })
+
+        val secondDisplay = backend.createDemoDisplay()
+        assertTrue(secondDisplay.displayId > 0)
+        assertTrue(waitUntil { demoActivityUsesDisplay(secondDisplay.displayId) })
         device.executeShellCommand("kill ${first.pid}")
         assertTrue("Binder death was not observed", waitUntil { !backend.status().running })
+        assertTrue("Display survived backend death", waitUntil { !systemHasDisplay(secondDisplay.displayId) })
+        assertTrue("Demo Activity survived backend death", waitUntil { !demoActivityIsRunning() })
 
         AdbTransport().use { transport ->
             AdbClient("127.0.0.1", connectionPort, key, transport).use { client ->
@@ -121,6 +140,22 @@ class AdbPairingIntegrationTest {
         assertFalse("Cancelled backend start must finish", starter.isAlive)
         assertTrue(failure.get() is CancellationException)
         backend.close()
+    }
+
+    private fun systemHasDisplay(displayId: Int): Boolean =
+        context.getSystemService(DisplayManager::class.java).getDisplay(displayId) != null
+
+    private fun demoActivityIsRunning(): Boolean =
+        device.executeShellCommand("dumpsys activity activities").contains("DisplayDemoActivity")
+
+    private fun demoActivityUsesDisplay(displayId: Int): Boolean {
+        val dump = device.executeShellCommand("dumpsys activity activities")
+        val activity = dump.indexOf("DisplayDemoActivity")
+        if (activity < 0) return false
+        val displayHeader = dump.lastIndexOf("Display #", activity)
+        if (displayHeader < 0) return false
+        val headerEnd = dump.indexOf('\n', displayHeader).let { if (it < 0) dump.length else it }
+        return dump.substring(displayHeader, headerEnd).startsWith("Display #$displayId ")
     }
 
     private fun assertUnauthorizedExchangeIsRejected() {

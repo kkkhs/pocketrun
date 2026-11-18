@@ -45,13 +45,35 @@ import figureStyles from '@site/src/css/tutorial-figures.module.css';
   <figcaption>ADB 是启动钥匙；一次性交换完成后，日常通信只走 Binder。</figcaption>
 </figure>
 
+## TypeScript、App Kotlin 和 shell 后端是什么关系
+
+它们不是三个 App，也不是两个后端：
+
+```text
+React / TypeScript UI（PocketRun App）
+        │ TurboModule + Promise
+        ▼
+App Kotlin 原生层（同一个 App 进程、App UID）
+        │ Binder
+        ▼
+shell 后端 Kotlin（独立 app_process、UID 2000）
+```
+
+- TypeScript 负责按钮、状态和结果展示。
+- `AdbModule.kt`、`PrivilegedBackendController.kt` 属于同一个 PocketRun App 的 Kotlin 原生层；它们持有 Android 的 `IBinder`。
+- `PrivilegedBackendMain.kt` 是另一个进程里的真正后端。
+
+Binder 可以类比成本机 RPC / HTTP 调用通道：它负责把方法和结果送过进程边界，本身不是后端。TypeScript 不能直接持有 Android 的 `IBinder`，所以结果要经过 Kotlin 转成 `WritableMap`，再由 Promise 回到 TS。
+
+同理，ADB 也不是后端。ADB 只负责启动 `app_process`；启动完成后的日常调用走 Binder。
+
 ## 先在界面跑一遍
 
 前提是已经按第 2 章完成配对，并连接无线调试主页的连接端口。
 
 1. 点“启动 shell 后端”。结果应显示 `Binder pong`、UID 2000 和一个 PID。
 2. 点第 2 章的“取消 / 断开”，关闭 PocketRun 的 ADB transport。
-3. 回到第 3 章点“检查 Binder 后端”。PID 应保持不变。
+3. 回到第 3 章点“通过 Binder 检查 shell 后端”。PID 应保持不变。
 4. 点“停止 shell 后端”。按钮回到只能启动的状态。
 
 这四步分别证明：后端真实启动、身份正确、Binder 不依赖 ADB 连接、资源能够主动关闭。
@@ -79,9 +101,9 @@ export CLASSPATH='<当前 APK>'
 
 shell 返回只说明进程还活着。PocketRun 必须真正收到 Binder，并调用 `getUid()` 得到 2000，才把启动判为成功。
 
-## 后端只暴露四个 Binder 方法
+## 第 3 章只暴露四个 Binder 方法
 
-AIDL 是 Android 对 Binder 接口的声明。`IPrivilegedBackend.aidl` 目前只有：
+AIDL 是 Android 对 Binder 接口的声明。第 3 章完成时，`IPrivilegedBackend.aidl` 只有：
 
 ```aidl
 interface IPrivilegedBackend {
@@ -92,7 +114,7 @@ interface IPrivilegedBackend {
 }
 ```
 
-这里故意没有 `execute(String command)`。后续能力会以参数明确的方法加入，不能绕过原生校验变成任意 shell 入口。
+这里故意没有 `execute(String command)`。第 4 章会增加参数固定的虚拟屏方法；后续能力都以边界明确的方法加入，不能绕过原生校验变成任意 shell 入口。
 
 `PrivilegedBackendMain` 在每个方法前检查：
 
@@ -167,7 +189,7 @@ app/
 npm run typecheck
 npm run lint
 npm test -- --runInBand
-npm audit --audit-level=high --registry=https://registry.npmjs.org
+npm run audit:ci
 
 cd android
 ./gradlew :adb:testDebugUnitTest :app:testDebugUnitTest \
@@ -216,3 +238,4 @@ adb -s "$SERIAL" shell am instrument -w \
 ## 本章代码
 
 - [PR #6：shell 后端、Binder 通信与第 3 章](https://github.com/kkkhs/pocketrun/pull/6)
+- [Release `chapter-3`：本章结束时的源码快照](https://github.com/kkkhs/pocketrun/releases/tag/chapter-3)

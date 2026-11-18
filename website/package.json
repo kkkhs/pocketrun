@@ -9,7 +9,8 @@
     "clear": "docusaurus clear",
     "serve": "docusaurus serve",
     "typecheck": "tsc",
-    "test:toolchain": "node toolchain-compat.cjs"
+    "test:toolchain": "node toolchain-compat.cjs",
+    "audit:ci": "node ../scripts/audit-ci.cjs"
   },
   "dependencies": {
     "@docusaurus/core": "3.10.2",

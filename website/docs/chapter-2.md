@@ -173,7 +173,7 @@ React 使用递增序号忽略取消后才返回的旧 Promise，但这只能保
 npm run typecheck
 npm run lint
 npm test -- --runInBand
-npm audit --audit-level=high --registry=https://registry.npmjs.org
+npm run audit:ci
 ```
 
 再构建 ADB 单元测试、App 和设备测试 APK：
@@ -225,3 +225,4 @@ adb -s "$SERIAL" shell am instrument -w \
 ## 本章代码
 
 - [PR #5：App 自有 ADB 配对、连接与第 2 章](https://github.com/kkkhs/pocketrun/pull/5)
+- [Release `chapter-2`：本章结束时的源码快照](https://github.com/kkkhs/pocketrun/releases/tag/chapter-2)
