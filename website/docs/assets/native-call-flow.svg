@@ -1,64 +1,36 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 760 490" role="img" aria-labelledby="pr-native-title pr-native-desc" class="pr-native-diagram">
-  <title id="pr-native-title">Codegen在构建期生成接口，点击时通过TurboModule调用Kotlin</title>
-  <desc id="pr-native-desc">开发机构建APK时，Codegen根据TypeScript Spec生成Java和C++接口。手机运行时，React按钮通过TurboModule调用Kotlin模块，后者读取Build和Process的系统信息，再通过Promise返回结果或错误。Codegen不会在每次点击时重新执行。</desc>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 940 254" role="img" aria-labelledby="pr-native-title pr-native-desc" class="pr-native-diagram">
+  <title id="pr-native-title">一次点击怎样得到设备信息</title>
+  <desc id="pr-native-desc">React 按钮通过 TurboModule 调用同一 App 进程内的 Kotlin getDeviceInfo。Kotlin 读取 Build 和 Process，通过 Promise 返回结果，React 更新显示。Codegen 在构建期完成，不属于点击后的运行步骤。</desc>
   <style>
-    .pr-native-diagram { --app: #2a78d6; --ink: var(--ifm-font-color-base, #1c1e21); --muted: var(--ifm-color-emphasis-700, #606770); --border: var(--ifm-color-emphasis-300, #dadde1); --panel: var(--ifm-background-surface-color, #fff); font-family: system-ui, -apple-system, "Segoe UI", sans-serif; }
-    html[data-theme="dark"] .pr-native-diagram { --app: #3987e5; }
     .pr-native-diagram .card { fill: var(--panel); stroke: var(--border); stroke-width: 1.5; }
     .pr-native-diagram .edge { fill: none; stroke: var(--muted); stroke-width: 2; }
     .pr-native-diagram .heading { fill: var(--ink); font-size: 24px; font-weight: 650; }
     .pr-native-diagram .body { fill: var(--ink); font-size: 20px; }
-    .pr-native-diagram .label { fill: var(--muted); font-size: 18px; }
+    .pr-native-diagram .label { fill: var(--muted); font-size: 16px; }
   </style>
-  <defs>
-    <marker id="pr-native-arrow" markerWidth="9" markerHeight="8" refX="8" refY="4" orient="auto"><path d="M0 0 9 4 0 8Z" fill="var(--muted)"/></marker>
-  </defs>
-  <text x="20" y="30" class="heading">构建期</text>
-  <text x="116" y="30" class="label">开发机 · 构建 APK 时生成</text>
-  <path d="M232 124 H274" class="edge" marker-end="url(#pr-native-arrow)"/>
-  <path d="M486 124 H528" class="edge" marker-end="url(#pr-native-arrow)"/>
-  <path d="M634 176 V206 Q634 214 626 214 H388 Q380 214 380 222 V276" class="edge" stroke-dasharray="6 5" marker-end="url(#pr-native-arrow)"/>
-  <text x="456" y="204" class="label">生成后供运行时使用</text>
-
-  <g data-node="spec">
-    <title>TypeScript Spec定义getDeviceInfo及其返回数据。</title>
-    <rect x="20" y="72" width="212" height="104" rx="10" class="card"/>
-    <text x="40" y="112" class="heading">TypeScript</text>
-    <text x="40" y="147" class="body">Spec 定义调用约定</text>
+  <defs><marker id="pr-native-arrow" markerWidth="9" markerHeight="8" refX="8" refY="4" orient="auto"><path d="M0 0 9 4 0 8Z" fill="var(--muted)"/></marker></defs>
+  <text x="470" y="34" class="heading" text-anchor="middle">点击后，信息怎样回到页面？</text>
+  <g data-node="request">
+    <rect x="20" y="78" width="220" height="112" rx="10" class="card"/>
+    <text x="130" y="117" class="heading" text-anchor="middle">点击按钮</text>
+    <text x="130" y="150" class="body" text-anchor="middle">React 发起请求</text>
+    <text x="130" y="177" class="label" text-anchor="middle">getDeviceInfo()</text>
   </g>
-  <g data-node="codegen">
-    <rect x="274" y="72" width="212" height="104" rx="10" class="card"/>
-    <text x="294" y="112" class="heading">Codegen</text>
-    <text x="294" y="147" class="body">读取接口定义</text>
+  <path d="M240 134 H360" class="edge" marker-end="url(#pr-native-arrow)"/>
+  <text x="300" y="118" class="label" text-anchor="middle">TurboModule</text>
+  <g data-node="read">
+    <rect x="360" y="78" width="220" height="112" rx="10" class="card"/>
+    <text x="470" y="117" class="heading" text-anchor="middle">读取信息</text>
+    <text x="470" y="150" class="body" text-anchor="middle">App Kotlin 执行</text>
+    <text x="470" y="177" class="label" text-anchor="middle">Build / Process</text>
   </g>
-  <g data-node="generated">
-    <title>生成文件位于build目录，由构建工具管理，不手动编辑。</title>
-    <rect x="528" y="72" width="212" height="104" rx="10" class="card"/>
-    <text x="548" y="112" class="heading">生成的接口</text>
-    <text x="548" y="147" class="body">Java / C++</text>
+  <path d="M580 134 H700" class="edge" marker-end="url(#pr-native-arrow)"/>
+  <text x="640" y="118" class="label" text-anchor="middle">Promise 结果</text>
+  <g data-node="render">
+    <rect x="700" y="78" width="220" height="112" rx="10" class="card"/>
+    <text x="810" y="117" class="heading" text-anchor="middle">显示结果</text>
+    <text x="810" y="150" class="body" text-anchor="middle">React 更新状态</text>
+    <text x="810" y="177" class="label" text-anchor="middle">四个字段或错误</text>
   </g>
-
-  <text x="20" y="249" class="heading">运行期</text>
-  <text x="116" y="249" class="label">手机 · 用户点击按钮</text>
-  <path d="M232 328 H274" class="edge" marker-end="url(#pr-native-arrow)"/>
-  <path d="M486 328 H528" class="edge" marker-end="url(#pr-native-arrow)"/>
-  <path d="M634 380 V414 Q634 422 626 422 H134 Q126 422 126 414 V380" class="edge" marker-end="url(#pr-native-arrow)"/>
-  <g data-node="button">
-    <rect x="20" y="276" width="212" height="104" rx="10" class="card"/>
-    <text x="40" y="316" class="heading">React 按钮</text>
-    <text x="40" y="351" class="body">发起读取请求</text>
-  </g>
-  <g data-node="turbo">
-    <rect x="274" y="276" width="212" height="104" rx="10" class="card"/>
-    <text x="294" y="316" class="heading">TurboModule</text>
-    <text x="294" y="351" class="body">调用原生模块</text>
-  </g>
-  <g data-node="kotlin">
-    <rect x="528" y="276" width="212" height="104" rx="10" class="card"/>
-    <rect x="528" y="286" width="4" height="84" rx="2" fill="var(--app)"/>
-    <text x="548" y="316" class="heading">Kotlin</text>
-    <text x="548" y="351" class="body">Build / Process</text>
-  </g>
-  <text x="380" y="449" class="body" text-anchor="middle">Promise：设备信息 / 错误</text>
-  <text x="380" y="479" class="label" text-anchor="middle">运行期保持普通 App UID，不获得 shell 或 root 权限。</text>
+  <text x="470" y="232" class="label" text-anchor="middle">同一个 App 进程，始终保持普通 App UID；Codegen 不在点击时运行。</text>
 </svg>

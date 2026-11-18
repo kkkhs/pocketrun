@@ -11,11 +11,15 @@ import NativeCallFlow from './assets/native-call-flow.svg';
 import NativeModuleLookup from './assets/native-module-lookup.svg';
 import figureStyles from '@site/src/css/tutorial-figures.module.css';
 
-这一章只做一件事：点击“检查设备”，显示 Android 版本、API Level、ABI 和当前 App UID。
+从一个 React 按钮开始。这一章只做一个任务：**点击“检查设备”，让 Kotlin 读取 Android 版本、API Level、ABI 和当前 App UID，再把结果显示在 React 页面上。**
 
-**主线位置：** React 界面 → **本章：Kotlin 原生模块（App UID）** → 下一章：经用户授权的 ADB 入口。
+```text
+发起：用户点按钮，React 调原生方法
+执行：Kotlin 读取设备信息
+返回：Promise 完成，React 显示结果
+```
 
-现在不处理 shell 权限。先确认“界面能调用 Android，但调用后仍是普通 App 身份”。
+现在不处理 shell 权限。先确认“界面能调用 Android，但调用后仍是普通 App 身份”；下一章才引入需要系统授权的 ADB 入口。
 
 <div style={{display: 'flex', gap: '1.5rem', flexWrap: 'wrap', margin: '1.25rem 0'}}>
   <figure style={{margin: 0, flex: '0 1 280px', minWidth: 0, maxWidth: '100%'}}>
@@ -30,20 +34,25 @@ import figureStyles from '@site/src/css/tutorial-figures.module.css';
 
 两张图来自同一次模拟器验证，均截取内容区域。UID 由 Android 分配，你的设备上不必是 `10150`。
 
-## 一次点击怎么走
+## 看清一次点击
+
+如果已经安装本章 App，先点“检查设备”，确认从“尚未读取”变成四个字段。还没有环境时，可先读下面的原理，再展开安装说明。
+
+**这里有两个执行层，但只有一个 App 进程：** React / TypeScript 管按钮和显示，App Kotlin 读 Android 信息。TurboModule 接通两层，不是跨进程的 Binder，也不会启动 shell 后端。
 
 <figure style={{margin: '1.25rem 0'}}>
-  <div style={{overflowX: 'auto'}} tabIndex={0} role="region" aria-label="原生调用的构建期与运行期流程图，可横向查看">
-    <NativeCallFlow className={`pr-native-diagram ${figureStyles.diagram}`} role="img" aria-labelledby="pr-native-title" aria-describedby="pr-native-desc" style={{display: 'block', width: '100%', minWidth: 600, height: 'auto'}} />
+  <div style={{overflowX: 'auto'}} tabIndex={0} role="region" aria-label="一次按钮调用与结果返回的顺序，可横向查看">
+    <NativeCallFlow className={`pr-native-diagram ${figureStyles.diagram}`} role="img" aria-labelledby="pr-native-title" aria-describedby="pr-native-desc" style={{display: 'block', width: '100%', minWidth: 820, height: 'auto'}} />
   </div>
-  <figcaption>Codegen 在构建期生成接口；点击按钮时，调用的是已经接好的原生模块。</figcaption>
+  <figcaption>这张图只回答点击后的先后顺序。所有步骤仍在同一个 App 进程内；Codegen 不在这条运行链里。</figcaption>
 </figure>
 
 React 负责显示和交互，Kotlin 读取系统信息。**调用原生方法不会改变 App 的身份**，也不会授予 shell 或 root 权限。
 
 本章没有 Agent、虚拟屏或额外设备授权。先把最短调用链跑通，再接后续能力。
 
-## 先把环境准备好
+<details>
+<summary>实践准备：安装 App 依赖、JDK、SDK 与模拟器</summary>
 
 代码位于 `app/`，和 `website/` 各用一份 npm 依赖。没有把手机工程混进文档站。
 
@@ -123,7 +132,9 @@ npm exec --yes --registry=https://registry.npmjs.org \
 
 </details>
 
-## 加入一个原生方法
+</details>
+
+## 接好原生方法
 
 关键文件只有这些：
 
@@ -139,7 +150,7 @@ app/
 
 ### 先写调用约定
 
-`NativePocketRunDevice.ts` 定义返回值和一个异步方法：
+先约定“按钮能调用什么、得到什么”。[NativePocketRunDevice.ts](https://github.com/kkkhs/pocketrun/blob/main/app/specs/NativePocketRunDevice.ts) 定义返回值和一个异步方法：
 
 ```ts
 import type {TurboModule} from 'react-native';
@@ -161,13 +172,13 @@ export default TurboModuleRegistry.get<Spec>('PocketRunDevice');
 
 这个文件做两件事：`Spec` 描述方法和返回值；最后一行按名字取得原生模块。前端 import 的默认值，就是最后一行的结果。
 
-**Android 不会在点击时读取这个 `.ts` 文件。** 构建时，Codegen 按 `package.json` 中的 `codegenConfig` 生成 `NativePocketRunDeviceSpec` 等接口；运行时，手机执行编译后的 JavaScript 和原生代码。
+**Android 不会在点击时读取这个 `.ts` 文件。** 构建时，Codegen 按 [app/package.json](https://github.com/kkkhs/pocketrun/blob/main/app/package.json) 中的 `codegenConfig` 生成 `NativePocketRunDeviceSpec` 等接口；运行时，手机执行编译后的 JavaScript 和原生代码。
 
 生成文件留在 `build/`，不手改、不提交。这里用 `get`：找不到模块时返回 `null`，由页面显示错误；顶层 `getEnforcing` 则会直接抛错。
 
-### Kotlin 读取系统信息
+### 用 Kotlin 读取
 
-`DeviceInfoModule.kt` 的读取部分：
+[DeviceInfoModule.kt](https://github.com/kkkhs/pocketrun/blob/main/app/android/app/src/main/java/io/github/kkkhs/pocketrun/DeviceInfoModule.kt) 继承生成的 `NativePocketRunDeviceSpec`，实现 `getDeviceInfo()`。它从 `Build` 取系统版本和 ABI，从 `Process.myUid()` 取**当前 App 进程**的 UID：
 
 ```kotlin
 val abis = Arguments.createArray()
@@ -181,9 +192,11 @@ val result = Arguments.createMap().apply {
 promise.resolve(result)
 ```
 
-### 启动时，先把模块登记好
+返回值用 RN 的数组和 Map 构造，`promise.resolve(result)` 再交给 JavaScript。失败则由 `promise.reject(...)` 拒绝 Promise；React 不需要拿到 Android `Build` 对象本身。
 
-Kotlin 类写好后，RN 还不知道去哪里找它。`MainApplication.kt` 在创建 ReactHost 时加入我们的 Package：
+### 登记模块名字
+
+Kotlin 类写好后，RN 还不知道去哪里找它。[MainApplication.kt](https://github.com/kkkhs/pocketrun/blob/main/app/android/app/src/main/java/io/github/kkkhs/pocketrun/MainApplication.kt) 在创建 ReactHost 时加入我们的 Package：
 
 ```kotlin
 PackageList(this).packages.apply {
@@ -191,14 +204,14 @@ PackageList(this).packages.apply {
 }
 ```
 
-Package 像一份模块目录，向 RN 提供两样东西：
+[DeviceInfoPackage.kt](https://github.com/kkkhs/pocketrun/blob/main/app/android/app/src/main/java/io/github/kkkhs/pocketrun/DeviceInfoPackage.kt) 像一份模块目录，向 RN 提供两样东西：
 
 | 方法 | 告诉 RN 什么 |
 | --- | --- |
 | `getReactModuleInfoProvider()` | 我提供名为 `PocketRunDevice` 的 TurboModule |
 | `getModule(name, context)` | 请求这个名字时，返回 `DeviceInfoModule` 实例 |
 
-当前创建方法很短：
+第 1 章快照中的创建方法很短；后续章节会在这个 Package 中再加入 ADB 模块：
 
 ```kotlin
 override fun getModule(name: String, reactContext: ReactApplicationContext): NativeModule? =
@@ -207,13 +220,13 @@ override fun getModule(name: String, reactContext: ReactApplicationContext): Nat
 
 其中 `DeviceInfoModule.NAME` 的值是 `"PocketRunDevice"`。RN 管理模块的创建和复用，不需要页面每点一次就创建一个 Kotlin 对象。
 
-### 前端按名字拿到代理
+### 按名字取代理
 
 <figure style={{margin: '1.25rem 0'}}>
-  <div style={{overflowX: 'auto'}} tabIndex={0} role="region" aria-label="原生模块注册与按名查找图，可横向查看">
-    <NativeModuleLookup className={`pr-lookup-diagram ${figureStyles.diagram}`} role="img" aria-labelledby="pr-lookup-title" aria-describedby="pr-lookup-desc" style={{display: 'block', width: '100%', minWidth: 640, height: 'auto'}} />
+  <div style={{overflowX: 'auto'}} tabIndex={0} role="region" aria-label="PocketRunDevice 查找名与原生实现的对应关系，可横向查看">
+    <NativeModuleLookup className={`pr-lookup-diagram ${figureStyles.diagram}`} role="img" aria-labelledby="pr-lookup-title" aria-describedby="pr-lookup-desc" style={{display: 'block', width: '100%', minWidth: 820, height: 'auto'}} />
   </div>
-  <figcaption>先登记名字和提供方法，再按名字查找。图中的目录与缓存由 React Native 管理。</figcaption>
+  <figcaption>这张图只回答“这个名字怎样对应到实现”。目录和实例复用由 RN 管理，不是每次点击重做的任务阶段。</figcaption>
 </figure>
 
 `App.tsx` 的 import 会执行接口文件中的默认导出：
@@ -234,9 +247,9 @@ RN 根据 `PocketRunDevice` 找到 Package，再取得原生实例。JS 拿到�
 | `NativePocketRunDeviceSpec` | Codegen 生成的基类，供 Kotlin 继承 |
 | `PocketRunSpecs` | Codegen 库名，用于组织生成文件，不是查找键 |
 
-### 点击后，结果怎样回到界面
+## 点按钮并显示
 
-按钮调用代理上的 `getDeviceInfo()`，最终进入 Kotlin 的同名方法。`promise.resolve(result)` 会使 JS 的 Promise 完成，然后 React 更新界面：
+准备和注册已经完成，点击才进入运行阶段。[App.tsx](https://github.com/kkkhs/pocketrun/blob/main/app/App.tsx) 的按钮调用代理上的 `getDeviceInfo()`，最终进入 Kotlin 的同名方法。`promise.resolve(result)` 会使 JS 的 Promise 完成，然后 React 更新界面：
 
 ```ts
 if (!NativePocketRunDevice) {
@@ -250,9 +263,12 @@ setInfo(info);
 
 若提示模块未注册，先检查 Package 是否加入、注册名是否对应。修改 Spec 或 Kotlin 后要重新构建并安装 APK；只刷新 Metro 不会更新原生代码。
 
-## 构建并实际点一次
+## 核对真实结果
 
-先检查源码，再构建 Android：
+<details>
+<summary>实践命令：构建、安装与系统信息对照</summary>
+
+先按前面的环境说明准备自己的专用模拟器。检查源码，再构建 Android：
 
 ```bash
 # 在 app/
@@ -304,7 +320,9 @@ adb -s "$SERIAL" logcat -d -s PocketRunDevice:I '*:S'
 
 `run-as` 用于本章可调试的自有 App，不是获取其他应用权限的方法。结束后停止 Metro；用模拟器窗口退出，或对确认属于本次任务的序列号执行 `adb -s "$SERIAL" emu kill`。
 
-## 哪些已经验证
+</details>
+
+本章已经验证：
 
 - TypeScript、ESLint、三个 UI 测试通过。
 - Codegen、Kotlin/Java、C++ 和 ARM64 Debug APK 构建通过。
@@ -328,7 +346,7 @@ adb -s "$SERIAL" logcat -d -s PocketRunDevice:I '*:S'
 
 </details>
 
-练习：沿着这五个文件找出按钮、接口、Kotlin 实现和注册位置。下一章将引入 ADB；届时要区分普通 App 身份和 shell 后端身份。
+练习：沿着这五个文件找出按钮、接口、Kotlin 实现和注册位置。下一章将引入 ADB；届时要区分普通 App 身份和 shell 命令的执行身份。
 
 参考：[原生模块](https://reactnative.dev/docs/turbo-native-modules-introduction)、[Codegen](https://reactnative.dev/docs/the-new-architecture/using-codegen)、[Android 开发环境](https://reactnative.dev/docs/set-up-your-environment)。
 

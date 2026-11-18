@@ -2,14 +2,22 @@
 sidebar_position: 91
 sidebar_label: 参考：工程与发布
 title: 第 0 章：运行与发布教程站
-description: 从现有仓库运行网站，检查修改，再通过 PR 发布一次更新。
+description: 写一段教程，热更新预览，构建检查，再通过 PR 发布到自己的 GitHub Pages。
 ---
 
-本章要完成一次可验证的教程更新：**本地看见修改，PR 检查通过，合并后在线确认。**
+本章是独立的网站工程参考，**不需要 Android SDK、手机或 ADB，也不是第 1 章的前置。**
 
-现有网站使用 Docusaurus 3.10.2 默认 Docs 主题。先运行它，再走更新流程。
+只做一个任务：**给教程补一段有用的说明，先在本地看见，再发布到自己的 GitHub Pages。**
 
-## 本地打开
+```text
+准备：自己的仓库和分支
+写作：改正文 → 本地预览 → 构建检查
+发布：提交 PR → 合并 → 核对页面
+```
+
+网站使用 Docusaurus 3.10.2 默认 Docs 主题。正文是源文件，开发预览帮助写作，构建产物才是 Pages 最后发布的内容；这三者不是同一份状态。
+
+## 准备仓库
 
 准备 Git、Node 24.18.0 和 npm。使用 nvm 时，仓库的 `.nvmrc` 会指定 Node 版本；也可以用其他方式安装同一版本。
 
@@ -28,7 +36,37 @@ npm ci --registry=https://registry.npmjs.org
 
 `website/` 是 npm 项目。安装成功应以退出码 `0` 结束，实际依赖由 `package-lock.json` 固定。
 
-## 检查并预览
+## 写一段说明
+
+结束安装后，先从 `website/` 回到仓库根目录，创建自己的文档分支：
+
+```bash
+cd ..
+git switch main
+git pull --ff-only
+git switch -c docs/update-chapter-0
+```
+
+在 `website/docs/chapter-0.md` 的“遇到问题”中补一条你实际用过的排错提示。先改正文，不改设备示例或依赖。
+
+Markdown 写文章，MDX 允许正文中的 React 组件。开头的 `title` 是页面标题，`sidebar_label` 是目录里读者看到的名字；相对链接如 `architecture.md` 会由 Docusaurus 转成站点路径。
+
+代码位置：[正文目录](https://github.com/kkkhs/pocketrun/tree/main/website/docs)、[站点配置](https://github.com/kkkhs/pocketrun/blob/main/website/docusaurus.config.ts)、[侧栏配置](https://github.com/kkkhs/pocketrun/blob/main/website/sidebars.ts)。正文解决“写什么”，配置解决“在哪里展示”。
+
+## 本地看修改
+
+在 `website/` 开启热更新预览：
+
+```bash
+cd website
+npm start -- --host 127.0.0.1 --port 3000 --no-open
+```
+
+打开 `http://127.0.0.1:3000/pocketrun/`，进入工程与发布参考页，确认刚写的说明已经出现。改正文后页面会更新；按 `Ctrl+C` 结束。端口被占用时换一个空闲端口，不停止别人的服务。
+
+这是开发预览，尚未生成可部署网站。**“开发页面正常”不等于“构建和链接检查通过”。**
+
+## 构建并检查
 
 继续在 `website/` 运行：
 
@@ -46,42 +84,29 @@ npm run serve -- --host 127.0.0.1 --port 3000 --no-open
 
 现在检查页面：
 
-- 首页是导读，侧栏先列第 1—4 章主线，再列系统概览与工程发布参考。
+- 首页是导读，侧栏先列第 1—5 章主线，再列系统概览与工程发布参考。
 - 直接打开并刷新 `/pocketrun/chapter-4/`、`/pocketrun/architecture/`、`/pocketrun/chapter-0/`，页面正常。
 - CSS / JS 没有 404；切到手机宽度后，正文和导航可读，代码块不撑开整页。
 
-日常写作可以热更新：
+`build` 把正文、主题和静态资源编译到 `website/build/`，也检查 MDX 和断链；`serve` 只读取这份已有构建，修改后要重新 build。工具链检查的实现见 [toolchain-compat.cjs](https://github.com/kkkhs/pocketrun/blob/main/website/toolchain-compat.cjs)，依赖门禁见 [audit-ci.cjs](https://github.com/kkkhs/pocketrun/blob/main/scripts/audit-ci.cjs)。
 
-```bash
-# 在 website/
-npm start -- --host 127.0.0.1 --port 3000 --no-open
-```
+## 配好自己的 Pages
 
-`serve` 读取已有构建，修改后要重新 build。提交前仍需完成四项检查，不能只看开发页面正常。
+本地读示例站不需要 GitHub 写权限。发布则必须使用自己的 Fork 或获授权仓库，**不要把示例账号 `kkkhs` 当成发布目标。**
 
-## 提交一次更新
-
-结束预览后，从 `website/` 回到仓库根目录，创建文档分支：
-
-```bash
-cd ..
-git switch main
-git pull --ff-only
-git switch -c docs/update-chapter-0
-# 编辑 website/docs/chapter-0.md
-```
-
-首次发布自己的 Pages 前，修改 `website/docusaurus.config.ts`（用实际账号和仓库名替换占位值）：
+首次发布前，修改 `website/docusaurus.config.ts`（用实际账号和仓库名替换占位值）：
 
 - `url` 改为 `https://OWNER.github.io`，`organizationName` 改为实际 `OWNER`。
 - 仓库改名时，同步 `projectName` 为实际 `REPO`、`baseUrl` 为 `/REPO/`；本地预览和深链也使用新路径。
 
 在自己的仓库启用 Actions 工作流，将 Pages Source 设为 **GitHub Actions**，并把 `github-pages` 环境限定为 `main`。
 
-检查修改，再提交：
+## 提交自己的 PR
+
+站点配置改完后，结束预览。继续在 `website/` 重新检查完整修改，再回到仓库根目录提交：
 
 ```bash
-cd website
+# 在 website/
 npm run test:toolchain
 npm run typecheck
 npm run build
