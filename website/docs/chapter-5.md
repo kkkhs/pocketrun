@@ -112,6 +112,8 @@ UiAutomation 则向系统查询窗口，选择同一个 `displayId` 下的窗口
 
 所以 React 最后收到的是**一张可预览的图片，以及一份可解析的控件数据**，不是 Android 的 Bitmap、窗口对象或内存句柄。
 
+对应代码：[VirtualDisplaySession.captureScreenshot()](https://github.com/kkkhs/pocketrun/blob/main/app/android/app/src/main/java/io/github/kkkhs/pocketrun/VirtualDisplaySession.kt#L70) 负责取图，[DisplayAutomation.kt](https://github.com/kkkhs/pocketrun/blob/main/app/android/app/src/main/java/io/github/kkkhs/pocketrun/DisplayAutomation.kt) 负责读控件。
+
 ### 找输入框：算出点击坐标
 
 这一步在 TypeScript 中完成。`DisplayPanel.tsx` 解析 UI 树，寻找描述为 `演示输入框`、可编辑且已启用的唯一控件。
@@ -135,6 +137,8 @@ const y = Math.floor((bounds.top + bounds.bottom) / 2);  // 740
 
 这不是在主屏上点击图片预览的位置，而是在虚拟屏的 720 × 1280 坐标系里点击控件。找不到唯一目标、树不完整或坐标越界时，页面不会启用输入按钮。
 
+对应代码：[DisplayPanel.parseTree()](https://github.com/kkkhs/pocketrun/blob/main/app/DisplayPanel.tsx#L30) 找到控件并算出中心坐标。这一步不需要跨进程。
+
 ### 点击并填字：发送输入事件
 
 定位之后，React 发起两个请求：
@@ -152,6 +156,8 @@ await NativeAdb.injectText(displayId, 'PocketRun_Ditto_5');
 
 当前仅支持 1—64 个可打印 ASCII 字符，固定例子也使用 ASCII。中文输入属于后续能力扩展，不是本章已验证的能力。
 
+对应代码：[DisplayInput.tap() / text()](https://github.com/kkkhs/pocketrun/blob/main/app/android/app/src/main/java/io/github/kkkhs/pocketrun/DisplayInput.kt#L29) 生成事件、设置显示编号并调用系统输入服务。
+
 ### 检查结果：确认文字改变
 
 输入方法返回 `true`，只说明这一组注入调用被系统接受。它不能单独证明目标控件出现了预期文字。
@@ -162,6 +168,8 @@ await NativeAdb.injectText(displayId, 'PocketRun_Ditto_5');
 2. 新 UI 树里，EditText 的真实 `text` 和结果 TextView 都包含这个值。
 
 Demo 的 `TextWatcher` 会把输入值同步到结果行。这一行是可观察的反馈，帮助区分“仍然只是 hint”与“实际收到输入”。
+
+对应代码：[DisplayDemoActivity.kt](https://github.com/kkkhs/pocketrun/blob/main/app/android/app/src/main/java/io/github/kkkhs/pocketrun/DisplayDemoActivity.kt#L38) 更新结果文字；用户再通过之前的截图、查树方法读取这个变化。
 
 截图和树不是一份原子快照，截图也只取当前最新可用帧。若页面尚未重绘，就再次读取；不要把旧预览或旧 JSON 当成操作成功的证据。
 
