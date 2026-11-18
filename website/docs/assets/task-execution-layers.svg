@@ -1,0 +1,44 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 890" role="img" aria-labelledby="pr-layers-title pr-layers-desc" class="pr-layers-diagram">
+  <title id="pr-layers-title">一次调用经过四层职责，PocketRun 自己运行两个进程</title>
+  <desc id="pr-layers-desc">第一、二层在同一个普通 App 进程中：React TypeScript 发起请求，App Kotlin 接收原生调用。TurboModule 连接这两层。第三层是另一个 UID 2000 的 shell 后端进程，App Kotlin 通过 Binder 请求它。后端校验请求并调用第四层 Android 系统能力，取得显示、窗口信息或分发输入。结果沿原路径返回。层数不等于进程数。</desc>
+  <style>
+    .pr-layers-diagram { --ink: var(--ifm-font-color-base, #1c1e21); --muted: var(--ifm-color-emphasis-700, #606770); --border: var(--ifm-color-emphasis-300, #dadde1); --panel: var(--ifm-background-surface-color, #fff); --app: #2a78d6; --shell: #eb6834; font-family: system-ui, -apple-system, "Segoe UI", sans-serif; }
+    .pr-layers-diagram .title { fill: var(--ink); font-size: 28px; font-weight: 650; }
+    .pr-layers-diagram .heading { fill: var(--ink); font-size: 24px; font-weight: 650; }
+    .pr-layers-diagram .body { fill: var(--muted); font-size: 20px; }
+    .pr-layers-diagram .card { fill: var(--panel); stroke: var(--border); stroke-width: 1.5; }
+    .pr-layers-diagram .edge { fill: none; stroke: var(--muted); stroke-width: 2; }
+  </style>
+  <defs><marker id="pr-layers-arrow" markerWidth="9" markerHeight="8" refX="8" refY="4" orient="auto"><path d="M0 0 9 4 0 8Z" fill="var(--muted)"/></marker></defs>
+
+  <text x="400" y="38" text-anchor="middle" class="title">谁执行：两个进程，四层职责</text>
+  <rect x="50" y="86" width="610" height="322" rx="12" fill="none" stroke="var(--app)" stroke-width="1.5"/>
+  <text x="80" y="122" class="heading">App 进程 · 普通 App UID</text>
+  <rect x="80" y="144" width="550" height="76" rx="8" class="card"/>
+  <text x="104" y="176" class="heading">1 · React / TypeScript</text>
+  <text x="104" y="203" class="body">用户点按钮；界面发请求、展示结果</text>
+  <path d="M355 220 V280" class="edge" marker-end="url(#pr-layers-arrow)"/>
+  <text x="380" y="257" class="body">TurboModule · 调用原生模块</text>
+  <rect x="80" y="280" width="550" height="76" rx="8" class="card"/>
+  <text x="104" y="312" class="heading">2 · App Kotlin</text>
+  <text x="104" y="339" class="body">检查参数；把请求发给独立后端</text>
+
+  <path d="M355 356 V490" class="edge" marker-end="url(#pr-layers-arrow)"/>
+  <text x="380" y="452" class="body">Binder · 跨进程通信</text>
+  <rect x="50" y="490" width="610" height="140" rx="12" class="card"/>
+  <rect x="50" y="502" width="4" height="116" rx="2" fill="var(--shell)"/>
+  <text x="80" y="526" class="heading">3 · shell 后端 Kotlin</text>
+  <text x="80" y="559" class="body">独立 app_process 进程 · UID 2000</text>
+  <text x="80" y="595" class="body">检查调用者与目标显示；持有虚拟屏资源</text>
+
+  <path d="M355 630 V710" class="edge" marker-end="url(#pr-layers-arrow)"/>
+  <text x="380" y="677" class="body">调用 Android 平台能力</text>
+  <rect x="50" y="710" width="610" height="140" rx="12" class="card"/>
+  <text x="80" y="749" class="heading">4 · Android 系统能力</text>
+  <text x="80" y="784" class="body">管理显示、读取窗口、分发输入事件</text>
+  <text x="80" y="819" class="body">由 Android 提供，不是另写一套系统</text>
+
+  <path d="M660 810 H710 V182 H630" class="edge" stroke-dasharray="6 5" marker-end="url(#pr-layers-arrow)"/>
+  <text x="745" y="520" text-anchor="middle" class="body" transform="rotate(-90 745 520)">数据、状态或错误 · 沿原路径返回</text>
+  <text x="355" y="879" text-anchor="middle" class="body">职责层 ≠ 进程；React 与 App Kotlin 并没有分成两个 App。</text>
+</svg>

@@ -1,90 +1,45 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 620" role="img" aria-labelledby="pr-oa-title pr-oa-desc" class="pr-oa-diagram">
-  <title id="pr-oa-title">在同一个 displayId 上观察、操作，再观察结果</title>
-  <desc id="pr-oa-desc">React 界面通过 App Kotlin 和 typed Binder 请求 UID 2000 shell 后端。后端从当前 VirtualDisplay 的 ImageReader 取得截图，并由 UiAutomation 读取同一 displayId 的有界 UI 树。界面从树中取得输入框坐标，经 IInputManager 向相同 displayId 注入点击和固定文本。Demo 重绘后，界面再次读取截图和 UI 树确认结果。默认显示零从不作为回退目标。</desc>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 880" role="img" aria-labelledby="pr-oa-title pr-oa-desc" class="pr-oa-diagram">
+  <title id="pr-oa-title">填写输入框的任务顺序：准备、观察、定位、操作、核对、结束</title>
+  <desc id="pr-oa-desc">先按需连接本机 ADB、启动 shell 后端和建立 Binder，再创建虚拟屏并保存 displayId。之后按顺序读取截图和 UI 树，从树中找到输入框，点击中心并输入固定文字，再读取截图和树确认文字，最后释放虚拟屏和停止后端。当前由用户依次点击按钮驱动这些阶段，不是已经实现的自动 Agent 循环。</desc>
   <style>
-    .pr-oa-diagram { --app: #2a78d6; --shell: #eb6834; --ok: #2f9e44; --ink: var(--ifm-font-color-base, #1c1e21); --muted: var(--ifm-color-emphasis-700, #606770); --border: var(--ifm-color-emphasis-300, #dadde1); --panel: var(--ifm-background-surface-color, #fff); font-family: system-ui, -apple-system, "Segoe UI", sans-serif; }
-    html[data-theme="dark"] .pr-oa-diagram { --app: #3987e5; --shell: #d95926; --ok: #40c057; }
+    .pr-oa-diagram { --ink: var(--ifm-font-color-base, #1c1e21); --muted: var(--ifm-color-emphasis-700, #606770); --border: var(--ifm-color-emphasis-300, #dadde1); --panel: var(--ifm-background-surface-color, #fff); --app: #2a78d6; --shell: #eb6834; font-family: system-ui, -apple-system, "Segoe UI", sans-serif; }
+    .pr-oa-diagram .title { fill: var(--ink); font-size: 28px; font-weight: 650; }
+    .pr-oa-diagram .heading { fill: var(--ink); font-size: 24px; font-weight: 650; }
+    .pr-oa-diagram .body { fill: var(--muted); font-size: 20px; }
     .pr-oa-diagram .card { fill: var(--panel); stroke: var(--border); stroke-width: 1.5; }
     .pr-oa-diagram .edge { fill: none; stroke: var(--muted); stroke-width: 2; }
-    .pr-oa-diagram .heading { fill: var(--ink); font-size: 22px; font-weight: 650; }
-    .pr-oa-diagram .body { fill: var(--ink); font-size: 18px; }
-    .pr-oa-diagram .label { fill: var(--muted); font-size: 16px; }
   </style>
   <defs><marker id="pr-oa-arrow" markerWidth="9" markerHeight="8" refX="8" refY="4" orient="auto"><path d="M0 0 9 4 0 8Z" fill="var(--muted)"/></marker></defs>
+  <text x="400" y="38" text-anchor="middle" class="title">任务顺序：先准备，再执行一轮</text>
 
-  <text x="22" y="31" class="heading">闭环</text>
-  <text x="86" y="31" class="label">所有请求都携带同一个 expectedDisplayId</text>
+  <rect x="30" y="80" width="740" height="105" rx="10" class="card"/>
+  <text x="56" y="112" class="heading">会话准备 · 按需启动一次</text>
+  <text x="56" y="144" class="body">App 连本机 ADB → 启动后端，Binder 就绪</text>
+  <text x="56" y="172" class="body">创建虚拟屏并打开 Demo → 保存 displayId</text>
+  <path d="M400 185 V245" class="edge" marker-end="url(#pr-oa-arrow)"/>
 
-  <g data-node="react">
-    <rect x="22" y="62" width="200" height="110" rx="10" class="card"/>
-    <text x="44" y="103" class="heading">React / TS</text>
-    <text x="44" y="137" class="body">预览、树、固定动作</text>
-  </g>
-  <path d="M222 117 H270" class="edge" marker-end="url(#pr-oa-arrow)"/>
-  <g data-node="app">
-    <rect x="270" y="62" width="220" height="110" rx="10" class="card"/>
-    <rect x="270" y="72" width="4" height="90" rx="2" fill="var(--app)"/>
-    <text x="292" y="103" class="heading">App Kotlin</text>
-    <text x="292" y="137" class="body">codec · cache · Binder proxy</text>
-  </g>
-  <path d="M490 117 H538" class="edge" marker-end="url(#pr-oa-arrow)"/>
-  <g data-node="session">
-    <rect x="538" y="62" width="340" height="110" rx="10" class="card"/>
-    <rect x="874" y="72" width="4" height="90" rx="2" fill="var(--shell)"/>
-    <text x="560" y="103" class="heading">shell 后端 session</text>
-    <text x="560" y="137" class="body">UID 2000 · displayId = N &gt; 0</text>
-  </g>
+  <rect x="30" y="245" width="740" height="64" rx="8" class="card"/>
+  <text x="56" y="284" class="heading">1 · 看界面</text>
+  <text x="286" y="284" class="body">读取截图和 UI 树</text>
+  <path d="M400 309 V369" class="edge" marker-end="url(#pr-oa-arrow)"/>
 
-  <path d="M620 172 V220" class="edge" marker-end="url(#pr-oa-arrow)"/>
-  <path d="M708 172 V220" class="edge" marker-end="url(#pr-oa-arrow)"/>
-  <path d="M796 172 V220" class="edge" marker-end="url(#pr-oa-arrow)"/>
-  <g data-node="frame">
-    <rect x="500" y="220" width="220" height="105" rx="10" class="card"/>
-    <text x="522" y="260" class="heading">ImageReader</text>
-    <text x="522" y="294" class="body">latest RGBA → JPEG</text>
-  </g>
-  <g data-node="tree">
-    <rect x="500" y="345" width="220" height="105" rx="10" class="card"/>
-    <text x="522" y="385" class="heading">UiAutomation</text>
-    <text x="522" y="419" class="body">exact-display UI 树</text>
-  </g>
-  <g data-node="input">
-    <rect x="740" y="282" width="138" height="105" rx="10" class="card"/>
-    <text x="756" y="322" class="heading">IInput</text>
-    <text x="756" y="356" class="body">tap / text</text>
-  </g>
-  <path d="M740 334 H720" class="edge" marker-end="url(#pr-oa-arrow)"/>
+  <rect x="30" y="369" width="740" height="64" rx="8" class="card"/>
+  <text x="56" y="408" class="heading">2 · 找输入框</text>
+  <text x="286" y="408" class="body">从树中找到目标，算出中心坐标</text>
+  <path d="M400 433 V493" class="edge" marker-end="url(#pr-oa-arrow)"/>
 
-  <g data-node="observe">
-    <rect x="22" y="228" width="390" height="96" rx="10" class="card"/>
-    <rect x="22" y="238" width="4" height="76" rx="2" fill="var(--app)"/>
-    <text x="44" y="266" class="heading">1 · 观察</text>
-    <text x="44" y="300" class="body">截图 + 有界 UI 树 → 找到唯一输入框 bounds</text>
-  </g>
-  <path d="M500 272 H412" class="edge" marker-end="url(#pr-oa-arrow)"/>
-  <path d="M500 397 H454 Q446 397 446 389 V316 Q446 308 412 308" class="edge" marker-end="url(#pr-oa-arrow)"/>
+  <rect x="30" y="493" width="740" height="64" rx="8" class="card"/>
+  <text x="56" y="532" class="heading">3 · 点击并填字</text>
+  <text x="286" y="532" class="body">向同一 displayId 发送输入事件</text>
+  <path d="M400 557 V617" class="edge" marker-end="url(#pr-oa-arrow)"/>
 
-  <g data-node="act">
-    <rect x="22" y="355" width="390" height="96" rx="10" class="card"/>
-    <rect x="22" y="365" width="4" height="76" rx="2" fill="var(--shell)"/>
-    <text x="44" y="393" class="heading">2 · 操作</text>
-    <text x="44" y="427" class="body">bounds 中心 tap → 固定 ASCII 文本</text>
-  </g>
-  <path d="M412 403 H470 Q478 403 478 395 V334 Q478 326 500 326" class="edge" marker-end="url(#pr-oa-arrow)"/>
+  <rect x="30" y="617" width="740" height="64" rx="8" class="card"/>
+  <text x="56" y="656" class="heading">4 · 检查结果</text>
+  <text x="286" y="656" class="body">再读截图和树，确认文字实际改变</text>
+  <path d="M400 681 V741" class="edge" marker-end="url(#pr-oa-arrow)"/>
 
-  <g data-node="demo">
-    <rect x="500" y="475" width="378" height="96" rx="10" class="card"/>
-    <text x="522" y="513" class="heading">DisplayDemoActivity</text>
-    <text x="522" y="547" class="body">同一 N 上更新 EditText 与结果 TextView</text>
-  </g>
-  <path d="M809 387 V475" class="edge" marker-end="url(#pr-oa-arrow)"/>
-  <path d="M500 523 H438 Q430 523 430 515 V494 Q430 486 412 486" class="edge" marker-end="url(#pr-oa-arrow)"/>
-  <g data-node="confirm">
-    <rect x="22" y="475" width="390" height="96" rx="10" class="card"/>
-    <rect x="22" y="485" width="4" height="76" rx="2" fill="var(--ok)"/>
-    <text x="44" y="513" class="heading">3 · 再观察</text>
-    <text x="44" y="547" class="body">新截图 + 树内真实文本共同确认结果</text>
-  </g>
-  <path d="M610 475 V450" class="edge" marker-end="url(#pr-oa-arrow)"/>
-  <text x="450" y="610" class="label" text-anchor="middle">display 0、错误 ID 和释放后的旧 ID 全部拒绝，不作为回退目标。</text>
+  <rect x="30" y="741" width="740" height="64" rx="8" class="card"/>
+  <text x="56" y="780" class="heading">5 · 结束任务</text>
+  <text x="286" y="780" class="body">释放虚拟屏；本次演示结束后停止后端</text>
+  <text x="400" y="859" text-anchor="middle" class="body">当前由用户依次点按钮；第 1—4 步可以复用已就绪的会话。</text>
 </svg>

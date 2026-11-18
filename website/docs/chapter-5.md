@@ -1,234 +1,303 @@
 ---
 sidebar_position: 6
-sidebar_label: 第 5 章：截图、UI 树与输入
-title: 第 5 章：只观察和操作同一块虚拟屏
-description: 在 API 36 ARM64 设备上验证目标显示截图、有界 UI 树、定向输入与资源清理。
+sidebar_label: 第 5 章：看见并操作虚拟屏
+title: 第 5 章：看见界面，再操作它
+description: 用一次填写输入框的任务，理解 TypeScript、Kotlin、Binder 与 Android 系统如何协作。
 ---
 
 import observeScreenshot from './assets/chapter-5-observe.png';
 import afterInputScreenshot from './assets/chapter-5-after-input.png';
+import TaskExecutionLayers from './assets/task-execution-layers.svg';
 import ObserveActFlow from './assets/observe-act-flow.svg';
 import figureStyles from '@site/src/css/tutorial-figures.module.css';
 
-第 4 章证明 Demo 的 task 位于一块 `displayId > 0` 的 VirtualDisplay。这一章完成可见闭环：**读取这块屏的画面和 UI 树，用树里的 bounds 定向输入，再读取新画面和新树确认结果。**
+上一章，我们把 Demo 放进了一块虚拟屏，但还看不到里面的画面。
 
-**Ditto 主线位置：** App 自有 ADB 配对 → UID 2000 后端 → VirtualDisplay → **截图 / UI 树 / 定向输入**。本章仍不增加任意 shell 方法；Linux / PRoot、Agent 宿主与模型循环留给后续章节。
+这一章只做一个任务：**找到虚拟屏里的输入框，填入 `PocketRun_Ditto_5`，再确认它真的填进去了。**
+
+```text
+准备：连接后端，创建虚拟屏
+执行：观察 → 定位 → 输入 → 核对
+结束：释放虚拟屏，停止后端
+```
+
+现在由用户依次点按钮驱动这些步骤。后续接入 Agent 时，Agent 负责根据观察选择下一步；这里先把它需要调用的能力做出来。
+
+## 1. 先在界面跑一遍
+
+沿用第 2—4 章的准备：连接本机 ADB，启动 shell 后端，创建演示虚拟屏。然后依次点击：
+
+1. **读取虚拟屏截图**：看到 Demo 的实际画面。
+2. **读取 UI 树**：看到节点信息，并提示已定位输入框。
+3. **点击演示输入框**：让这个输入框获得焦点。
+4. **输入固定 ASCII 文本**：向它输入 `PocketRun_Ditto_5`。
+5. **再次读取截图和 UI 树**：核对输入框和结果文字。
 
 <div style={{display: 'flex', gap: '1.5rem', flexWrap: 'wrap', margin: '1.25rem 0', alignItems: 'flex-start'}}>
   <figure style={{margin: 0, flex: '0 1 360px', minWidth: 0, maxWidth: '100%'}}>
-    <figcaption><strong>观察目标显示</strong></figcaption>
-    <img src={observeScreenshot} alt="PocketRun 第 5 章面板显示 displayId 11 的虚拟屏截图、available UI 树和唯一输入框" width="360" />
+    <figcaption><strong>输入前：已经能看见和定位</strong></figcaption>
+    <img src={observeScreenshot} alt="PocketRun 面板显示虚拟屏截图和 available UI 树，输入框尚未填字" width="360" />
   </figure>
   <figure style={{margin: 0, flex: '0 1 360px', minWidth: 0, maxWidth: '100%'}}>
-    <figcaption><strong>定向输入后再次观察</strong></figcaption>
-    <img src={afterInputScreenshot} alt="同一虚拟屏内的输入框和结果文本都显示 PocketRun_Ditto_5，UI 树状态为 available" width="360" />
+    <figcaption><strong>输入后：重新观察到结果</strong></figcaption>
+    <img src={afterInputScreenshot} alt="虚拟屏的输入框和结果 TextView 都显示 PocketRun_Ditto_5，UI 树状态为 available" width="360" />
   </figure>
 </div>
 
-截图中的 `displayId` 由 Android 动态分配，不要求等于 `11`。第一张图里输入框显示的是 hint，结果仍为空；第二张图中 EditText 和结果 TextView 才都包含真实输入值。
+第一张图里的灰色文字只是输入提示，下面的 `input:` 仍为空。第二张图里，输入框和 `input:` 后面都有了真实文字。
 
-## 先看完整闭环
+**“发出了输入”与“已经填对”是两件事。** 所以最后两次读取不能省。当前页面不会自动替你重新观察，需要再次点按钮。
 
-<figure style={{margin: '1.25rem 0'}}>
-  <div style={{overflowX: 'auto'}} tabIndex={0} role="region" aria-label="同一虚拟屏观察、操作和再次观察的流程图，可横向查看">
-    <ObserveActFlow className={`pr-oa-diagram ${figureStyles.diagram}`} role="img" aria-labelledby="pr-oa-title" aria-describedby="pr-oa-desc" style={{display: 'block', width: '100%', minWidth: 720, height: 'auto'}} />
+## 2. 谁在执行：两个进程，四层职责
+
+先把“层”与“进程”分开。**React 和 App Kotlin 是同一个 App 里的两层代码；shell 后端才是另一个进程。**
+
+<figure style={{margin: '1.25rem 0', maxWidth: 800}}>
+  <div style={{overflowX: 'auto'}} tabIndex={0} role="region" aria-label="四层执行职责与两个 PocketRun 进程，可横向查看">
+    <TaskExecutionLayers className={`pr-layers-diagram ${figureStyles.diagram}`} role="img" aria-labelledby="pr-layers-title" aria-describedby="pr-layers-desc" style={{display: 'block', width: '100%', minWidth: 640, height: 'auto'}} />
   </div>
-  <figcaption>截图、UI 树和输入是三种独立能力，但都由同一个正数 `expectedDisplayId` 路由；动作结果还要重新观察确认。</figcaption>
+  <figcaption>这张图只回答“谁负责执行”。向下是请求，虚线是结果返回；不表示任务有四个步骤。</figcaption>
 </figure>
 
-## 同一份任务资源，同一个 expectedDisplayId
+- **React / TypeScript**：用户点哪个按钮，就发哪种请求；收到结果后更新预览和文字。
+- **App Kotlin**：接收原生调用，检查参数，通过 Binder 请求后端，再把结果转换成前端能用的数据。
+- **shell 后端 Kotlin**：以 UID 2000 运行，校验调用者和目标显示，持有虚拟屏、读图和查树的资源。
+- **Android 系统能力**：真正管理显示、提供窗口信息、把输入事件交给目标窗口。
 
-```text
-React / TypeScript：按钮、预览、状态
-  ↓ TurboModule
-App Kotlin（App UID）：Binder proxy、codec、私有预览缓存
-  ↓ typed Binder，逐 RPC 检查 App UID
-shell 后端（UID 2000）：当前 VirtualDisplay session
-  ├─ ImageReader → 有界 JPEG / SharedMemory
-  ├─ UiAutomation → 当前显示的有界 UI 树
-  └─ IInputManager → 当前显示、App target UID 的事件
-```
+TurboModule 是 **React → App Kotlin** 的桥。Binder 是 **App Kotlin → 独立后端** 的通信通道。它们都不会把普通 App 自己的 UID 变成 2000。
 
-资源所有权仍在原生层。TypeScript 只收到普通数据，不持有 SharedMemory、FD、ImageReader、UiAutomationConnection 或 Binder 句柄。
+Demo 也仍在普通 App 进程里运行。**把 Activity 显示在虚拟屏上，只改变显示位置，不会把它变成 shell 进程。** 后端负责操作环境，Demo 负责像普通页面一样接收输入和绘制。
 
-每个操作都带 `expectedDisplayId`，后端先验证：
+## 3. 开始前：接通后端，创建虚拟屏
 
-1. Binder 调用者 UID 等于启动时绑定的 PocketRun App UID；有句柄不等于有权限。
-2. `expectedDisplayId > 0`。
-3. 它严格等于当前活动 session 的 ID；不是“系统里存在任意同名显示就可以”。
-4. 资源未释放、未关闭，调用没有与清理交错使用失效对象。
+操作输入框之前，需要先有一个可调用的后端和一块目标显示。这就是前几章各自在解决的问题：
 
-默认显示 `0`、不匹配的 ID、释放后的旧 ID 都必须拒绝。禁止 default-display fallback，也不允许创建屏失败时镜像主屏来凑出截图。
-
-## 四个有边界的 Binder 方法
-
-```aidl
-SharedMemory captureScreenshot(int expectedDisplayId);
-byte[] dumpUiTree(int expectedDisplayId);
-boolean injectTap(int expectedDisplayId, int x, int y);
-boolean injectText(int expectedDisplayId, String text);
-```
-
-没有 `execute(String command)`，也没有让调用者指定任意 package、component、输入 target UID 或显示降级选项。ADB 只承担第 2、3 章已有的 TLS 配对、`id -u` 探测和固定后端启动命令；后续动作只走 Binder。
-
-## 从最新 RGBA 帧到 JPEG
-
-第 4 章的 ImageReader 已经提供了 VirtualDisplay 的 Surface；现在读取的是它的 **latest image**，不是主显示截屏：
-
-1. ImageReader 的专用线程反复调用 `acquireLatestImage()`，只保留最新一帧并关闭被替换的旧帧；尚无帧时明确失败，不让 Binder 调用永久等待。
-2. `RGBA_8888` plane 同时有 `pixelStride` 和 `rowStride`。逐行按真实 stride 取有效像素，不能把含行尾 padding 的 buffer 直接当成紧凑位图。
-3. 得到实际宽高的 Bitmap，以 **JPEG quality 90** 编码。
-4. 临时 Bitmap 在 `finally` 中回收；保留的最新 Image 在下一帧替换或 session 释放时关闭，ImageReader 也随 session 清理。
-5. JPEG payload 限制为 **2 MiB**，放入有界 SharedMemory，并将保护属性改成只读。
-
-### 32 字节 header 不是图片的一部分
-
-`ScreenshotCodec` 使用 big-endian，布局固定：
-
-| 偏移 | 长度 | 字段 |
+| 准备工作 | 得到什么 | 对应章节 |
 | --- | --- | --- |
-| 0 | 4 | magic `0x50525353` |
-| 4 | 4 | version `1` |
-| 8 | 4 | `displayId` |
-| 12 | 4 | `width` |
-| 16 | 4 | `height` |
-| 20 | 8 | `frameTimestampNanos` |
-| 28 | 4 | JPEG `payloadLength` |
-| 32 | payloadLength | JPEG bytes |
+| App 与本机无线 ADB 配对、连接 | 可以在本机以 shell 身份启动进程 | 第 2 章 |
+| 通过 ADB 启动 `app_process`，交换 Binder | App 能调用独立的 UID 2000 后端 | 第 3 章 |
+| 后端创建 VirtualDisplay，打开 Demo | Demo 所在显示的 `displayId` | 第 4 章 |
 
-接收方先检查总长度、magic/version、正数 ID / 尺寸 / 时间戳，以及 payload 长度与剩余字节完全一致。截掉 header 后才可以交给 `BitmapFactory`。只断言“收到了一串 bytes”不够：真实验收还必须 JPEG 解码成功且宽高匹配。
+**ADB 是启动入口，Binder 是启动后的通信通道。** 后端建立好之后，本章的截图、查树和输入请求都走 Binder，不需要每次重新连 ADB、重新启动后端。
 
-### App 只读映射，再复制到私有 cache
+`displayId` 可以理解成显示器编号。默认主屏是 `0`，本章使用 Android 分配的正数编号，例如 `11`。
 
-App 用 `mapReadOnly()` 读取，decode 后复制 JPEG 到自身 `cacheDir`，在 `finally` 中 unmap 并 **close SharedMemory**。不要把跨进程 FD 长期留给 React 页面，也不要把 SharedMemory 对象塞入 Promise。
+每次请求都带 `expectedDisplayId`，意思是“我期望操作这块屏”。后端只接受它当前持有的编号；屏释放后，旧编号立即失效。这样就不会在虚拟屏不可用时转去操作主屏。
 
-前端预览信息约定为：
+## 4. 一次任务怎样推进
 
-```ts
-type ScreenshotInfo = {
-  displayId: number;
-  width: number;
-  height: number;
-  frameTimestampNanos: string;
-  uri: string;
-};
-```
+下面从上到下看时间顺序。它与上一张分层图回答的是不同的问题：**任务先做什么，再做什么。**
 
-纳秒时间戳保持十进制字符串，避免 JavaScript `number` 的整数精度丢失。`uri` 指向当前 App 私有 cache 文件，不是外部存储、公共媒体库或可跨 App 读取的 exported provider。图片不申请分享授权；验收检查路径、文件 App UID 所有权和仅 owner 可读写。释放、停止和 Binder death 应使本任务的预览文件失效并删除，不能只把按钮禁用。
+<figure style={{margin: '1.25rem 0', maxWidth: 800}}>
+  <div style={{overflowX: 'auto'}} tabIndex={0} role="region" aria-label="填写输入框任务的阶段顺序，可横向查看">
+    <ObserveActFlow className={`pr-oa-diagram ${figureStyles.diagram}`} role="img" aria-labelledby="pr-oa-title" aria-describedby="pr-oa-desc" style={{display: 'block', width: '100%', minWidth: 640, height: 'auto'}} />
+  </div>
+  <figcaption>先按需准备会话，再执行观察、定位、输入、核对；后端已就绪时，可以直接开始下一轮。</figcaption>
+</figure>
 
-## UI 树要先选 display，再遍历 node
+### 看界面：取得画面和控件
 
-shell 后端通过反射取得 `UiAutomationConnection`，以 `FLAG_DONT_SUPPRESS_ACCESSIBILITY_SERVICES` 建立自己的 UiAutomation，不停用用户已有的无障碍服务；读取 `getWindowsOnAllDisplays()`，**只选 `expectedDisplayId` 对应的 windows**。不能用 `rootInActiveWindow` 猜测当前屏，更不能无窗口时改读 display 0。
+**截图告诉我们“页面长什么样”，UI 树告诉我们“页面里有哪些控件”。** 查树不是从截图做 OCR，而是读取 Android 提供的控件信息。
 
-遍历预算固定为：
-
-- 最多 **512 nodes**；
-- depth 最多 **32**；
-- 编码后的 binary tree 最多 **256 KiB**；
-- 单个字符串采用有界编码，截断以 `truncated` 明确告知。
-
-树携带 `displayId`、typed status、`truncated` 和 node 数据，包括 parent/window、class/package/view ID、文本、contentDescription、bounds、editable/enabled/clickable/focused。节点与窗口读取结束后及时回收；专用工作线程有界等待，不把整个查询无限挂在 Binder / App UI 线程上。
-
-`UiTreeCodec` 负责 binary tree 解码，App 再转换成 JSON。面向 TypeScript 的同名约定为：
-
-```ts
-type UiTreeInfo = {
-  displayId: number;
-  status: string;
-  truncated: boolean;
-  nodeCount: number;
-  json: string;
-};
-```
-
-实际 typed 状态包括 `available`、`no_window`、`root_unavailable`、`timeout`、`busy`、`query_failed`。`no_window` 不意味着页面为空；`busy` 不意味着这次读取成功；权限不足、反射失败或目标窗口不可见不能返回一棵伪造的成功树。真实测试可在有界时间内等待 `available`；期限内仍不可用就是失败 / 阻塞，不是通过或跳过。
-
-## 定向输入不是“调用返回 true 就完成”
-
-Demo 增加一个 `EditText`，其 **contentDescription 精确为 `演示输入框`**；结果 TextView 展示当前输入。验收固定使用 printable ASCII：
+它们是两条独立路径：
 
 ```text
-PocketRun_Ditto_5
+画面：Demo 绘制 → 虚拟屏的 Surface → ImageReader → JPEG 图片
+控件：Demo 的窗口 → Android 无障碍接口 → UiAutomation → 节点数据
 ```
 
-输入路线是 `IInputManager`。每一个触摸 DOWN / UP 和字符按键事件都设置当前目标 `displayId`，注入的 **target UID 为 PocketRun App UID**。不把 target UID 传给 JavaScript，也不以 `input tap` / `input text` shell 字符串代替 typed RPC。
+ImageReader 承接虚拟屏的像素。后端取出最新可用帧，转成 JPEG，通过共享内存交给 App Kotlin；App 将图片放进自己的私有缓存，给 React 一个图片 URI。
 
-- 点击坐标为整数，必须在 session 的 `[0, width)`、`[0, height)` 内；负数、边界外和溢出值都拒绝。
-- 文本仅接受 printable ASCII；中文、换行、Tab、NUL、DEL 等拒绝。
-- 使用真实 UI 树找到唯一 editable Demo input，取得 bounds 后点击中心，再注入固定文本。
-- 注入返回成功后**重新读取树**：EditText 的真实 text 必须等于固定值，非 editable 的结果 TextView 也必须包含该值。
-- 操作期间通过已配对的真实 AdbClient，仅执行测试内固定的 dumpsys，检查 Demo task 的 display 归属；不在 shell UiAutomation 活跃时建立另一条 instrumentation UiAutomation / UiDevice 连接。
-- 所有 tree / input 已结束且后端显式 stop 或死亡后，才第一次使用真实 UiDevice 的 display 0 selector 交叉检查：主屏没有 Demo 标题 / `演示输入框` 控件，也没有 text 精确等于固定值的 EditText。测试不对 Panel JSON 使用 `textContains`，因为展示操作结果的 JSON 本来就可以含该值；这不是输入污染。主屏断言后不再重连后端 tree。
+UiAutomation 则向系统查询窗口，选择同一个 `displayId` 下的窗口，再读取控件。App Kotlin 把节点数据转成 JSON 给 React。
 
-如果输入系统服务不能提供显示路由或 App target UID 约束，就停止并报告能力失败，不能偷偷改成默认屏输入。
+所以 React 最后收到的是**一张可预览的图片，以及一份可解析的控件数据**，不是 Android 的 Bitmap、窗口对象或内存句柄。
 
-## Owned cleanup 与死亡
+对应代码：[VirtualDisplaySession.captureScreenshot()](https://github.com/kkkhs/pocketrun/blob/main/app/android/app/src/main/java/io/github/kkkhs/pocketrun/VirtualDisplaySession.kt#L70) 负责取图，[DisplayAutomation.kt](https://github.com/kkkhs/pocketrun/blob/main/app/android/app/src/main/java/io/github/kkkhs/pocketrun/DisplayAutomation.kt) 负责读控件。
 
-这里的任务 context 是这一次 App/backend 会话的原生资源范围，不是提前声称实现了后续章节的完整 Agent TaskContext。
+### 找输入框：算出点击坐标
 
-正常 release、shutdown、App client Binder death 和 backend death 都要关联到同一份 owned cleanup：
+这一步在 TypeScript 中完成。`DisplayPanel.tsx` 解析 UI 树，寻找描述为 `演示输入框`、可编辑且已启用的唯一控件。
 
-- 先失效当前 session ID，拒绝新的旧 ID RPC；
-- 不遗留未完成的触摸序列 / 等待中的输入任务；
-- 取消有界 tree 查询，请求专用线程 quit；UiAutomationConnection 在 owned 异步 close 路径 disconnect，并以有界观察确认线程真的退出，不能把发出 quit 当成已经退出；
-- release VirtualDisplay，close ImageReader / Image、临时 FD / SharedMemory；
-- 清理 App 私有截图 cache 与旧预览状态；
-- Demo 不得回落到主显示 0，系统 task/window/display 均消失。
+节点的 `bounds` 是它在**目标显示**上的矩形范围。举一个示意值：
 
-仅看到 `displayId = -1` 不足以证明所有资源已关闭。仪器测试检查系统显示和 Demo window/task 消失、已持有的旧 RPC 全部失败、cache 删除；shutdown / 精确 kill 后还检查 Binder death 和 owned PID 消失。
-
-线程验收使用已配对的真实 AdbClient 执行固定 `ps -T -p <本轮后端PID> -o TID,CMD`，因为 Android `ps` 的 `NAME` 列只重复进程名，`CMD` 才显示各线程的 kernel comm。先确实观察到 `PocketRun-DisplayFrames`、`PocketRun-UiQuery-<displayId>`、`PocketRun-UiEvents-<displayId>`，记录 TID。kernel comm 可能将名称截为 15 字节，测试用确切前缀并绑定 owned PID/TID；release 后有界轮询这些线程和异步 `PocketRun-UiClose-<displayId>` 全部消失，不要求 release 返回瞬间即完成。ps 不支持、无有效 header 或活进程没有真实线程行都会失败，不能把观察错误当清理成功。输入资源与 UiAutomation 必须和这个 session 关联，不能用 JVM mock 的 close 调用计数代替设备资源验收。
-
-### 真 Binder 的 dump / release 并发准备
-
-同一个 instrumentation `@Test` 在第一次正常释放后，再创建一个新的 expected ID，先真实读到 `available` 树并观察本轮 PID 的资源线程。两个 Future 通过同起 barrier 分别调用真实 `dumpUiTree(expectedId)` 与 `releaseDisplay()`，共享 **5 秒** deadline；结束后 fixture worker 也必须在有界时间内退出。没有产品 delay / test hook、mock 或第二次配对。
-
-并发 dump 只允许返回这一旧 expected ID 的合法 typed 树（`available`、`no_window`、`root_unavailable`、`query_failed`、`timeout`、`busy`），或者由释放造成的明确 stale-session 参数 / 状态异常。解码错误、非法数据、权限失败或返回其他 session ID 均不能当作 stale 成功。随后以真实 DisplayManager / 固定 ADB dumpsys / PID-TID 观察确认 display 和线程清理；只有清理完成才创建下一 ID，验证新树恢复 `available`，两个旧 ID 的四个 RPC 继续拒绝。
-
-本章的 API 36 ARM64 instrumentation 已真实执行这组并发调用，并在共享 5 秒期限内完成清理与重建。同起 barrier 不保证调度顺序，也不强制命中 `busy` / `timeout`；本次通过不表示这些分支都已命中。这里验证的是无论 dump 先完成还是 release 先失效 session，都不能串到新 ID，且资源最终清理完成。
-
-## 在自己的 API 36 ARM64 设备复现
-
-使用能实际运行 API 36 ARM64 guest 的自有 AVD，或明确授权的 ARM64 真机。只使用演示设备和演示数据；Android 11+ 无线调试是前提。instrumentation fixture 明确校验 **API 36 和 `arm64-v8a`**，其他系统或 ABI 需要各自的真实设备证据。
-
-### 1. 明确选择设备
-
-在与 ARM64 guest 匹配、具备对应平台加速能力的机器上，使用已安装的 SDK / API 36 ARM64 system image 创建专用 AVD。仅有 x86_64 KVM 不代表能硬件加速 ARM64 AVD；不满足时改用明确授权的 API 36 ARM64 真机。例如：
-
-```bash
-avdmanager create avd -n pocketrun-ch5-api36 \
-  -k 'system-images;android-36;google_apis;arm64-v8a' --device pixel_6
-emulator -avd pocketrun-ch5-api36 -port 5556 -no-snapshot -no-boot-anim
+```ts
+{
+  contentDescription: '演示输入框',
+  flags: { editable: true, enabled: true },
+  bounds: { left: 64, top: 700, right: 656, bottom: 780 },
+}
 ```
 
-SDK / 镜像没有准备好时，由用户先准备环境；本章任务不安装依赖。`5556` 只是显式选择的示例端口，不得复用正在承载别的任务的模拟器。另开终端，检查设备后安装本轮构建制品：
+知道四条边，就能算出点击中心：
+
+```ts
+const x = Math.floor((bounds.left + bounds.right) / 2);  // 360
+const y = Math.floor((bounds.top + bounds.bottom) / 2);  // 740
+```
+
+这不是在主屏上点击图片预览的位置，而是在虚拟屏的 720 × 1280 坐标系里点击控件。找不到唯一目标、树不完整或坐标越界时，页面不会启用输入按钮。
+
+对应代码：[DisplayPanel.parseTree()](https://github.com/kkkhs/pocketrun/blob/main/app/DisplayPanel.tsx#L30) 找到控件并算出中心坐标。这一步不需要跨进程。
+
+### 点击并填字：发送输入事件
+
+定位之后，React 发起两个请求：
+
+```ts
+await NativeAdb.injectTap(displayId, x, y);
+await NativeAdb.injectText(displayId, 'PocketRun_Ditto_5');
+```
+
+两次请求都经过 **App Kotlin → Binder → shell 后端**。后端把点击变成按下、抬起两个触摸事件，把文字变成字符按键事件，再通过 Android 输入服务发送。
+
+每个事件都设置相同的 `displayId`。API 36 验证路径还带上 PocketRun App UID，约束输入接收者。系统把事件交给 Demo 的输入框，Demo 按普通 Android 控件的逻辑更新文字。
+
+**这一章没有直接调用 `EditText.setText()` 来替代输入。** 我们要验证的是“程序能从外部操作这个页面”，所以要走真实输入分发。
+
+当前仅支持 1—64 个可打印 ASCII 字符，固定例子也使用 ASCII。中文输入属于后续能力扩展，不是本章已验证的能力。
+
+对应代码：[DisplayInput.tap() / text()](https://github.com/kkkhs/pocketrun/blob/main/app/android/app/src/main/java/io/github/kkkhs/pocketrun/DisplayInput.kt#L29) 生成事件、设置显示编号并调用系统输入服务。
+
+### 检查结果：确认文字改变
+
+输入方法返回 `true`，只说明这一组注入调用被系统接受。它不能单独证明目标控件出现了预期文字。
+
+所以再次点击“读取虚拟屏截图”和“读取 UI 树”，检查两件事：
+
+1. 截图里的输入框与结果行显示 `PocketRun_Ditto_5`。
+2. 新 UI 树里，EditText 的真实 `text` 和结果 TextView 都包含这个值。
+
+Demo 的 `TextWatcher` 会把输入值同步到结果行。这一行是可观察的反馈，帮助区分“仍然只是 hint”与“实际收到输入”。
+
+对应代码：[DisplayDemoActivity.kt](https://github.com/kkkhs/pocketrun/blob/main/app/android/app/src/main/java/io/github/kkkhs/pocketrun/DisplayDemoActivity.kt#L38) 更新结果文字；用户再通过之前的截图、查树方法读取这个变化。
+
+截图和树不是一份原子快照，截图也只取当前最新可用帧。若页面尚未重绘，就再次读取；不要把旧预览或旧 JSON 当成操作成功的证据。
+
+## 5. 结束时：把资源收回来
+
+本次演示最后点“释放虚拟屏”，再点“停止 shell 后端”。
+
+释放时，后端使旧 `displayId` 失效，结束查树连接、释放显示、关闭 ImageReader；App 删除这次截图缓存并清空预览。
+
+**React 清空 state 不等于原生资源已经释放。** 显示、连接和图片资源由 Kotlin 管理；后端退出或 App 进程死亡时也需要清理。重新开始时必须取得新的有效显示编号，不能继续使用旧结果。
+
+## 6. 对照代码读一遍
+
+先记住这条公共调用链。下面从仓库的 `app/` 目录起算：
+
+```text
+DisplayPanel.tsx                         用户点按钮、处理结果
+  ↓ TurboModule
+android/.../AdbModule.kt                  接收调用、检查参数
+  ↓ 普通 Kotlin 调用
+android/.../PrivilegedBackendController.kt App 侧后端客户端
+  ↓ Binder，接口定义在 IPrivilegedBackend.aidl
+android/.../PrivilegedBackendMain.kt      独立后端接收请求
+  ↓
+android/.../VirtualDisplaySession.kt      选中本次虚拟屏，执行对应操作
+```
+
+`NativePocketRunAdb.ts` 是 React 这边的调用约定；AIDL 是两个进程之间的调用约定。它们不是又多出了两个执行阶段。
+
+顺着一个按钮看完这条链，再看另外三个，结构是一样的：
+
+| 用户动作 | React 调用 | 后端做什么 | 回到 React 的结果 |
+| --- | --- | --- | --- |
+| 读取截图 | `captureScreenshot(id)` | ImageReader 取帧，编码 JPEG | 图片 URI、尺寸、时间戳 |
+| 读取 UI 树 | `dumpUiTree(id)` | `DisplayAutomation` 查询目标窗口 | 状态、节点数、JSON |
+| 点击输入框 | `injectTap(id, x, y)` | `DisplayInput` 发送触摸事件 | 注入调用是否被接受 |
+| 输入文字 | `injectText(id, text)` | `DisplayInput` 发送字符按键 | 注入调用是否被接受 |
+
+**建议阅读顺序：** [DisplayPanel.tsx](https://github.com/kkkhs/pocketrun/blob/main/app/DisplayPanel.tsx) → [AdbModule.kt](https://github.com/kkkhs/pocketrun/blob/main/app/android/app/src/main/java/io/github/kkkhs/pocketrun/AdbModule.kt) → [PrivilegedBackendController.kt](https://github.com/kkkhs/pocketrun/blob/main/app/android/app/src/main/java/io/github/kkkhs/pocketrun/PrivilegedBackendController.kt) → [PrivilegedBackendMain.kt](https://github.com/kkkhs/pocketrun/blob/main/app/android/app/src/main/java/io/github/kkkhs/pocketrun/PrivilegedBackendMain.kt) → [VirtualDisplaySession.kt](https://github.com/kkkhs/pocketrun/blob/main/app/android/app/src/main/java/io/github/kkkhs/pocketrun/VirtualDisplaySession.kt)。
+
+<details>
+<summary>进阶：截图、UI 树怎样跨进程传递</summary>
+
+**截图：共享内存中装什么？**
+
+`ScreenshotCodec.kt` 编码一个 32 字节的头部，后面跟 JPEG：
+
+| 偏移 | 字段 | 字节数 |
+| --- | --- | --- |
+| 0 | magic `0x50525353` | 4 |
+| 4 | version `1` | 4 |
+| 8 | displayId | 4 |
+| 12 | width | 4 |
+| 16 | height | 4 |
+| 20 | frameTimestampNanos | 8 |
+| 28 | JPEG 长度 | 4 |
+| 32 | JPEG 数据 | 按长度读取 |
+
+格式采用 big-endian。接收方校验格式、总长度、尺寸、时间戳和显示编号后，才复制 JPEG。共享内存设为只读；App 映射、复制后解除映射并关闭句柄。后端在 Binder 回复写入文件描述符之后关闭自己一侧的句柄。
+
+图像平面有真实的 `pixelStride`、`rowStride` 和裁剪范围，不能把带行尾填充的字节直接当成紧凑位图。当前按有效 RGBA 像素复制，JPEG 质量为 90，最多 2 MiB；临时 Bitmap 回收，旧 Image 在替换或释放时关闭。
+
+App 使用只允许自身 UID 读写的私有缓存。React 收到的是 `file://` URI；纳秒时间戳用十进制字符串传递，避免 JavaScript 整数精度丢失。释放、停止或后端死亡时使旧缓存失效。
+
+**UI 树：为什么限制大小？**
+
+`UiTreeCodec.kt` 传输有界二进制数据，App 再转成 JSON。上限是 512 个节点、深度 32、每个字段 256 UTF-8 字节、总计 256 KiB；截断用 `truncated` 表示。这避免把任意大的树塞进 Binder。
+
+查询只遍历 `getWindowsOnAllDisplays()[displayId]`。连接使用 `FLAG_DONT_SUPPRESS_ACCESSIBILITY_SERVICES`，不主动停用已有无障碍服务；窗口和节点在读取结束后回收。
+
+返回状态包括 `available`、`no_window`、`root_unavailable`、`timeout`、`busy`、`query_failed`。查树等待限时 1800 ms；这些失败状态不等于“成功拿到空页面”。当前只有完整、可用且目标唯一的树才能用于输入。
+
+Binder 接口只开放截图、查树、点击、文字等明确的方法。每次校验 App 调用者 UID、正数且仍有效的目标显示；TypeScript 不能指定任意 shell 命令或输入目标 UID。默认显示 `0`、不匹配与已释放的编号都拒绝。
+
+</details>
+
+## 7. 实践与验证
+
+2026-11-18，在任务专用 Android 16 / API 36 ARM64 AVD `pocketrun-ch1-api36` 上真实执行了本章流程。
+
+| 验证 | 已记录结果 |
+| --- | --- |
+| 产品界面 | 连接后端、创建显示、截图、查树、定向输入、再观察均通过 |
+| Android instrumentation | `Chapter5DittoIntegrationTest`：`OK (1 test)`，无跳过 |
+| App TypeScript / ESLint / Jest | 通过；30 个 Jest 测试 |
+| ADB / App JVM | 通过；27 个测试 |
+| ARM64 Debug / Release / AndroidTest 构建 | 通过 |
+| 网站类型检查、构建与审计 | 通过 |
+
+真实设备测试不仅检查“文字填对了”，还检查旧编号被拒绝、释放与后端死亡后显示/任务/线程/缓存被清理。Jest 和 JVM 适合检查状态与数据处理，不能替代真实 Android 测试。这里的通过代表这台 AVD，不是所有品牌设备都已支持。
+
+<details>
+<summary>实践：在自己的 API 36 ARM64 演示设备上运行测试</summary>
+
+**准备设备与构建。** 先按第 1 章准备 SDK、JDK 与依赖。使用自有专用 AVD 或明确授权的演示真机，确认系统为 API 36、ABI 包含 `arm64-v8a`；不要对未选中的设备安装或输入。ARM64 AVD 需要匹配的宿主或实际可用的模拟环境，x86_64 KVM 不等于可以加速 ARM64 guest。
+
+在 `app/` 执行：
 
 ```bash
-SERIAL=emulator-5556  # 真机则填入 adb devices 中的已授权 serial
+npm run typecheck
+npm run lint
+npm test -- --runInBand
+npm run audit:ci
+cd android
+./gradlew :adb:testDebugUnitTest :app:testDebugUnitTest \
+  :app:assembleDebug :app:assembleRelease :app:assembleDebugAndroidTest \
+  -PreactNativeArchitectures=arm64-v8a --max-workers=2
+```
+
+回到仓库根目录，显式选择设备。以下 AVD 名称和 serial 都是示例，必须换成自己选择的设备：
+
+```bash
+SERIAL=emulator-5556
+adb -s "$SERIAL" emu avd name
 adb -s "$SERIAL" shell getprop ro.build.version.sdk
 adb -s "$SERIAL" shell getprop ro.product.cpu.abilist
-adb -s "$SERIAL" emu avd name  # 只适用于 AVD，必须与选择的 ownedAvdName 一致
 adb -s "$SERIAL" install -r app/android/app/build/outputs/apk/debug/app-debug.apk
 adb -s "$SERIAL" install -r app/android/app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk
 ```
 
-以上 APK 路径从仓库根目录起算。只有用户确认归属和授权后才继续；真机的 runner 参数要匹配 `getprop ro.serialno`，不能只依赖主机默认设备。
+**授权并配对。** 在该设备开启开发者选项和无线调试，记录主页连接端口，再打开配对码弹窗，取得配对端口和本次六位码。连接端口不等于配对端口。
 
-测试在创建测试 key / 发送配对请求之前，以 App UID 启动固定参数数组 `[/system/bin/getprop, ro.boot.qemu.avd_name]` 或 `[/system/bin/getprop, ro.serialno]` 做只读身份核对；不使用 shell 解释器或 UiDevice。观察限时 3 秒、输出至多 1 KiB，`finally` 回收子进程和 streams。空值、SELinux 拒绝、非零退出或超时均明确失败 / 阻塞，不能悄悄改在配对后检查。部分真机禁止 App UID 读取 `ro.serialno`；这种设备的 `authorizedSerial` 路径当前受限，推荐使用可读 owned AVD 路径，不通过放宽权限或默认选择设备来规避。
-
-### 2. 系统授权和真实配对
-
-1. 在所选设备启用 Developer options，打开 Wireless debugging，完成系统授权。
-2. 无线调试主页记录**连接端口**。
-3. 点“Pair device with pairing code”，保持弹窗打开，读取本次**配对端口**与六位配对码。
-4. runner 默认连本设备 `127.0.0.1`。连接端口不等于配对端口；不硬编码端口或凭证。
-
-从本地终端交互读取本次值，避免把配对码字面量写进 shell 历史。不要打开 `set -x`，不要上传含码的终端录屏或 runner 参数；参数会临时出现在本机进程命令行，执行期间应使用可信独占主机。
+交互读取配对码，避免字面量进入命令历史；不要开启 `set -x`。runner 参数会暂时出现在本机进程命令行，仅在可信主机执行，不保留含码的录屏或日志。
 
 ```bash
-read -r -p 'Wireless debugging connection port: ' CONNECT_PORT
-read -r -p 'Pairing dialog port: ' PAIR_PORT
-read -r -s -p 'Current six-digit pairing code: ' PAIR_CODE
+read -r -p 'Connection port: ' CONNECT_PORT
+read -r -p 'Pairing port: ' PAIR_PORT
+read -r -s -p 'Current six-digit code: ' PAIR_CODE
 adb -s "$SERIAL" shell am instrument -w \
   -e class io.github.kkkhs.pocketrun.Chapter5DittoIntegrationTest \
   -e ownedAvdName pocketrun-ch5-api36 \
@@ -239,71 +308,37 @@ adb -s "$SERIAL" shell am instrument -w \
 unset PAIR_CODE PAIR_PORT
 ```
 
-真机将 `-e ownedAvdName pocketrun-ch5-api36` **替换**为 `-e authorizedSerial '<用户确认的 ro.serialno>'`，两者不能同时提供。此参数是用户明确选设备的安全门，不是自动授权任意在线设备。
+`ownedAvdName` 必须等于自己选择的 AVD 名称。真机改用 `authorizedSerial`，值为确认过的 `ro.serialno`，两者不能同时提供。fixture 在配对之前用固定、只读的 `getprop` 子进程核对设备身份；读取超时、拒绝或空值时停止，不绕过授权。部分真机不允许 App UID 读取序列号，这条验收路径会受限。
 
-测试沿用已有 fixture 的独立 `pocketrun_adb_test_identity` key store，真实配对后用 TLS 连接并连续探测两次 `id -u == 2000`，再启动实际后端。已有这份**测试身份**的真实系统授权时，可省去 pair 参数，改为 `-e adbAlreadyPaired true`；PocketRun 产品 UI 的另一个 key 已配对不等于测试 key 已配对。没有真实授权时 TLS 失败必须如实失败。
+测试用独立的 `pocketrun_adb_test_identity`，与产品 UI 的身份不同。只有这份测试身份已经获得系统授权时，才能省略 pair 参数并改传 `-e adbAlreadyPaired true`。
 
-### 3. 验收证据必须覆盖结果与死亡
+</details>
 
-`Chapter5DittoIntegrationTest` 不使用 mock 或 `Assume`。它检查：
+<details>
+<summary>验证细节：怎样确认资源清理与并发安全</summary>
 
-- 配对 / TLS connect / shell UID 2000 / backend UID、PID、pong；关闭 ADB 后 Binder 仍工作。
-- 系统 display 和 Demo task 对应同一正数 ID。
-- 32-byte screenshot header、尺寸 / timestamp、非空真实 JPEG、只读 SharedMemory 和私 cache URI。
-- exact-display `available` 树，以及 256 KiB / 512 nodes / depth 32 的预算。
-- 唯一 `演示输入框` 的真实 bounds、tap center、固定 ASCII text，重新读树确认 EditText 和结果 TextView。
-- 主显示 0 无 Demo / 演示输入 / 固定文本污染。
-- display 0、错误 ID、stale ID、非 printable ASCII 和非法 coordinates 的拒绝。
-- release 后旧 ID 四个 RPC 全部失败；同一起点并发 dump/release 必须有界结束、结果不能串到其他 session，display/线程清理后再建屏且 tree 可恢复。
-- 重建、正常 stop 与意外 backend death 分别验证 display/task/window/cache/process 清理。
+[Chapter5DittoIntegrationTest.kt](https://github.com/kkkhs/pocketrun/blob/main/app/android/app/src/androidTest/java/io/github/kkkhs/pocketrun/Chapter5DittoIntegrationTest.kt) 使用真实 TLS ADB、UID 2000 后端和 Binder。测试先检查目标显示/任务归属、共享内存只读与 JPEG 可解码、UI 树可用，再依据控件 bounds 注入并核对实际文字。
 
-需保留所选设备的 runner 原始结果、显示 ID / session / PID 关联、JPEG/树/输入与 release/death 观察证据；不保留配对码。只有完整 instrumentation 成功且资源观察一致才登记真实通过，单张预览、RPC `true` 或系统命令退出 `0` 不能替代上述验收。
+它分别测试释放显示、正常停止后端与杀死本轮后端 PID。检查系统显示和 Demo task/window 消失，旧编号的四个 RPC 拒绝，缓存删除；后端死亡时还检查 Binder death 与 PID 消失。
 
-## 验证结果
+线程观察通过固定 `ps -T -p <本轮PID> -o TID,CMD`：`CMD` 显示线程的 kernel comm，`NAME` 仅重复进程名。先记录真实帧/查询/事件线程 TID，再有界观察释放后这些线程与异步关闭线程消失；名字可能截为 15 字节。命令错误、缺 header 或活进程没有线程行不当作清理成功。
 
-2026-11-18 先在 Devbox 完成编译与静态门禁，再在任务专用的 ARM64 Android 16 / API 36 AVD `pocketrun-ch1-api36` 冷启动并执行真实 instrumentation 与产品界面闭环：
+并发测试让真实 `dumpUiTree(oldId)` 与 `releaseDisplay()` 从同一起点发起，要求两调用在共享 5 秒期限内结束。只允许旧 ID 的合法结果或明确失效异常，不接受新 ID、解码错误或权限失败。清理完成后重建，确认新树可用、旧 ID 继续拒绝。这不强制命中 `busy` / `timeout`，不代表所有晚回包分支已实测。
 
-```bash
-# app/，已有依赖，不安装新依赖
-npm run typecheck
-npm run lint
-npm test -- --runInBand
-npm run audit:ci
+测试期间不用另一条 instrumentation UiAutomation 查询界面，以免与后端的 UiAutomation 冲突。后端全部退出后才用 UiDevice 检查主屏没有 Demo 输入控件或固定文字；不把预览 JSON 中的文字误判成主屏被输入。
 
-# app/android/
-./gradlew :adb:testDebugUnitTest :app:testDebugUnitTest \
-  :app:assembleDebug :app:assembleRelease :app:assembleDebugAndroidTest \
-  -PreactNativeArchitectures=arm64-v8a --max-workers=2
+审计沿用第 0 章记录的精确 picomatch 临时例外，截止 2026-12-18；其他 high/critical 根公告仍阻断。第 5 章记录 App 5 项 moderate、网站 0 项 moderate，没有新增依赖或豁免。截图正文、UI 树正文、配对码和交换 token 不写日志。
 
-# website/
-npm run typecheck
-npm run build
-npm run audit:ci
-```
+</details>
 
-| 门禁 | 结果 |
-| --- | --- |
-| App typecheck / lint / Jest | 通过；4 suites / 30 tests，退出码 0 |
-| ADB / App JVM tests | 通过；ADB 4 + App 23，共 27 tests，无 failure/error/skip |
-| ARM64 Debug / Release / AndroidTest compile | 通过；三类 APK 均生成，Gradle 退出码 0 |
-| App / website `audit:ci` | 两者退出码 0；沿用精确 picomatch 临时豁免至 2026-12-18；App 5 项 moderate，未新增豁免或改依赖 |
-| 网站 typecheck / build | 通过，退出码 0 |
-| API 36 ARM64 instrumentation | 通过；`Chapter5DittoIntegrationTest` 为 `OK (1 test)`，无 skip |
-| 产品 UI 闭环 | 通过；真实连接 UID 2000 后端，创建目标显示，读取截图与 `available` 树，定向点击并输入，再观察到 EditText 与结果 TextView 同步更新 |
+## 8. 本章小结与源码
 
-instrumentation 覆盖真实 TLS ADB、UID 2000 `app_process`、Binder、ImageReader、UiAutomation、IInputManager、stale ID 拒绝，以及 release / shutdown / backend death 清理。Jest / JVM 仍只负责按钮状态、编解码预算和参数拒绝；它们不能替代这次设备结果。
+我们接通了三个能力：**看见画面、读取控件、向目标显示输入。** 它们让程序具备操作页面的基础；“做哪一步、何时继续或停止”仍由当前用户操作，后续才交给 Agent。
 
-## 对应代码
+下一章开始另一条通道：在普通 App UID 下准备工作目录，通过命令管道处理文件。
 
-- `app/android/app/src/androidTest/java/io/github/kkkhs/pocketrun/Chapter5DittoIntegrationTest.kt`：真实设备准备、结果断言、release / shutdown / backend death。
-- `app/android/app/src/main/aidl/io/github/kkkhs/pocketrun/IPrivilegedBackend.aidl`：typed capability 边界。
-- `app/android/app/src/main/java/io/github/kkkhs/pocketrun/ScreenshotCodec.kt`：有界 screenshot header 与 SharedMemory codec。
-- `app/android/app/src/main/java/io/github/kkkhs/pocketrun/UiTreeCodec.kt`：有界 binary tree 与 typed 状态。
-- `PrivilegedBackendController.kt`、`PrivilegedBackendMain.kt`、`VirtualDisplaySession.kt` 与 `DisplayDemoActivity.kt`：App/backend/resource owner 和固定 Demo。
+练习：点击按钮后，如果 `injectText()` 返回 `true`，但新 UI 树的输入值仍为空，你会直接宣布完成，还是继续观察并报告未确认？为什么？
 
-练习：解释为什么“JPEG 可解码”“tree available”“injectText 返回 true”“树里真实显示输入值”是四条独立证据，以及释放后为什么必须再次调用旧 ID 验证拒绝。
-
-## 本章代码
-
-- [PR #8：截图、UI 树、定向输入与第 5 章](https://github.com/kkkhs/pocketrun/pull/8)
+- [PR #8：第 5 章实现](https://github.com/kkkhs/pocketrun/pull/8)
+- [PR #9：任务主线与分层图解](https://github.com/kkkhs/pocketrun/pull/9)
 - [Release `chapter-5`：本章结束时的源码快照](https://github.com/kkkhs/pocketrun/releases/tag/chapter-5)
