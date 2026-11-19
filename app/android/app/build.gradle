@@ -7,6 +7,8 @@ apply plugin: "com.facebook.react"
  * By default you don't need to apply any configuration, just uncomment the lines you need.
  */
 react {
+    // Cloud-device debug builds are standalone: do not depend on a development Metro server.
+    debuggableVariants = []
     /* Folders */
     //   The root of your project, i.e. where "package.json" lives. Default is '../..'
     // root = file("../../")
@@ -74,6 +76,9 @@ def jscFlavor = 'io.github.react-native-community:jsc-android:2026004.+'
 
 android {
     buildFeatures { aidl true }
+    externalNativeBuild {
+        cmake { path file("src/main/jni/CMakeLists.txt") }
+    }
     ndkVersion rootProject.ext.ndkVersion
     buildToolsVersion rootProject.ext.buildToolsVersion
     compileSdk rootProject.ext.compileSdkVersion

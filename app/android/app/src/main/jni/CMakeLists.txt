@@ -1,0 +1,6 @@
+cmake_minimum_required(VERSION 3.22.1)
+project(appmodules)
+include(${REACT_ANDROID_DIR}/cmake-utils/ReactNative-application.cmake)
+add_library(pocketrun_fs SHARED ../cpp/pocketrun_fs.cpp)
+target_compile_options(pocketrun_fs PRIVATE -Wall -Wextra -Werror)
+target_link_options(pocketrun_fs PRIVATE "-Wl,-z,max-page-size=16384" "-Wl,-z,common-page-size=16384")
