@@ -13,6 +13,7 @@ class DeviceInfoPackage : BaseReactPackage() {
         AdbModule.NAME -> AdbModule(reactContext)
         WorkspaceModule.NAME -> WorkspaceModule(reactContext)
         LinuxModule.NAME -> LinuxModule(reactContext)
+        PtyModule.NAME -> PtyModule(reactContext)
         else -> null
       }
 
@@ -49,7 +50,16 @@ class DeviceInfoPackage : BaseReactPackage() {
             false,
             false,
             true,
-        )
+        ),
+        PtyModule.NAME to ReactModuleInfo(
+            PtyModule.NAME,
+            PtyModule.NAME,
+            false,
+            false,
+            false,
+            true,
+        ),
+
     )
   }
 }
