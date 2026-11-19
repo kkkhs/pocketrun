@@ -106,6 +106,68 @@ class LinuxSessionTest {
         LinuxDirectoryLease.recover(parent, LinuxDirectoryLease.Kind.RUN, unused = { _, _ -> true })
     }
 
+    @Test(timeout = 15000) fun originalOperationCleanupRequiresRealExecutorTerminationEvenWithoutRunDirectory() = RootfsTarTest.temporary { files ->
+        val session = LinuxSession(files, RootfsInstallerTest.installer(files), 10469, 12345)
+        val release = java.util.concurrent.CountDownLatch(1)
+        val started = java.util.concurrent.CountDownLatch(1)
+        val executor = java.util.concurrent.Executors.newSingleThreadExecutor()
+        try {
+            session.prepare(session.reservePrepare("prepare-retry"))
+            val operation = session.reserve("pending-io")
+            val run = checkNotNull(operation.run)
+            val task = executor.submit {
+                started.countDown()
+                var interrupted = false
+                while (release.count > 0) {
+                    try { release.await() } catch (_: InterruptedException) { interrupted = true }
+                }
+                if (interrupted) Thread.currentThread().interrupt()
+            }
+            assertTrue(started.await(5, java.util.concurrent.TimeUnit.SECONDS))
+            run.ioExecutor = executor
+            run.ioCleanupProven = false // The assigned executor really has an unfinished task, not a pretend success flag.
+            executor.shutdown()
+            session.cancel(operation.token)
+            val result = session.runDemo(operation) // Cancelled before any ARM/Android process start.
+            assertEquals("unproven", result.cleanupStatus)
+            assertTrue(File(files, "linux/runs").list().orEmpty().none { it.startsWith("pocketrun-run-") })
+            assertFalse(session.retryProcessCleanup(operation))
+            assertFalse(executor.isTerminated)
+            RootfsTarTest.expectFailure { session.reserve("must-stay-busy") }
+            release.countDown()
+            task.get(5, java.util.concurrent.TimeUnit.SECONDS)
+            assertTrue(executor.awaitTermination(5, java.util.concurrent.TimeUnit.SECONDS))
+            assertTrue(session.retryProcessCleanup(operation))
+            assertTrue(run.cleanupProven && run.ioCleanupProven)
+            assertEquals("unproven", result.cleanupStatus) // Retry does not relabel the original result.
+            val next = session.reserve("after-real-reap") // Proves the actual CommandPipeline reservation was released too.
+            assertFalse(session.retryProcessCleanup(operation))
+            session.cancel(next.token)
+            assertEquals("done", session.runDemo(next).cleanupStatus)
+        } finally {
+            release.countDown()
+            executor.shutdownNow()
+            executor.awaitTermination(5, java.util.concurrent.TimeUnit.SECONDS)
+            session.close()
+        }
+    }
+
+    @Test fun cleanupRetryRejectsUnfinishedAndForeignSessionOperations() = RootfsTarTest.temporary { files ->
+        LinuxSession(files, RootfsInstallerTest.installer(files), 10469, 12345).use { first ->
+            LinuxSession(files, RootfsInstallerTest.installer(files), 10469, 12345).use { second ->
+                val op = first.reserve("first-owner")
+                assertFalse(first.retryProcessCleanup(op))
+                assertFalse(second.retryProcessCleanup(op))
+                first.cancel(op.token)
+                assertEquals("done", first.runDemo(op).cleanupStatus)
+                val foreign = second.reserve("second-owner")
+                assertFalse(first.retryProcessCleanup(foreign))
+                second.cancel(foreign.token)
+                assertEquals("done", second.runDemo(foreign).cleanupStatus)
+            }
+        }
+    }
+
     @Test fun trustedPlatformAliasCanBeNormalizedOnceWithoutRejectingThePhysicalPrivateBase() = RootfsTarTest.temporary { parent ->
         val physical = File(parent, "physical").apply { mkdir() }
         val alias = File(parent, "platform-alias")

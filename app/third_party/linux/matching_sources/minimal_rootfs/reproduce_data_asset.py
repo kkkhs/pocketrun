@@ -25,6 +25,7 @@ with tarfile.open(fileobj=raw, mode='w', format=tarfile.USTAR_FORMAT) as archive
         'etc/group': b'root:x:0:\nnobody:x:65534:\n',
         'bin/busybox': b'',
         'lib/ld-musl-aarch64.so.1': b'',
+        'dev/null': b'',
     }
     for name, data in files.items():
         member = tarfile.TarInfo(name)

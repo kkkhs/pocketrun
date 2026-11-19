@@ -18,6 +18,42 @@ class LinuxDirectoryLeaseTest {
         assertEquals(listOf("another-run"), remaining(parent))
     }
 
+    @Test fun heldProducerIsSkippedBeforeMarkerInspectionOrOpeningDuringRecoveryAndAllocation() = RootfsTarTest.temporary { parent ->
+        val a = LinuxDirectoryLease.allocate(parent, LinuxDirectoryLease.Kind.RUN, unused = { _, _ -> true })
+        val marker = File(parent, ".${a.directory.name}.lease")
+        val original = checkNotNull(LinuxDirectoryLease.readAttributes(marker))
+        var inspectedA = 0
+        var probes = 0
+        val inspect: (File) -> java.nio.file.attribute.BasicFileAttributes? = { file ->
+            if (file == marker) inspectedA++
+            LinuxDirectoryLease.readAttributes(file)
+        }
+        try {
+            LinuxDirectoryLease.recover(parent, LinuxDirectoryLease.Kind.RUN, unused = { _, _ -> probes++; true }, inspect = inspect)
+            assertFalse(LinuxDirectoryLease.recoverOwned(a.directory, LinuxDirectoryLease.Kind.RUN,
+                unused = { _, _ -> probes++; true }, inspect = inspect))
+            val b = LinuxDirectoryLease.allocate(parent, LinuxDirectoryLease.Kind.RUN,
+                unused = { _, _ -> probes++; true }, inspect = inspect)
+            try {
+                assertEquals(0, inspectedA)
+                assertEquals(0, probes)
+                val after = checkNotNull(LinuxDirectoryLease.readAttributes(marker))
+                assertEquals(original.size(), after.size())
+                assertEquals(original.lastModifiedTime(), after.lastModifiedTime())
+                assertEquals(original.fileKey(), after.fileKey())
+                assertTrue(a.directory.isDirectory)
+                assertFalse(a.cleanupProven)
+                assertEquals("not_closed", a.cleanupFailureReason)
+            } finally { b.close() }
+            assertTrue(b.cleanupProven)
+            assertNull(b.cleanupFailureReason)
+            assertTrue(a.directory.isDirectory)
+        } finally { a.close() }
+        assertTrue(a.cleanupProven)
+        assertNull(a.cleanupFailureReason)
+        assertTrue(remaining(parent).isEmpty())
+    }
+
     @Test fun runRecoveryRequiresExplicitUnusedProofAndUnknownRetainsData() = RootfsTarTest.temporary { parent ->
         val run = LinuxDirectoryLease.allocate(parent, LinuxDirectoryLease.Kind.RUN, unused = { _, _ -> false })
         File(run.directory, "tmp").mkdir()
@@ -25,6 +61,8 @@ class LinuxDirectoryLeaseTest {
         val directory = run.directory
         run.close()
         assertFalse(run.cleanupProven)
+        assertEquals("probe_unknown", run.cleanupFailureReason)
+        assertTrue(run.elapsedMillis >= 0)
         assertTrue(directory.isDirectory)
         LinuxDirectoryLease.recover(parent, LinuxDirectoryLease.Kind.RUN, unused = { _, _ -> throw java.io.IOException("proc unknown") })
         assertTrue(directory.isDirectory)
@@ -75,6 +113,7 @@ class LinuxDirectoryLeaseTest {
         assertEquals("unproven", result.cleanupStatus)
         assertEquals("kept stdout", result.stdout)
         assertFalse(run.cleanupProven)
+        assertEquals("cleanup_io", run.cleanupFailureReason)
         LinuxDirectoryLease.recover(parent, LinuxDirectoryLease.Kind.RUN, unused = { _, _ -> true }, inspect = inspect)
         assertEquals("must retain", File(run.directory, "keep").readText())
         LinuxDirectoryLease.recover(parent, LinuxDirectoryLease.Kind.RUN, unused = { _, _ -> true })
@@ -107,6 +146,7 @@ class LinuxDirectoryLeaseTest {
         File(parent, ".${run.directory.name}.lease").writeText("")
         run.close()
         assertFalse(run.cleanupProven)
+        assertEquals("invalid_marker", run.cleanupFailureReason)
         assertTrue(run.directory.isDirectory)
         LinuxDirectoryLease.recover(parent, LinuxDirectoryLease.Kind.RUN, unused = { _, _ -> true })
         assertTrue(run.directory.isDirectory)
@@ -174,11 +214,129 @@ class LinuxDirectoryLeaseTest {
         assertTrue(remaining(parent).isEmpty())
     }
 
+    @Test fun missingRecordIsNotCalledAProbeFailureAndDoesNotAuthorizeGoneCleanup() = RootfsTarTest.temporary { parent ->
+        var probes = 0
+        val run = LinuxDirectoryLease.allocate(parent, LinuxDirectoryLease.Kind.RUN, unused = { _, _ -> probes++; true })
+        assertTrue(File(parent, ".${run.directory.name}.lease").delete())
+        run.close()
+        assertFalse(run.cleanupProven)
+        assertEquals("record_missing", run.cleanupFailureReason)
+        assertEquals(0, probes)
+        assertTrue(run.directory.isDirectory)
+        val elapsed = run.elapsedMillis
+        run.close()
+        assertEquals(elapsed, run.elapsedMillis)
+        assertFalse(run.cleanupProven)
+    }
+
+    @Test(timeout = 10000) fun expiredBudgetBeforeProbeIsDiagnosedWithoutInvokingProbe() = RootfsTarTest.temporary { parent ->
+        var probes = 0
+        val run = LinuxDirectoryLease.allocate(parent, LinuxDirectoryLease.Kind.RUN, unused = { _, _ -> probes++; true },
+            inspect = { file ->
+                if (file.name.startsWith("pocketrun-run-")) Thread.sleep(1550)
+                LinuxDirectoryLease.readAttributes(file)
+            })
+        run.close()
+        assertFalse(run.cleanupProven)
+        assertEquals("budget_exhausted", run.cleanupFailureReason)
+        assertEquals(0, probes)
+        assertTrue(run.elapsedMillis >= 1500)
+        assertTrue(run.directory.isDirectory)
+        LinuxDirectoryLease.recover(parent, LinuxDirectoryLease.Kind.RUN, unused = { _, _ -> true })
+        assertFalse(run.cleanupProven) // A later recovery is not a relabel of the original failed close.
+    }
+
+    @Test(timeout = 10000) fun successfulProbeCannotHideOverallBudgetExhaustion() = RootfsTarTest.temporary { parent ->
+        var probes = 0
+        val run = LinuxDirectoryLease.allocate(parent, LinuxDirectoryLease.Kind.RUN, unused = { _, budget ->
+            probes++
+            Thread.sleep(budget + 20)
+            true
+        })
+        run.close()
+        assertEquals(1, probes)
+        assertFalse(run.cleanupProven)
+        assertEquals("budget_exhausted", run.cleanupFailureReason)
+        assertTrue(run.directory.isDirectory)
+        LinuxDirectoryLease.recover(parent, LinuxDirectoryLease.Kind.RUN, unused = { _, _ -> true })
+    }
+
+    @Test fun errorDuringCloseStillReleasesOriginalDescriptorsBeforeBecomingRecoverable() = RootfsTarTest.temporary { parent ->
+        val fatal = AssertionError("probe failed")
+        val run = LinuxDirectoryLease.allocate(parent, LinuxDirectoryLease.Kind.RUN, unused = { _, _ -> throw fatal })
+        try { run.close(); fail("must rethrow Error") } catch (error: AssertionError) { assertSame(fatal, error) }
+        assertFalse(run.cleanupProven)
+        assertEquals("cleanup_error", run.cleanupFailureReason)
+        LinuxDirectoryLease.recover(parent, LinuxDirectoryLease.Kind.RUN, unused = { _, _ -> true })
+        assertFalse(run.directory.exists()) // The current-process active registry was removed after real close.
+        assertFalse(run.cleanupProven)
+        assertEquals("cleanup_error", run.cleanupFailureReason)
+    }
+
+    @Test fun targetedRecoveryReachesBWithoutProbingUnremovableA() = RootfsTarTest.temporary { parent ->
+        val a = LinuxDirectoryLease.allocate(parent, LinuxDirectoryLease.Kind.RUN, unused = { _, _ -> false })
+        val b = LinuxDirectoryLease.allocate(parent, LinuxDirectoryLease.Kind.RUN, unused = { _, _ -> false })
+        a.close()
+        b.close()
+        var globalProbes = 0
+        LinuxDirectoryLease.recover(parent, LinuxDirectoryLease.Kind.RUN, unused = { _, _ -> globalProbes++; false })
+        assertEquals(1, globalProbes)
+        assertTrue(a.directory.isDirectory && b.directory.isDirectory)
+        val targets = ArrayList<File>()
+        assertTrue(LinuxDirectoryLease.recoverOwned(b.directory, LinuxDirectoryLease.Kind.RUN, unused = { target, budget ->
+            targets += target
+            assertTrue(budget in 1..1500)
+            target == b.directory
+        }))
+        assertEquals(listOf(b.directory), targets)
+        assertFalse(b.directory.exists())
+        assertTrue(a.directory.isDirectory)
+        assertEquals("probe_unknown", b.cleanupFailureReason) // No relabel of the original failed close.
+        assertFalse(b.cleanupProven)
+        assertTrue(LinuxDirectoryLease.recoverOwned(a.directory, LinuxDirectoryLease.Kind.RUN, unused = { _, _ -> true }))
+    }
+
+    @Test fun failedUnlockWithSuccessfulOriginalChannelCloseDoesNotPermanentlyPinActiveRegistry() = RootfsTarTest.temporary { parent ->
+        var original: java.nio.channels.FileLock? = null
+        val failure = java.io.IOException("injected unlock failure")
+        val run = LinuxDirectoryLease.allocate(parent, LinuxDirectoryLease.Kind.RUN, unused = { _, _ -> false },
+            unlock = { held -> original = held; assertTrue(held.isValid); throw failure })
+        try { run.close(); fail("must report unlock failure") } catch (error: java.io.IOException) { assertSame(failure, error) }
+        val held = checkNotNull(original)
+        assertFalse(held.isValid) // Actual FileChannel.close invalidated the original real FileLock.
+        assertFalse(held.channel().isOpen)
+        assertFalse(run.cleanupProven)
+        assertEquals("cleanup_io", run.cleanupFailureReason)
+        assertTrue(run.directory.isDirectory)
+        assertTrue(LinuxDirectoryLease.recoverOwned(run.directory, LinuxDirectoryLease.Kind.RUN, unused = { _, _ -> true }))
+        assertFalse(run.directory.exists())
+        assertFalse(run.cleanupProven)
+        assertEquals("cleanup_io", run.cleanupFailureReason)
+    }
+
+    @Test fun targetedRecoveryRejectsMalformedMissingOrCorruptedOwnershipWithoutDeleting() = RootfsTarTest.temporary { parent ->
+        var probes = 0
+        assertFalse(LinuxDirectoryLease.recoverOwned(File(parent, "foreign-directory"), LinuxDirectoryLease.Kind.RUN,
+            unused = { _, _ -> probes++; true }))
+        val run = LinuxDirectoryLease.allocate(parent, LinuxDirectoryLease.Kind.RUN, unused = { _, _ -> false })
+        run.close()
+        val marker = File(parent, ".${run.directory.name}.lease")
+        marker.writeText("foreign ownership")
+        assertFalse(LinuxDirectoryLease.recoverOwned(run.directory, LinuxDirectoryLease.Kind.RUN,
+            unused = { _, _ -> probes++; true }))
+        assertEquals(0, probes)
+        assertTrue(run.directory.isDirectory)
+        assertTrue(marker.delete())
+        assertFalse(LinuxDirectoryLease.recoverOwned(run.directory, LinuxDirectoryLease.Kind.RUN,
+            unused = { _, _ -> probes++; true }))
+        assertTrue(run.directory.isDirectory)
+    }
+
     private fun remaining(parent: File) = parent.list().orEmpty().filter { it != ".pocketrun-recovery.lock" }
     private fun startWorker(parent: File, kind: String, ending: String): Process {
         val locations = listOf(LinuxLeaseCrashWorker::class.java, LinuxDirectoryLease::class.java, Unit::class.java)
-            .map { File(it.protectionDomain.codeSource.location.toURI()).path }
-        val classpath = (locations + System.getProperty("java.class.path").split(File.pathSeparator)).distinct().joinToString(File.pathSeparator)
+            .map { File(checkNotNull(checkNotNull(it.protectionDomain).codeSource).location.toURI()).path }
+        val classpath = (locations + checkNotNull(System.getProperty("java.class.path")).split(File.pathSeparator)).distinct().joinToString(File.pathSeparator)
         return ProcessBuilder(File(System.getProperty("java.home"), "bin/java").path,
             "-cp", classpath, LinuxLeaseCrashWorker::class.java.name, parent.path, kind, ending).start()
     }

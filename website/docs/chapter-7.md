@@ -82,9 +82,9 @@ BusyBox 用一个程序提供 `cat`、`wc`、`id` 等命令；musl 提供这些 
 <details>
 <summary>安装内容怎样校验，怎样避免半安装与路径逃逸</summary>
 
-当前运行清单是 `app/android/app/src/main/assets/linux/runtime.json`，版本为 `alpine-3.22.8-minimal-proot-5.1.107.102`，variant 为 `minimal-busybox-musl`。只包含四个 ELF 可执行文件和两个 guest 代码绑定，不是曾研究的完整 19-ELF 候选。
+当前运行清单是 `app/android/app/src/main/assets/linux/runtime.json`，版本为 `alpine-3.22.8-minimal-proot-5.1.107.102-candidate2-prebound`，variant 为 `minimal-busybox-musl`。只包含四个 ELF 可执行文件和两个 guest 代码绑定，不是曾研究的完整 19-ELF 候选。
 
-数据资产实际名为 `linux/alpine-data.bin`，570 字节，SHA256 为 `6975f46c20ad8b950f164c3ea3fc524f416d82b232539f3c266c5e9aef82a149`。`.bin` 是打包时的文件名；内容仍是固定的 gzip / ustar 数据归档，不是另一份镜像。清单、真实资产字节与解压后的安装内容都要检查，不能只相信文件名或旧审核清单。
+当前数据资产为 `linux/alpine-data.bin`，587 字节、34 个条目，SHA256 为 `8c4ac18ae5babcbd3f692e1c4bed6710eb965967da792fc6ad597def4a1eff06`。它预置普通的 0600、零字节 `dev/null`，供固定 `/dev/null` 绑定使用，不是字符设备。`.bin` 只是打包名称，内容仍是固定的 gzip / ustar 数据归档；清单、实际字节与安装库存都要核对，不能只信文件名。先前正常演示使用的 570 字节资产是另一份历史快照，不能把它的设备结果借给新资产。
 
 `RootfsInstaller.verifyArtifacts()` 检查四个只读文件及各自 SHA256；`RootfsTar.extract()` 有界解压，只接受普通数据文件、目录与允许的链接，拒绝 ELF、可执行普通文件、重复路径、截断归档、特殊条目和路径逃逸。归档链接在普通文件写入完成后才创建，最终变为仍落在 rootfs 内的相对链接。
 
@@ -169,9 +169,9 @@ stage 和 run 的恢复条件不同。run 目录还需检查 App UID 相关进�
 | 实际 Linux 输出 | 两次均为版本 `3.22.8`、cwd `/workspace`、UID `10469`、初始 CSV 行数 `3` |
 | 内部步骤与外层进程 | 五个步骤均为 `0`，PRoot 退出码为 `0`，stderr 空 |
 | 本轮正常清理与工作数据 | 两次断言 `cleanupStatus == done`；关闭会话后工作文件仍保留 |
-| 当前 APK 的静态内容 | 四个 Linux ELF 与清单 SHA256 一致；570 字节数据资产与固定 SHA256 一致；包含 17 份许可证/版权文本及其索引 |
-| 完整生命周期 | 首批真实专项 10 项中 7 项通过、3 项未通过：取消／输出超限后的 tracer 回收，以及主 guest 被信号杀死时的退出码传播仍在修复。它们不满足本章完整验收；修复后须重新运行，不能用正常演示或后来进程消失替代 |
-| 真实产品界面与网站 | **仍待实际操作、渲染和最终版本统一检查** |
+| 固定 APK 的静态内容 | 四个 Linux ELF 与清单 SHA256 一致；历史正常批次为 570 字节资产，当前预置绑定点版本为 587 字节且实际 APK entry SHA 一致；包含许可证/版权文本及索引 |
+| 完整生命周期 | 原 10 项／3 失败、11 项／2 失败保留；修复等待夹具重复打开 FIFO FD 后，新 12 项生命周期通过，默认和 fallback 回收均有原生断言。但显式 App 死亡后的 rootfs 重用仍失败于运行后出现的不可读绑定占位；587 字节预置版本尚未取得新真机结果。本章仍未完整验收 |
+| 真实产品界面与网站 | 产品界面仍待本章完整操作验收；此前正文已有手机／桌面深浅主题渲染检查，新增对照内容仍需最终版本统一复核 |
 | 公开发布 | **本章 PR、CI / Pages、注释 tag、源码 Release 与对应源码公开交付均待完成** |
 
 正常演示的 JSON 输出没有单独打印 `cleanupStatus`；这一项由实际通过的测试源码断言。不能把它描述成原始 JSON 已包含的字段。
@@ -181,7 +181,7 @@ stage 和 run 的恢复条件不同。run 目录还需检查 App UID 相关进�
 <details>
 <summary>证据对应的构建与可运行检查</summary>
 
-上述正常演示对应的 App APK SHA256 前缀为 `37ee35e17146`，AndroidTest APK 前缀为 `e7cdeb257046`。安装记录均退出 `0`，但设备通过结论来自原始 runner 的 `OK (1 test)` 和实际结果断言，不来自“安装成功”。后续重新构建的 APK 需要重新关联验收，不能借用这份旧结果。
+上表原正常演示对应 App APK SHA256 前缀 `37ee35e17146`、AndroidTest APK 前缀 `e7cdeb257046`。安装记录均退出 `0`，但通过结论来自原始 runner 的 `OK (1 test)` 和实际断言，不来自“安装成功”。candidate2 另一次真实正常演示也通过，对应 App `b74b47d7950c`、AndroidTest `462c18f18553`；其新生命周期专项为 11 项／2 失败。不同包、不同批次分别保留，不把旧包证据借给新源码。
 
 先按[第 1 章](chapter-1.md)准备已有工具链与依赖。源码检查、ARM64 构建和审计从仓库根目录起算：
 
@@ -234,11 +234,24 @@ Alpine 原始来源是[官方 3.22.8 / aarch64 minirootfs](https://dl-cdn.alpine
 
 </details>
 
+<details>
+<summary>Ditto 实物对照：原理相近，不等于完整复刻</summary>
+
+最初采用的是“Ditto 类似执行核心”的架构意图，不是已经逐项读过 Ditto 原始源码。后来对 Ditto 0.1.14 APK 与可读的重建方法做了实物对照：它也使用 App 的 `nativeLibraryDir` 中的 PRoot / loader 来承接 Linux 命令，并有 Termux 风格的 JNI 子进程、PTY 尺寸与 IO 路径。这能说明实现结构，不能单独证明 Ditto 设备上的实际 UID、所有降级分支或完整取消行为。
+
+范围有明确差异：Ditto APK 内是 Alpine **3.24.3**、**515 个归档条目**，包含 `apk`；PocketRun 本章是 Alpine **3.22.8 派生的最小 BusyBox / musl**，只有四个 Linux ELF、两个 guest 代码绑定，不支持 `apk add`。路径兼容、程序来源与权限边界可借鉴，但不能称为完整发行版或全部能力已对齐。
+
+JADX 1.5.1 的重建结果有 **32 个错误**，属于部分可读的反编译代码，不是原始源码；出错或缺失的方法不能补猜。可访问的[Ditto 包源码候选](https://github.com/WindySha/ditto-termux-packages)尚未核为整个 App 的原始源码或本次 APK 的对应版本，也不替代修改后程序的对应源码与许可证交付。React Native / TurboModule 是 PocketRun 的选择，不能据此反推 Ditto 同样使用它们。
+
+这份对照不扩大上方验证结论：candidate1 的正常演示仍是原批次 `OK (1 test)`、0.344 秒、重复两次；原生命周期 10 项中的 3 项失败仍是失败。candidate2 有独立的新正常路径及 12 项生命周期通过记录，但显式 App 死亡恢复仍有失败，当前预置绑定点的数据版本也未完成真机验收，不能称为完整通过。
+
+</details>
+
 ## 下一章再做交互终端
 
 本章得到的是一个固定的非交互 Linux 任务：同一份 CSV 在新的用户态环境中可读，版本、目录、实际身份、结果与正常清理可以核对。
 
-它还不证明完整发行版兼容，不提供任意命令、包管理、交互终端或 Agent。下一章再加入真正的 PTY，让输入、输出和终端尺寸变化成为可交互会话；PTY 当前尚未实现，本章的 `ProcessBuilder` 管道不能冒充它。
+它还不证明完整发行版兼容，不提供任意命令、包管理、交互终端或 Agent。[下一章](chapter-8.md)讲真正的 PTY，让输入、输出和终端尺寸变化成为可交互会话；它有独立的实现与验收边界，本章的 `ProcessBuilder` 管道不能冒充它。
 
 开发继续依赖已经验证的代码与能力，不依赖前章是否已发布。PR、Pages、tag 和 Release 是独立的发布待办；它们未完成时继续开发，但不把本地验证写成线上已交付。
 

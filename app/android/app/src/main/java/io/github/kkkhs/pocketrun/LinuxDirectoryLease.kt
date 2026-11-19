@@ -18,6 +18,7 @@ import java.nio.file.attribute.BasicFileAttributes
 import java.security.MessageDigest
 import java.util.Base64
 import java.util.UUID
+import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.TimeoutException
 import java.util.concurrent.locks.ReentrantLock
@@ -31,35 +32,67 @@ internal class LinuxDirectoryLease private constructor(
     private val lease: FileLock,
     private val unused: (File, Long) -> Boolean,
     private val inspect: (File) -> BasicFileAttributes?,
+    private val unlock: (FileLock) -> Unit,
+    private val activeKey: String,
 ) : Closeable {
     enum class Kind(val label: String) { STAGE("stage"), RUN("run") }
     private var closed = false
     var cleanupProven = false
+        private set
+    var cleanupFailureReason: String? = "not_closed"
+        private set
+    var elapsedMillis = 0L
         private set
 
     override fun close() {
         synchronized(this) {
             if (closed) return
             closed = true
+            val started = System.nanoTime()
+            cleanupFailureReason = "close_in_progress"
             var failure: Throwable? = null
+            var removed = false
+            var channelClosed = false
             try {
                 coordinated(leaseFile.parentFile!!, {}) { budget ->
                     val attrs = inspect(leaseFile)
-                    if (attrs == null || !attrs.isRegularFile ||
-                        !validRecord(channel, leaseFile.parentFile!!, directory.name, kind, processGeneration)) return@coordinated
-                    val directoryAttrs = inspect(directory)
-                    if (directoryAttrs == null || removable(directory, directoryAttrs, kind, unused, budget, {})) {
-                        if (directoryAttrs != null) deleteOwned(directory, budget, {})
-                        Files.delete(leaseFile.toPath())
-                        cleanupProven = true
+                    if (attrs == null) { cleanupFailureReason = "record_missing"; return@coordinated }
+                    if (!attrs.isRegularFile ||
+                        !validRecord(channel, leaseFile.parentFile!!, directory.name, kind, processGeneration)) {
+                        cleanupFailureReason = "invalid_marker"
+                        return@coordinated
                     }
+                    val directoryAttrs = inspect(directory)
+                    val decision = if (directoryAttrs == null) RemovalDecision.ALLOWED
+                        else removable(directory, directoryAttrs, kind, unused, budget, {})
+                    if (decision != RemovalDecision.ALLOWED) {
+                        cleanupFailureReason = decision.reason
+                        return@coordinated
+                    }
+                    if (directoryAttrs != null) deleteOwned(directory, budget, {})
+                    Files.delete(leaseFile.toPath())
+                    removed = true
                 }
             } catch (error: Throwable) {
+                cleanupFailureReason = failureReason(error)
                 failure = error
                 throw error
             } finally {
-                try { try { lease.release() } finally { channel.close() } }
-                catch (cleanup: Throwable) { if (failure != null) failure.addSuppressed(cleanup) else throw cleanup }
+                try {
+                    try { unlock(lease) }
+                    finally { channel.close(); channelClosed = true }
+                } catch (cleanup: Throwable) {
+                    cleanupFailureReason = "cleanup_io"
+                    if (failure != null) failure.addSuppressed(cleanup) else { failure = cleanup; throw cleanup }
+                } finally {
+                    // A successful original channel.close also invalidates/releases its locks after an unlock failure.
+                    val descriptorsClosed = channelClosed && !channel.isOpen && !lease.isValid
+                    if (descriptorsClosed) activeLeases.remove(activeKey, this)
+                    cleanupProven = removed && descriptorsClosed && failure == null
+                    if (!descriptorsClosed) cleanupFailureReason = "cleanup_io"
+                    if (cleanupProven) cleanupFailureReason = null
+                    elapsedMillis = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - started)
+                }
             }
         }
     }
@@ -68,6 +101,7 @@ internal class LinuxDirectoryLease private constructor(
         private const val RECOVERY_MS = 1500L
         private const val MAX_SCAN_ENTRIES = 128
         private val coordinator = ReentrantLock()
+        private val activeLeases = ConcurrentHashMap<String, LinuxDirectoryLease>()
         private val processGeneration = UUID.randomUUID().toString()
         private val uuid = "[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}"
         private data class Owner(val uid: Long, val pid: Long, val startTicks: Long)
@@ -88,13 +122,23 @@ internal class LinuxDirectoryLease private constructor(
             }
         }
         private class RecoveryExpired : Exception()
+        private enum class RemovalDecision(val reason: String?) {
+            ALLOWED(null), INVALID_DIRECTORY("invalid_directory"), PROBE_UNKNOWN("probe_unknown"), BUDGET_EXHAUSTED("budget_exhausted"),
+        }
+        private fun failureReason(error: Throwable) = when (error) {
+            is TimeoutException, is RecoveryExpired -> "budget_exhausted"
+            is IOException, is UnsupportedOperationException -> "cleanup_io"
+            else -> "cleanup_error"
+        }
+        private fun activeKey(file: File) = File(checkNotNull(file.parentFile).canonicalFile, file.name).path
 
         internal fun readAttributes(file: File): BasicFileAttributes? = try {
             Files.readAttributes(file.toPath(), BasicFileAttributes::class.java, NOFOLLOW_LINKS)
         } catch (_: NoSuchFileException) { null } // Permission/I/O errors are not absence.
 
         fun allocate(parent: File, kind: Kind, unused: (File, Long) -> Boolean = { _, _ -> false },
-            guard: () -> Unit = {}, inspect: (File) -> BasicFileAttributes? = ::readAttributes): LinuxDirectoryLease =
+            guard: () -> Unit = {}, unlock: (FileLock) -> Unit = { it.release() },
+            inspect: (File) -> BasicFileAttributes? = ::readAttributes): LinuxDirectoryLease =
             coordinated(parent, guard) { budget ->
                 recoverLocked(parent, kind, unused, budget, guard, inspect)
                 budget.check(guard)
@@ -103,6 +147,8 @@ internal class LinuxDirectoryLease private constructor(
                 val record = record(parent, name, kind).toByteArray(Charsets.UTF_8)
                 // A full, fsynced identity record precedes mkdir; a torn record can never authorize deletion.
                 val directory = File(parent, name)
+                val key = activeKey(leaseFile)
+                var registered: LinuxDirectoryLease? = null
                 var lease: FileLock? = null
                 var created = false
                 var transferred = false
@@ -117,7 +163,11 @@ internal class LinuxDirectoryLease private constructor(
                     Files.createDirectory(directory.toPath())
                     created = true
                     RootfsTar.privateDirectory(directory)
-                    LinuxDirectoryLease(directory, leaseFile, kind, channel, lease, unused, inspect).also { transferred = true }
+                    val owned = LinuxDirectoryLease(directory, leaseFile, kind, channel, lease, unused, inspect, unlock, key)
+                    registered = owned
+                    check(activeLeases.putIfAbsent(key, owned) == null) { "Linux 目录已有活跃生产者。" }
+                    transferred = true
+                    owned
                 } catch (error: Throwable) {
                     failure = error
                     throw error
@@ -127,7 +177,18 @@ internal class LinuxDirectoryLease private constructor(
                             try {
                                 if (created) RootfsInstaller.removeOwned(directory)
                                 Files.deleteIfExists(leaseFile.toPath())
-                            } finally { try { lease?.release() } finally { channel.close() } }
+                            } finally {
+                                var closed = false
+                                try { lease?.release() }
+                                finally {
+                                    try { channel.close(); closed = true }
+                                    finally {
+                                        if (closed && !channel.isOpen && lease?.isValid != true) {
+                                            registered?.let { activeLeases.remove(key, it) }
+                                        }
+                                    }
+                                }
+                            }
                         } catch (cleanup: Throwable) { if (failure != null) failure.addSuppressed(cleanup) else throw cleanup }
                     }
                 }
@@ -136,6 +197,48 @@ internal class LinuxDirectoryLease private constructor(
         fun recover(parent: File, kind: Kind, unused: (File, Long) -> Boolean = { _, _ -> false },
             guard: () -> Unit = {}, inspect: (File) -> BasicFileAttributes? = ::readAttributes) {
             coordinated(parent, guard) { budget -> recoverLocked(parent, kind, unused, budget, guard, inspect) }
+        }
+
+        /** Recover exactly this registered directory, without letting an unrelated unremovable entry starve it. */
+        fun recoverOwned(directory: File, kind: Kind, unused: (File, Long) -> Boolean = { _, _ -> false },
+            guard: () -> Unit = {}, inspect: (File) -> BasicFileAttributes? = ::readAttributes): Boolean {
+            val name = directory.name
+            val prefix = "pocketrun-${kind.label}-"
+            if (!name.startsWith(prefix) || !validUuid(name.removePrefix(prefix))) return false
+            val parent = directory.parentFile ?: return false
+            try {
+                guard()
+                if (directory.absoluteFile != directory.canonicalFile || parent.absoluteFile != parent.canonicalFile) return false
+                val parentAttrs = readAttributes(parent) ?: return false
+                if (!parentAttrs.isDirectory || parentAttrs.isSymbolicLink) return false
+                return coordinated(parent, guard) { budget ->
+                    budget.check(guard)
+                    val marker = File(parent, ".$name.lease")
+                    if (activeLeases.containsKey(activeKey(marker))) return@coordinated false
+                    val attrs = inspect(marker) ?: return@coordinated false
+                    if (!attrs.isRegularFile) return@coordinated false
+                    FileChannel.open(marker.toPath(), READ, WRITE, NOFOLLOW_LINKS).use channelScope@ { channel ->
+                        val lock = try { channel.tryLock() } catch (_: OverlappingFileLockException) { null }
+                        if (lock == null) return@channelScope false
+                        lock.use {
+                            if (!validRecord(channel, parent, name, kind)) return@channelScope false
+                            budget.check(guard)
+                            val directoryAttrs = inspect(directory)
+                            if (directoryAttrs != null &&
+                                removable(directory, directoryAttrs, kind, unused, budget, guard) != RemovalDecision.ALLOWED) {
+                                return@channelScope false
+                            }
+                            if (directoryAttrs != null) deleteOwned(directory, budget, guard)
+                            budget.check(guard)
+                            Files.delete(marker.toPath())
+                            true
+                        }
+                    }
+                }
+            } catch (_: IOException) { return false }
+            catch (_: UnsupportedOperationException) { return false }
+            catch (_: TimeoutException) { return false }
+            catch (_: RecoveryExpired) { return false }
         }
 
         private fun recoverLocked(parent: File, kind: Kind, unused: (File, Long) -> Boolean,
@@ -149,6 +252,8 @@ internal class LinuxDirectoryLease private constructor(
                     val file = path.toFile()
                     val name = pattern.matchEntire(file.name)?.groupValues?.get(1) ?: continue
                     try {
+                        // Even an unsuccessful same-process lock probe must not open/close this producer's inode.
+                        if (activeLeases.containsKey(activeKey(file))) continue
                         val attrs = inspect(file) ?: continue
                         if (!attrs.isRegularFile) continue
                         var examined = false
@@ -160,7 +265,8 @@ internal class LinuxDirectoryLease private constructor(
                                 examined = true
                                 val directory = File(parent, name)
                                 val directoryAttrs = inspect(directory)
-                                if (directoryAttrs == null || removable(directory, directoryAttrs, kind, unused, budget, guard)) {
+                                if (directoryAttrs == null ||
+                                    removable(directory, directoryAttrs, kind, unused, budget, guard) == RemovalDecision.ALLOWED) {
                                     if (directoryAttrs != null) deleteOwned(directory, budget, guard)
                                     Files.delete(path)
                                 }
@@ -178,14 +284,15 @@ internal class LinuxDirectoryLease private constructor(
         }
 
         private fun removable(directory: File, attrs: BasicFileAttributes, kind: Kind,
-            unused: (File, Long) -> Boolean, budget: Budget, guard: () -> Unit): Boolean {
-            if (!attrs.isDirectory || attrs.isSymbolicLink) return false
+            unused: (File, Long) -> Boolean, budget: Budget, guard: () -> Unit): RemovalDecision {
+            if (!attrs.isDirectory || attrs.isSymbolicLink) return RemovalDecision.INVALID_DIRECTORY
             guard()
             val remaining = budget.remainingMillis()
-            if (remaining <= 0) return false
+            if (remaining <= 0) return RemovalDecision.BUDGET_EXHAUSTED
             val proven = if (kind == Kind.STAGE) true else try { unused(directory, remaining) } catch (_: Exception) { false }
             guard()
-            return proven && budget.remainingMillis() > 0
+            if (budget.remainingMillis() <= 0) return RemovalDecision.BUDGET_EXHAUSTED
+            return if (proven) RemovalDecision.ALLOWED else RemovalDecision.PROBE_UNKNOWN
         }
 
         private fun deleteOwned(directory: File, budget: Budget, guard: () -> Unit) {

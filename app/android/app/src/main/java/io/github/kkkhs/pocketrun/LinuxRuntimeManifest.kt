@@ -19,7 +19,7 @@ internal object LinuxRuntimeManifest {
         }
         val json = JSONObject(String(bytes, Charsets.UTF_8))
         require(json.getInt("schemaVersion") == 1 && json.getString("abi") == "arm64-v8a" &&
-            json.getString("version") == "alpine-3.22.8-minimal-proot-5.1.107.102-candidate2" &&
+            json.getString("version") == "alpine-3.22.8-minimal-proot-5.1.107.102-candidate2-prebound" &&
             json.getString("variant") == "minimal-busybox-musl") { "Linux 固定 runtime 版本无效。" }
         val artifactsJson = json.getJSONArray("artifacts")
         require(artifactsJson.length() in 4..19)
@@ -36,7 +36,7 @@ internal object LinuxRuntimeManifest {
         }
         val data = json.getJSONObject("dataAsset")
         require(data.getString("name") == "linux/alpine-data.bin") // Opaque AAPT name; bytes remain the pinned gzip tar.
-        require(data.getString("sha256") == "6975f46c20ad8b950f164c3ea3fc524f416d82b232539f3c266c5e9aef82a149")
+        require(data.getString("sha256") == "8c4ac18ae5babcbd3f692e1c4bed6710eb965967da792fc6ad597def4a1eff06")
         return LinuxRuntime(RootfsInstaller.hex(MessageDigest.getInstance("SHA-256").digest(bytes)),
             artifacts, bindings, data.getString("name"), data.getString("sha256"))
     }

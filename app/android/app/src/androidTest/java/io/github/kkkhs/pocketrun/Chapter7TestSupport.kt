@@ -46,8 +46,11 @@ internal object Chapter7TestSupport {
     }
     fun await(message: String, timeoutMillis: Long = 3000, condition: () -> Boolean) {
         val deadline = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(timeoutMillis)
-        while (!condition() && System.nanoTime() < deadline) Thread.sleep(10)
-        assertTrue(message, condition())
+        while (System.nanoTime() < deadline) {
+            if (condition()) return
+            Thread.sleep(10)
+        }
+        fail(message)
     }
     fun fdCount() = checkNotNull(File("/proc/self/fd").list()).size
     fun ioThreads() = Thread.getAllStackTraces().keys.count { it.isAlive && it.name == "PocketRun-PipeIO" }
@@ -179,6 +182,7 @@ internal object Chapter7TestSupport {
             captured = (listOf(tracer) + guests + tids).distinctBy { it.pid }
             evidence(if (fallback) "fallback-tree" else "default-tree", JSONObject()
                 .put("identities", JSONArray(captured.map { it.json() })).put("appPid", Process.myPid())
+                .put("appStartTicks", identity("app", Process.myPid()).ticks)
                 .put("markers", markers.path).put("tmp", tmp.path).put("tracerRecord", control.tracerRecord.path))
             return captured
         }
@@ -226,8 +230,15 @@ internal object Chapter7TestSupport {
             worker.shutdownNow()
             worker.awaitTermination(1, TimeUnit.SECONDS)
             owned.close()
+            val probe = LinuxRecoveryProbe.lastFailure(runDirectory)
             evidence("tree-run-lease-cleanup", JSONObject().put("runDirectory", runDirectory.path)
-                .put("cleanupStatus", if (owned.cleanupProven) "done" else "unproven"))
+                .put("cleanupStatus", if (owned.cleanupProven) "done" else "unproven")
+                .put("cleanupFailureReason", owned.cleanupFailureReason ?: JSONObject.NULL)
+                .put("cleanupElapsedMillis", owned.elapsedMillis)
+                .put("probeFailureReason", probe?.reason ?: JSONObject.NULL)
+                .put("probePid", probe?.pid ?: JSONObject.NULL)
+                .put("probeFd", probe?.fd ?: JSONObject.NULL)
+                .put("probeErrno", probe?.errno ?: JSONObject.NULL))
             // Never replace the production conservative proof with unconditional deletion.
             assertTrue("Actual LinuxRecoveryProbe could not prove RUN lease cleanup", owned.cleanupProven)
             assertFalse(runDirectory.exists())

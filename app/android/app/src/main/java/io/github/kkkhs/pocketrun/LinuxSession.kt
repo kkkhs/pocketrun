@@ -23,8 +23,9 @@ internal class LinuxSession(
         val stdout: String, val stderr: String, val exitCodes: List<Int>, val stageExitCodes: List<Int>,
         val durationMillis: Long, val appUid: Int, val alpineVersion: String?, val guestUid: Int?,
         val cwd: String?, val lineCount: Int?, val cleanupStatus: String = "unproven")
-    class Operation internal constructor(val token: String, internal val run: CommandPipeline.Run?) {
+    class Operation internal constructor(val token: String, internal val run: CommandPipeline.Run?, internal val owner: LinuxSession) {
         internal val cancelled = AtomicBoolean(false)
+        internal var finished = false
         internal var settled = false // guarded by the session lock; cancellation has a definite commit point.
         internal val deadline = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(CommandPipeline.TIMEOUT_MS)
     }
@@ -41,7 +42,7 @@ internal class LinuxSession(
         require(token.matches(Regex("[a-zA-Z0-9_.:-]{1,96}"))) { "Linux correlation token 无效。" }
         check(!closed) { "Linux 会话已关闭。" }
         check(current == null) { "已有 Linux 操作正在运行。" }
-        Operation(token, if (command) pipeline.reserve() else null).also { current = it }
+        Operation(token, if (command) pipeline.reserve() else null, this).also { current = it }
     }
 
     fun prepare(operation: Operation): Info {
@@ -116,11 +117,13 @@ internal class LinuxSession(
                     error.message.orEmpty().take(256), emptyList(), emptyList(), elapsed(started), appUid,
                     null, null, null, null)
             }
-            pipeline.abandon(checkNotNull(operation.run))
+            val originalRun = checkNotNull(operation.run)
+            pipeline.abandon(originalRun)
             reservationReleased = true
             cleanupAttempted = true
+            val actualProcessCleanup = originalRun.cleanupProven && originalRun.ioCleanupProven
             val cleaned = if (allocationAttempted && owned == null) outcome.copy(cleanupStatus = "unproven")
-                else cleanupResult(outcome, owned, pipelineCleanupProven)
+                else cleanupResult(outcome, owned, pipelineCleanupProven && actualProcessCleanup)
             return settle(operation, cleaned.copy(durationMillis = elapsed(started)))
         } catch (error: Throwable) {
             primaryFailure = error
@@ -162,7 +165,21 @@ internal class LinuxSession(
         operation.settled = true
         if (operation.cancelled.get() || closed) result.copy(status = "cancelled") else result
     }
-    private fun finish(operation: Operation) = synchronized(lock) { if (current === operation) current = null }
+    private fun finish(operation: Operation) = synchronized(lock) {
+        operation.finished = true
+        val run = operation.run
+        if (current === operation && (run == null || (run.cleanupProven && run.ioCleanupProven))) current = null
+    }
+
+    /** Re-prove only this session's original finished run; directory recovery is a separate caller gate. */
+    internal fun retryProcessCleanup(operation: Operation): Boolean = synchronized(lock) {
+        if (operation.owner !== this || !operation.finished || (current != null && current !== operation)) return false
+        val run = operation.run ?: return false
+        try { pipeline.abandon(run) } catch (_: Exception) { return false }
+        val proven = run.cleanupProven && run.ioCleanupProven
+        if (proven && current === operation) current = null
+        proven
+    }
     private fun validateWorkspace() {
         val sample = File(workspace, "items.csv")
         require(workspace.isDirectory && workspace.canonicalFile == workspace.absoluteFile &&

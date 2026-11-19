@@ -10,7 +10,7 @@ import java.util.zip.GZIPOutputStream
 class RootfsTarTest {
     @Test fun realPinnedArchiveExtractsOnlyDataAndGuestRelativeLinks() = temporary { root ->
         val asset = mainDirectory().resolve("assets/linux/alpine-data.bin")
-        assertEquals("6975f46c20ad8b950f164c3ea3fc524f416d82b232539f3c266c5e9aef82a149", RootfsInstaller.hash(asset))
+        assertEquals("8c4ac18ae5babcbd3f692e1c4bed6710eb965967da792fc6ad597def4a1eff06", RootfsInstaller.hash(asset))
         asset.inputStream().use { RootfsTar.extract(it, root) }
         assertEquals("3.22.8\n", File(root, "etc/alpine-release").readText())
         assertEquals("busybox", Files.readSymbolicLink(File(root, "bin/sh").toPath()).toString())
@@ -19,6 +19,11 @@ class RootfsTarTest {
         assertEquals(0L, File(root, "bin/busybox").length()) // Empty placeholder, never a writable ELF.
         assertEquals("ld-musl-aarch64.so.1", Files.readSymbolicLink(File(root, "lib/libc.musl-aarch64.so.1").toPath()).toString())
         assertFalse(File(root, "sbin/apk").exists())
+        val nullPlaceholder = File(root, "dev/null")
+        assertTrue(Files.isRegularFile(nullPlaceholder.toPath(), java.nio.file.LinkOption.NOFOLLOW_LINKS))
+        assertEquals(0L, nullPlaceholder.length())
+        assertEquals(setOf(java.nio.file.attribute.PosixFilePermission.OWNER_READ,
+            java.nio.file.attribute.PosixFilePermission.OWNER_WRITE), Files.getPosixFilePermissions(nullPlaceholder.toPath()))
     }
 
     @Test fun rejectsAbsoluteTraversalSpecialElfExecutableAndDuplicateEntries() {

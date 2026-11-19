@@ -21,6 +21,19 @@ import org.junit.runner.RunWith
 /** No mock runtime/process: production installer/session, real APK ELF, BusyBox, PRoot, ptrace and setsid. */
 @RunWith(AndroidJUnit4::class)
 class Chapter7LifecycleIntegrationTest {
+    @Test fun successfulAwaitDoesNotAcquireASecondFileDescriptor() {
+        val opened = mutableListOf<java.io.FileDescriptor>()
+        try {
+            Chapter7TestSupport.await("FD acquisition was not observed", 1000) {
+                opened += Os.open("/dev/null", OsConstants.O_RDONLY, 0)
+                true
+            }
+            assertEquals("A successful predicate must not be evaluated twice", 1, opened.size)
+        } finally {
+            opened.forEach(Os::close)
+        }
+    }
+
     @Test fun archiveAndElfHashFailuresDoNotPublishAndPreserveUnownedStages() = Chapter7TestSupport.inFiles { files ->
         val runtime = Chapter7TestSupport.runtime()
         val foreign = File(files, "linux/stage/not-this-attempt").apply { mkdirs() }

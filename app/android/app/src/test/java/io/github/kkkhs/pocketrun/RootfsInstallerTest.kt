@@ -92,7 +92,7 @@ class RootfsInstallerTest {
             val bindings = Regex("\\\"apk_basename\\\"\\s*:\\s*\\\"([^\\\"]+)\\\"\\s*,\\s*\\\"guest_path\\\"\\s*:\\s*\\\"([^\\\"]+)\\\"")
                 .findAll(text).map { LinuxBinding(it.groupValues[1], it.groupValues[2]) }.toList()
             val runtime = LinuxRuntime(RootfsInstaller.hash(manifest), artifacts, bindings,
-                "linux/alpine-data.bin", "6975f46c20ad8b950f164c3ea3fc524f416d82b232539f3c266c5e9aef82a149")
+                "linux/alpine-data.bin", "8c4ac18ae5babcbd3f692e1c4bed6710eb965967da792fc6ad597def4a1eff06")
             return RootfsInstaller(files.canonicalFile, native, runtime, { main.resolve("assets/$it").inputStream() })
         }
     }
