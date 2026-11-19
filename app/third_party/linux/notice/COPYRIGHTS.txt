@@ -1,0 +1,38 @@
+Copyright and license inventory for the CURRENT minimal Linux runtime
+Collected from exact-version source documents; no copyright ownership is inferred from a package maintainer name.
+
+PRoot v5.1.107.102 and separate loader
+Original source headers: Copyright (C) 2015 STMicroelectronics; individual years/contributors also occur in other files. Complete upstream COPYING, contributor attribution and GPLv2 text: ../licenses/PRoot-COPYING.txt. Complete collected source copyright/permission blocks: ../licenses/proot-source-copyright-notices.txt. Original grant GPL-2.0-or-later; modified PRoot+talloc executable is conveyed using GPLv3. Local changes dated 2026-11-19 and fully enumerated in ../matching_sources/proot-talloc/MODIFICATIONS.txt.
+
+talloc 2.5.0, statically embedded into the PRoot executable
+Copyright (C) Andrew Tridgell 2004 (talloc.h: 2004-2005).
+Copyright (C) Stefan Metzmacher 2006.
+LGPL-3.0-or-later, as stated in talloc.c and talloc.h, not an assertion that all Samba is LGPL. Complete source headers and other source attributions: ../licenses/talloc-source-copyright-notices.txt. Complete applicable license texts: ../licenses/LGPL-3.0.txt and GPL-3.0.txt. The full source archive is in the PRoot+talloc corresponding-source bundle and includes original copyright notices.
+
+BusyBox 1.37.0-r20 from the fixed Alpine minirootfs
+GPL-2.0-only. Exact upstream LICENSE explicitly restricts this BusyBox release to GPL version 2; do not infer an any-later-version option from the generic license's example boilerplate.
+Many individual authors hold copyrights on BusyBox components. All collected source notice blocks and their complete copyright/permission/disclaimer text are retained in ../licenses/busybox-source-copyright-notices.txt; the complete version-specific upstream license is ../licenses/busybox-LICENSE.txt. The complete source tar and the fixed Alpine patches/configuration are in ../matching_sources/aports/busybox/.
+
+utmps 0.1.3.1-r0, statically embedded into BusyBox
+Copyright (c) 2018-2025 Laurent Bercot <ska-skaware@skarnet.org>.
+ISC permission and disclaimer reproduced verbatim in ../licenses/utmps-utmps-0.1.3.1-COPYING.txt. Additional source notices: ../licenses/utmps-dependency-source-copyright-notices.txt. Complete exact-version source plus official fixed-recipe/buildtrace provenance are in ../matching_sources/static-dependency-evidence/.
+
+skalibs 2.14.4.0-r0 / libskarnet, statically embedded into BusyBox
+Copyright (c) 2011-2025 Laurent Bercot <ska-skaware@skarnet.org>.
+ISC permission and disclaimer reproduced verbatim in ../licenses/skalibs-skalibs-2.14.4.0-COPYING.txt. Additional source notices: ../licenses/skalibs-dependency-source-copyright-notices.txt. Complete exact-version source plus provenance are in ../matching_sources/static-dependency-evidence/.
+
+musl 1.2.5-r13 from the fixed Alpine minirootfs
+Copyright © 2005-2020 Rich Felker, et al.
+The whole-library MIT grant, complete author/contributor list, third-party component acknowledgments and special public-header/crt attribution permissions are reproduced verbatim in ../licenses/musl-COPYRIGHT.txt. This includes TRE, math/complex code, AArch64 Arm code and other permissive components, not just the headline MIT text. All collected source notice/permission/disclaimer blocks are also in ../licenses/musl-source-copyright-notices.txt. Exact upstream source and all fixed Alpine patches/configuration are in ../matching_sources/aports/musl/.
+
+Minimal data files
+The seven-byte Alpine version value 3.22.8 newline is preserved as provenance, not relabelled as a full Alpine installation. passwd/group, directories, empty bind placeholders and relative symlink table are generated for PocketRun. Their complete generator is ../matching_sources/minimal_rootfs/reproduce_data_asset.py (GPL-2.0-or-later); its output was byte-compared with the inspected 570-byte data asset. No original APK database, CA trust bundle or unrelated Alpine package configuration is retained in this minimal payload.
+
+Build-control source, not an installed runtime package
+abuild 3.15.0-r1 supplies the default_prepare/install helpers used by the original Alpine APKBUILDs. Its exact upstream source archive, fixed recipe, two checked patches and installation control files are retained in ../matching_sources/build_tools/abuild/. Its GPLv2 license is retained in ../licenses/abuild-3.15.0-COPYING.txt; original copyright/permission statements remain in the source archive. This does not place the abuild executable or its own binary dependencies into the minimal App runtime.
+
+Excluded full-candidate material
+Other documents in licenses/ and matching_sources/aports/ (apk-tools, musl-utils utility headers, pax-utils, OpenSSL, zlib, ca-certificates, alpine-baselayout/keys/base) are historical source audit evidence for the discarded full candidate, not a declaration that these are installed or required by the current minimal runtime. source-provenance.json marks the current required origins individually. The 53,279,637-byte OpenSSL source was privately downloaded and hash-verified but is not copied into the source tree and is not part of the current executable scope.
+
+Distribution status
+These notices and sources are local material. Full license/copyright texts must actually accompany the distributed code, and GPL Corresponding Source must be delivered through the chosen compliant mechanism. See LICENSE-SCOPE.txt and MINIMAL-DISTRIBUTION.txt. This file does not declare that publication, source delivery, APK notice packaging or Chapter 7 device acceptance has happened.

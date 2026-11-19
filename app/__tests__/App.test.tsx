@@ -13,6 +13,7 @@ jest.mock('../AdbPanel', () => 'AdbPanel');
 jest.mock('../BackendPanel', () => 'BackendPanel');
 jest.mock('../DisplayPanel', () => 'DisplayPanel');
 jest.mock('../WorkspacePanel', () => 'WorkspacePanel');
+jest.mock('../LinuxPanel', () => 'LinuxPanel');
 jest.mock('../specs/NativePocketRunDevice', () => ({
   __esModule: true,
   default: { getDeviceInfo: jest.fn() },

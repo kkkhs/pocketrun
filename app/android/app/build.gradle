@@ -76,6 +76,12 @@ def jscFlavor = 'io.github.react-native-community:jsc-android:2026004.+'
 
 android {
     buildFeatures { aidl true }
+    packaging {
+        jniLibs {
+            useLegacyPackaging = true
+            keepDebugSymbols += ["**/libproot*.so", "**/libalpine_*.so"]
+        }
+    }
     externalNativeBuild {
         cmake { path file("src/main/jni/CMakeLists.txt") }
     }
@@ -91,6 +97,8 @@ android {
         versionCode 1
         versionName "1.0"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
+        // External death protocols are exercised by their host driver, not default discovery.
+        testInstrumentationRunnerArguments notClass: "io.github.kkkhs.pocketrun.Chapter6HostDeathTest,io.github.kkkhs.pocketrun.Chapter7HostDeathTest"
     }
     signingConfigs {
         debug {

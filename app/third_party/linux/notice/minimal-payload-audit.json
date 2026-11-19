@@ -1,0 +1,374 @@
+{
+  "minimal_payload": {
+    "status": "STATIC_VERIFIED_NOT_DEVICE_ACCEPTED",
+    "runtime_manifest": {
+      "schemaVersion": 1,
+      "version": "alpine-3.22.8-minimal-proot-5.1.107.102",
+      "abi": "arm64-v8a",
+      "artifacts": [
+        {
+          "name": "libproot.so",
+          "sha256": "0e5b9a21954ec529ae75d68c45c9e50277e9b7bb1e7138f3651b5336849f855e",
+          "bytes": 334208
+        },
+        {
+          "name": "libproot_loader.so",
+          "sha256": "1396d5c21670602730b02c25b0d723c606a6d6f4d23c7e77cac4b6bdd70cd555",
+          "bytes": 3000
+        },
+        {
+          "name": "libalpine_bin_busybox.so",
+          "sha256": "da988cc7d4ab9d83f1798f6e92cf4aa0ba5b0b8fd2bae5f1c7bd3f882a569c81",
+          "bytes": 919304
+        },
+        {
+          "name": "libalpine_lib_ld_musl_aarch64_so_1.so",
+          "sha256": "42fb025bc758b76e60e7b3b0fcdcfab93b6ba1694b363244c2e8e6f51847e28c",
+          "bytes": 723480
+        }
+      ],
+      "guestBindings": [
+        {
+          "apk_basename": "libalpine_bin_busybox.so",
+          "guest_path": "/bin/busybox",
+          "package": "busybox",
+          "sha256": "da988cc7d4ab9d83f1798f6e92cf4aa0ba5b0b8fd2bae5f1c7bd3f882a569c81"
+        },
+        {
+          "apk_basename": "libalpine_lib_ld_musl_aarch64_so_1.so",
+          "guest_path": "/lib/ld-musl-aarch64.so.1",
+          "package": "musl",
+          "sha256": "42fb025bc758b76e60e7b3b0fcdcfab93b6ba1694b363244c2e8e6f51847e28c"
+        }
+      ],
+      "dataAsset": {
+        "name": "linux/alpine-data.tar.gz",
+        "sha256": "6975f46c20ad8b950f164c3ea3fc524f416d82b232539f3c266c5e9aef82a149",
+        "bytes": 570
+      },
+      "variant": "minimal-busybox-musl"
+    },
+    "runtime_manifest_sha256": "8baa6c001985a318af8ee75c4064f4c61625873edee166a7465c190822e611ff",
+    "artifacts": [
+      {
+        "name": "libproot.so",
+        "sha256": "0e5b9a21954ec529ae75d68c45c9e50277e9b7bb1e7138f3651b5336849f855e",
+        "bytes": 334208,
+        "role": "proot",
+        "guest_path": null,
+        "package": null,
+        "dt_needed": [
+          "libdl.so",
+          "libc.so"
+        ]
+      },
+      {
+        "name": "libproot_loader.so",
+        "sha256": "1396d5c21670602730b02c25b0d723c606a6d6f4d23c7e77cac4b6bdd70cd555",
+        "bytes": 3000,
+        "role": "proot_loader",
+        "guest_path": null,
+        "package": null,
+        "dt_needed": []
+      },
+      {
+        "name": "libalpine_bin_busybox.so",
+        "sha256": "da988cc7d4ab9d83f1798f6e92cf4aa0ba5b0b8fd2bae5f1c7bd3f882a569c81",
+        "bytes": 919304,
+        "role": "guest_elf",
+        "guest_path": "/bin/busybox",
+        "package": "busybox",
+        "dt_needed": [
+          "libc.musl-aarch64.so.1"
+        ]
+      },
+      {
+        "name": "libalpine_lib_ld_musl_aarch64_so_1.so",
+        "sha256": "42fb025bc758b76e60e7b3b0fcdcfab93b6ba1694b363244c2e8e6f51847e28c",
+        "bytes": 723480,
+        "role": "guest_elf",
+        "guest_path": "/lib/ld-musl-aarch64.so.1",
+        "package": "musl",
+        "dt_needed": []
+      }
+    ],
+    "tar_members": [
+      {
+        "path": "bin",
+        "type": "directory",
+        "mode": "0o700"
+      },
+      {
+        "path": "lib",
+        "type": "directory",
+        "mode": "0o700"
+      },
+      {
+        "path": "etc",
+        "type": "directory",
+        "mode": "0o700"
+      },
+      {
+        "path": "root",
+        "type": "directory",
+        "mode": "0o700"
+      },
+      {
+        "path": "tmp",
+        "type": "directory",
+        "mode": "0o700"
+      },
+      {
+        "path": "workspace",
+        "type": "directory",
+        "mode": "0o700"
+      },
+      {
+        "path": "proc",
+        "type": "directory",
+        "mode": "0o700"
+      },
+      {
+        "path": "dev",
+        "type": "directory",
+        "mode": "0o700"
+      },
+      {
+        "path": "usr",
+        "type": "directory",
+        "mode": "0o700"
+      },
+      {
+        "path": "usr/bin",
+        "type": "directory",
+        "mode": "0o700"
+      },
+      {
+        "path": "etc/alpine-release",
+        "type": "regular",
+        "mode": "0o600",
+        "bytes": 7,
+        "sha256": "e758029138089636b1bf6186a6a3af9496489bb1509f9a125a5d29ac759f5898",
+        "text": "3.22.8\n"
+      },
+      {
+        "path": "etc/passwd",
+        "type": "regular",
+        "mode": "0o600",
+        "bytes": 68,
+        "sha256": "611a17ec85428725952c36e759a152313aa4fc23f34eb1bbe099d084993d176b",
+        "text": "root:x:0:0:root:/root:/bin/sh\nnobody:x:65534:65534:nobody:/:/bin/sh\n"
+      },
+      {
+        "path": "etc/group",
+        "type": "regular",
+        "mode": "0o600",
+        "bytes": 26,
+        "sha256": "5a2aa1c5c06249d726a2bd35bba20289a94d37c18cac2485da47f62e07379b25",
+        "text": "root:x:0:\nnobody:x:65534:\n"
+      },
+      {
+        "path": "bin/busybox",
+        "type": "regular",
+        "mode": "0o600",
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "text": ""
+      },
+      {
+        "path": "lib/ld-musl-aarch64.so.1",
+        "type": "regular",
+        "mode": "0o600",
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "text": ""
+      },
+      {
+        "path": "bin/sh",
+        "type": "symlink",
+        "mode": "0o777",
+        "target": "busybox",
+        "resolved_target": "bin/busybox"
+      },
+      {
+        "path": "bin/ash",
+        "type": "symlink",
+        "mode": "0o777",
+        "target": "busybox",
+        "resolved_target": "bin/busybox"
+      },
+      {
+        "path": "bin/cat",
+        "type": "symlink",
+        "mode": "0o777",
+        "target": "busybox",
+        "resolved_target": "bin/busybox"
+      },
+      {
+        "path": "bin/wc",
+        "type": "symlink",
+        "mode": "0o777",
+        "target": "busybox",
+        "resolved_target": "bin/busybox"
+      },
+      {
+        "path": "bin/printf",
+        "type": "symlink",
+        "mode": "0o777",
+        "target": "busybox",
+        "resolved_target": "bin/busybox"
+      },
+      {
+        "path": "bin/sleep",
+        "type": "symlink",
+        "mode": "0o777",
+        "target": "busybox",
+        "resolved_target": "bin/busybox"
+      },
+      {
+        "path": "bin/id",
+        "type": "symlink",
+        "mode": "0o777",
+        "target": "busybox",
+        "resolved_target": "bin/busybox"
+      },
+      {
+        "path": "bin/pwd",
+        "type": "symlink",
+        "mode": "0o777",
+        "target": "busybox",
+        "resolved_target": "bin/busybox"
+      },
+      {
+        "path": "bin/ls",
+        "type": "symlink",
+        "mode": "0o777",
+        "target": "busybox",
+        "resolved_target": "bin/busybox"
+      },
+      {
+        "path": "bin/head",
+        "type": "symlink",
+        "mode": "0o777",
+        "target": "busybox",
+        "resolved_target": "bin/busybox"
+      },
+      {
+        "path": "bin/yes",
+        "type": "symlink",
+        "mode": "0o777",
+        "target": "busybox",
+        "resolved_target": "bin/busybox"
+      },
+      {
+        "path": "bin/tty",
+        "type": "symlink",
+        "mode": "0o777",
+        "target": "busybox",
+        "resolved_target": "bin/busybox"
+      },
+      {
+        "path": "bin/stty",
+        "type": "symlink",
+        "mode": "0o777",
+        "target": "busybox",
+        "resolved_target": "bin/busybox"
+      },
+      {
+        "path": "bin/kill",
+        "type": "symlink",
+        "mode": "0o777",
+        "target": "busybox",
+        "resolved_target": "bin/busybox"
+      },
+      {
+        "path": "bin/true",
+        "type": "symlink",
+        "mode": "0o777",
+        "target": "busybox",
+        "resolved_target": "bin/busybox"
+      },
+      {
+        "path": "bin/false",
+        "type": "symlink",
+        "mode": "0o777",
+        "target": "busybox",
+        "resolved_target": "bin/busybox"
+      },
+      {
+        "path": "bin/uname",
+        "type": "symlink",
+        "mode": "0o777",
+        "target": "busybox",
+        "resolved_target": "bin/busybox"
+      },
+      {
+        "path": "lib/libc.musl-aarch64.so.1",
+        "type": "symlink",
+        "mode": "0o777",
+        "target": "ld-musl-aarch64.so.1",
+        "resolved_target": "lib/ld-musl-aarch64.so.1"
+      }
+    ],
+    "removed_original_guest_elf_count": 15,
+    "original_16_package_database_not_present": true,
+    "source_rootfs_sha256": "36091efacd083c1cf5a8c837272530bff4fc72db1fbfdef559f52de0d890bca4",
+    "capability_note": "minimal derivative; not a complete Alpine rootfs, no apk add promise"
+  },
+  "proot_source_verification": {
+    "source_bundle_sha256": "eb5d7c20067c7c14e1ffb5047408a96270b95ae4682dd34bc80dc526252165ef",
+    "full_diff_sha256": "c5caed68d2619164e48cbbfad004fe5e5f2728cf8a76f4a0be66d394b9245d1f",
+    "six_original_and_patched_hashes_verified": [
+      {
+        "path": "src/GNUmakefile",
+        "upstream_sha256": "5dc2786ef347cf45a83b8b5f13472f383c1bbe3e0484d0dca3d98b022c53aaad",
+        "patched_sha256": "e6ddc7e10fab5abc35b4d425def403f4776da73bd4b5adb298d8a951b29090fd"
+      },
+      {
+        "path": "src/arch.h",
+        "upstream_sha256": "86e8a5548e67fc38408a9ab1d65fb2c07a1bef63c3f1f96eefe1c070260150f8",
+        "patched_sha256": "be067a31988a5b7cb40f0ff8a9b2fabf5a766230de8a3d4fc842aaba67b488d9"
+      },
+      {
+        "path": "src/tracee/event.c",
+        "upstream_sha256": "a0ff3803895b6c3cf9a631fd80c535c5233e5dca4c8d52e44f5b61a2329d858e",
+        "patched_sha256": "cc9bdbdf21451525c1a2eb5051571b36a63cee1a59bff96405d9edc65c74d49a"
+      },
+      {
+        "path": "src/extension/ashmem_memfd/ashmem_memfd.c",
+        "upstream_sha256": "5cc4d36eecb7ab8cea7af5317f2114282f12d8fd29cc11429ef012c2453bef38",
+        "patched_sha256": "93c75efac8ec957cead52123173ea067119618a01f7347de014ba66bda24b193"
+      },
+      {
+        "path": "src/loader/loader.c",
+        "upstream_sha256": "b50e32641dd421726af89c7655cbe8431372fe1568b86648e6e4ea847d2c86a7",
+        "patched_sha256": "e66bc14af9ac54548c956f938c4770f3a320446aea26fa51346d579cfed44382"
+      },
+      {
+        "path": "src/cli/cli.c",
+        "upstream_sha256": "6905f787bc3f0b31b426220ad9f67a61d67c38983d611ae029aef7b6da6399bf",
+        "patched_sha256": "2bde4294fe81d4e1d6125e2bf825d724377ac5acee36769d6cbf019c14b5fb69"
+      }
+    ],
+    "patch_application_exit": 0,
+    "existing_builder_reproduction_steps_exit": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "existing_reproduced_binaries_hash_checked": [
+      {
+        "name": "libproot.so",
+        "sha256": "0e5b9a21954ec529ae75d68c45c9e50277e9b7bb1e7138f3651b5336849f855e",
+        "bytes": 334208
+      },
+      {
+        "name": "libproot_loader.so",
+        "sha256": "1396d5c21670602730b02c25b0d723c606a6d6f4d23c7e77cac4b6bdd70cd555",
+        "bytes": 3000
+      }
+    ],
+    "new_compilation_performed_by_this_audit": false
+  }
+}

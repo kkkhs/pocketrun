@@ -3,6 +3,8 @@ package io.github.kkkhs.pocketrun
 import java.io.Closeable
 import java.io.File
 import java.io.FileOutputStream
+import java.nio.file.Files
+import java.nio.file.attribute.PosixFilePermission
 
 class WorkspaceSession(
     private val filesDirectory: File,
@@ -14,7 +16,7 @@ class WorkspaceSession(
     private val pipeline = CommandPipeline()
     private val directory = File(File(filesDirectory.canonicalFile, "workspaces"), "demo")
     private val sample = File(directory, "items.csv")
-    private val lock = Any()
+    private val lock = PREPARATION_LOCK
     private var closed = false
 
     fun prepare(): Info = synchronized(lock) {
@@ -25,9 +27,8 @@ class WorkspaceSession(
         check(parent.isDirectory || parent.mkdir()) { "无法创建工作目录。" }
         require(directory.canonicalFile == directory.absoluteFile) { "工作目录不能逃逸 App 私有目录。" }
         check(directory.isDirectory || directory.mkdir()) { "无法创建演示工作目录。" }
-        check(directory.setReadable(false, false) && directory.setReadable(true, true) &&
-            directory.setWritable(false, false) && directory.setWritable(true, true) &&
-            directory.setExecutable(false, false) && directory.setExecutable(true, true)) { "无法设置私有工作目录权限。" }
+        Files.setPosixFilePermissions(directory.toPath(), setOf(PosixFilePermission.OWNER_READ,
+            PosixFilePermission.OWNER_WRITE, PosixFilePermission.OWNER_EXECUTE))
         require(sample.canonicalFile == sample.absoluteFile) { "演示文件不能使用符号链接。" }
         directory.listFiles()?.filter {
             it.name.startsWith(".pocketrun-sample-") && it.name.endsWith(".tmp") &&
@@ -77,6 +78,7 @@ class WorkspaceSession(
     }
 
     companion object {
+        private val PREPARATION_LOCK = Any()
         const val DEMO_CSV = "name,quantity\napple,2\nbanana,3\n"
         private val DEMO_COMMANDS = listOf(
             listOf("/system/bin/toybox", "cat", "items.csv"),

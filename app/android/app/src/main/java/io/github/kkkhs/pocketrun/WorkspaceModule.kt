@@ -1,5 +1,6 @@
 package io.github.kkkhs.pocketrun
 
+import android.os.Build
 import android.os.Process
 import com.facebook.react.bridge.Arguments
 import com.facebook.react.bridge.Promise
@@ -61,11 +62,15 @@ class WorkspaceModule(context: ReactApplicationContext) : NativePocketRunWorkspa
     override fun invalidate() {
         closed.set(true)
         session.close()
-        worker.shutdownNow()
+        worker.shutdown()
         super.invalidate()
     }
 
     private fun begin(promise: Promise): Boolean {
+        if (Build.VERSION.SDK_INT < 26) {
+            promise.reject("E_WORKSPACE_UNSUPPORTED", "工作目录和命令管道需要 Android 8 或更新版本。")
+            return false
+        }
         if (closed.get()) {
             promise.reject("E_WORKSPACE_CLOSED", "工作目录模块已关闭。")
             return false
@@ -80,14 +85,16 @@ class WorkspaceModule(context: ReactApplicationContext) : NativePocketRunWorkspa
     private fun submit(promise: Promise, action: () -> Any) {
         try {
             worker.execute {
-                try {
+                val value = try {
                     check(!closed.get()) { "工作目录模块已关闭。" }
-                    promise.resolve(action())
+                    action()
                 } catch (error: Exception) {
-                    promise.reject("E_WORKSPACE_OPERATION", error.message, error)
-                } finally {
                     busy.set(false)
+                    promise.reject("E_WORKSPACE_OPERATION", error.message, error)
+                    return@execute
                 }
+                busy.set(false)
+                promise.resolve(value)
             }
         } catch (error: RejectedExecutionException) {
             session.cancel()

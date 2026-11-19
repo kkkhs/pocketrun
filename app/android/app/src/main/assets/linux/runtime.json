@@ -1,0 +1,47 @@
+{
+  "schemaVersion": 1,
+  "version": "alpine-3.22.8-minimal-proot-5.1.107.102-candidate2",
+  "abi": "arm64-v8a",
+  "artifacts": [
+    {
+      "name": "libproot.so",
+      "sha256": "fab33311684895a2818abe2ce616bda06d352babc3602b702901f4b4893cda19",
+      "bytes": 336264
+    },
+    {
+      "name": "libproot_loader.so",
+      "sha256": "1396d5c21670602730b02c25b0d723c606a6d6f4d23c7e77cac4b6bdd70cd555",
+      "bytes": 3000
+    },
+    {
+      "name": "libalpine_bin_busybox.so",
+      "sha256": "da988cc7d4ab9d83f1798f6e92cf4aa0ba5b0b8fd2bae5f1c7bd3f882a569c81",
+      "bytes": 919304
+    },
+    {
+      "name": "libalpine_lib_ld_musl_aarch64_so_1.so",
+      "sha256": "42fb025bc758b76e60e7b3b0fcdcfab93b6ba1694b363244c2e8e6f51847e28c",
+      "bytes": 723480
+    }
+  ],
+  "guestBindings": [
+    {
+      "apk_basename": "libalpine_bin_busybox.so",
+      "guest_path": "/bin/busybox",
+      "package": "busybox",
+      "sha256": "da988cc7d4ab9d83f1798f6e92cf4aa0ba5b0b8fd2bae5f1c7bd3f882a569c81"
+    },
+    {
+      "apk_basename": "libalpine_lib_ld_musl_aarch64_so_1.so",
+      "guest_path": "/lib/ld-musl-aarch64.so.1",
+      "package": "musl",
+      "sha256": "42fb025bc758b76e60e7b3b0fcdcfab93b6ba1694b363244c2e8e6f51847e28c"
+    }
+  ],
+  "dataAsset": {
+    "name": "linux/alpine-data.bin",
+    "sha256": "6975f46c20ad8b950f164c3ea3fc524f416d82b232539f3c266c5e9aef82a149",
+    "bytes": 570
+  },
+  "variant": "minimal-busybox-musl"
+}

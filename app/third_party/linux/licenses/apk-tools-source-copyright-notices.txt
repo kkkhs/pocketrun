@@ -1,0 +1,792 @@
+
+===== apk-tools-v2.14.13/libfetch/common.c =====
+/*	$NetBSD: common.c,v 1.31 2016/10/20 21:25:57 joerg Exp $	*/
+/*-
+ * Copyright (c) 1998-2004 Dag-Erling Co�dan Sm�rgrav
+ * Copyright (c) 2008, 2010 Joerg Sonnenberger <joerg@NetBSD.org>
+ * Copyright (c) 2020 Noel Kuntze <noel.kuntze@thermi.consulting>
+ * All rights reserved.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions
+ * are met:
+ * 1. Redistributions of source code must retain the above copyright
+ *    notice, this list of conditions and the following disclaimer
+ *    in this position and unchanged.
+ * 2. Redistributions in binary form must reproduce the above copyright
+ *    notice, this list of conditions and the following disclaimer in the
+ *    documentation and/or other materials provided with the distribution.
+ * 3. The name of the author may not be used to endorse or promote products
+ *    derived from this software without specific prior written permission
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
+ * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
+ * OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.
+ * IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY DIRECT, INDIRECT,
+ * INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT
+ * NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
+ * DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
+ * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+ * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
+ * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ *
+ * $FreeBSD: common.c,v 1.53 2007/12/19 00:26:36 des Exp $
+ */
+
+===== apk-tools-v2.14.13/libfetch/common.h =====
+/*	$NetBSD: common.h,v 1.24 2016/10/20 21:25:57 joerg Exp $	*/
+/*-
+ * Copyright (c) 1998-2004 Dag-Erling Co�dan Sm�rgrav
+ * All rights reserved.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions
+ * are met:
+ * 1. Redistributions of source code must retain the above copyright
+ *    notice, this list of conditions and the following disclaimer
+ *    in this position and unchanged.
+ * 2. Redistributions in binary form must reproduce the above copyright
+ *    notice, this list of conditions and the following disclaimer in the
+ *    documentation and/or other materials provided with the distribution.
+ * 3. The name of the author may not be used to endorse or promote products
+ *    derived from this software without specific prior written permission
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
+ * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
+ * OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.
+ * IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY DIRECT, INDIRECT,
+ * INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT
+ * NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
+ * DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
+ * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+ * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
+ * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ *
+ * $FreeBSD: common.h,v 1.30 2007/12/18 11:03:07 des Exp $
+ */
+
+===== apk-tools-v2.14.13/libfetch/fetch.c =====
+/*	$NetBSD: fetch.c,v 1.19 2009/08/11 20:48:06 joerg Exp $	*/
+/*-
+ * Copyright (c) 1998-2004 Dag-Erling Co�dan Sm�rgrav
+ * Copyright (c) 2008 Joerg Sonnenberger <joerg@NetBSD.org>
+ * All rights reserved.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions
+ * are met:
+ * 1. Redistributions of source code must retain the above copyright
+ *    notice, this list of conditions and the following disclaimer
+ *    in this position and unchanged.
+ * 2. Redistributions in binary form must reproduce the above copyright
+ *    notice, this list of conditions and the following disclaimer in the
+ *    documentation and/or other materials provided with the distribution.
+ * 3. The name of the author may not be used to endorse or promote products
+ *    derived from this software without specific prior written permission
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
+ * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
+ * OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.
+ * IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY DIRECT, INDIRECT,
+ * INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT
+ * NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
+ * DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
+ * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+ * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
+ * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ *
+ * $FreeBSD: fetch.c,v 1.41 2007/12/19 00:26:36 des Exp $
+ */
+
+===== apk-tools-v2.14.13/libfetch/fetch.h =====
+/*	$NetBSD: fetch.h,v 1.16 2010/01/22 13:21:09 joerg Exp $	*/
+/*-
+ * Copyright (c) 1998-2004 Dag-Erling Co�dan Sm�rgrav
+ * All rights reserved.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions
+ * are met:
+ * 1. Redistributions of source code must retain the above copyright
+ *    notice, this list of conditions and the following disclaimer
+ *    in this position and unchanged.
+ * 2. Redistributions in binary form must reproduce the above copyright
+ *    notice, this list of conditions and the following disclaimer in the
+ *    documentation and/or other materials provided with the distribution.
+ * 3. The name of the author may not be used to endorse or promote products
+ *    derived from this software without specific prior written permission
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
+ * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
+ * OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.
+ * IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY DIRECT, INDIRECT,
+ * INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT
+ * NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
+ * DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
+ * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+ * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
+ * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ *
+ * $FreeBSD: fetch.h,v 1.26 2004/09/21 18:35:20 des Exp $
+ */
+
+===== apk-tools-v2.14.13/libfetch/file.c =====
+/*	$NetBSD: file.c,v 1.15 2009/10/15 12:36:57 joerg Exp $	*/
+/*-
+ * Copyright (c) 1998-2004 Dag-Erling Co�dan Sm�rgrav
+ * Copyright (c) 2008, 2009 Joerg Sonnenberger <joerg@NetBSD.org>
+ * All rights reserved.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions
+ * are met:
+ * 1. Redistributions of source code must retain the above copyright
+ *    notice, this list of conditions and the following disclaimer
+ *    in this position and unchanged.
+ * 2. Redistributions in binary form must reproduce the above copyright
+ *    notice, this list of conditions and the following disclaimer in the
+ *    documentation and/or other materials provided with the distribution.
+ * 3. The name of the author may not be used to endorse or promote products
+ *    derived from this software without specific prior written permission
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
+ * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
+ * OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.
+ * IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY DIRECT, INDIRECT,
+ * INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT
+ * NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
+ * DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
+ * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+ * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
+ * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ *
+ * $FreeBSD: file.c,v 1.18 2007/12/14 10:26:58 des Exp $
+ */
+
+===== apk-tools-v2.14.13/libfetch/ftp.c =====
+/*	$NetBSD: ftp.c,v 1.46 2014/06/11 13:12:12 joerg Exp $	*/
+/*-
+ * Copyright (c) 1998-2004 Dag-Erling Co�dan Sm�rgrav
+ * Copyright (c) 2008, 2009, 2010 Joerg Sonnenberger <joerg@NetBSD.org>
+ * All rights reserved.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions
+ * are met:
+ * 1. Redistributions of source code must retain the above copyright
+ *    notice, this list of conditions and the following disclaimer
+ *    in this position and unchanged.
+ * 2. Redistributions in binary form must reproduce the above copyright
+ *    notice, this list of conditions and the following disclaimer in the
+ *    documentation and/or other materials provided with the distribution.
+ * 3. The name of the author may not be used to endorse or promote products
+ *    derived from this software without specific prior written permission
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
+ * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
+ * OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.
+ * IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY DIRECT, INDIRECT,
+ * INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT
+ * NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
+ * DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
+ * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+ * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
+ * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ *
+ * $FreeBSD: ftp.c,v 1.101 2008/01/23 20:57:59 des Exp $
+ */
+/*
+ * Portions of this code were taken from or based on ftpio.c:
+ *
+ * ----------------------------------------------------------------------------
+ * "THE BEER-WARE LICENSE" (Revision 42):
+ * <phk@FreeBSD.org> wrote this file.  As long as you retain this notice you
+ * can do whatever you want with this stuff. If we meet some day, and you think
+ * this stuff is worth it, you can buy me a beer in return.   Poul-Henning Kamp
+ * ----------------------------------------------------------------------------
+ *
+ * Major Changelog:
+ *
+ * Dag-Erling Co�dan Sm�rgrav
+ * 9 Jun 1998
+ *
+ * Incorporated into libfetch
+ *
+ * Jordan K. Hubbard
+ * 17 Jan 1996
+ *
+ * Turned inside out. Now returns xfers as new file ids, not as a special
+ * `state' of FTP_t
+ *
+ * $ftpioId: ftpio.c,v 1.30 1998/04/11 07:28:53 phk Exp $
+ *
+ */
+
+===== apk-tools-v2.14.13/libfetch/http.c =====
+/*	$NetBSD: http.c,v 1.40 2016/10/21 11:51:18 jperkin Exp $	*/
+/*-
+ * Copyright (c) 2000-2004 Dag-Erling Co�dan Sm�rgrav
+ * Copyright (c) 2003 Thomas Klausner <wiz@NetBSD.org>
+ * Copyright (c) 2008, 2009 Joerg Sonnenberger <joerg@NetBSD.org>
+ * All rights reserved.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions
+ * are met:
+ * 1. Redistributions of source code must retain the above copyright
+ *    notice, this list of conditions and the following disclaimer
+ *    in this position and unchanged.
+ * 2. Redistributions in binary form must reproduce the above copyright
+ *    notice, this list of conditions and the following disclaimer in the
+ *    documentation and/or other materials provided with the distribution.
+ * 3. The name of the author may not be used to endorse or promote products
+ *    derived from this software without specific prior written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
+ * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
+ * OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.
+ * IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY DIRECT, INDIRECT,
+ * INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT
+ * NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
+ * DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
+ * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+ * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
+ * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ *
+ * $FreeBSD: http.c,v 1.83 2008/02/06 11:39:55 des Exp $
+ */
+/*
+ * The following copyright applies to the base64 code:
+ *
+ *-
+ * Copyright 1997 Massachusetts Institute of Technology
+ *
+ * Permission to use, copy, modify, and distribute this software and
+ * its documentation for any purpose and without fee is hereby
+ * granted, provided that both the above copyright notice and this
+ * permission notice appear in all copies, that both the above
+ * copyright notice and this permission notice appear in all
+ * supporting documentation, and that the name of M.I.T. not be used
+ * in advertising or publicity pertaining to distribution of the
+ * software without specific, written prior permission.  M.I.T. makes
+ * no representations about the suitability of this software for any
+ * purpose.  It is provided "as is" without express or implied
+ * warranty.
+ *
+ * THIS SOFTWARE IS PROVIDED BY M.I.T. ``AS IS''.  M.I.T. DISCLAIMS
+ * ALL EXPRESS OR IMPLIED WARRANTIES WITH REGARD TO THIS SOFTWARE,
+ * INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF
+ * MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE. IN NO EVENT
+ * SHALL M.I.T. BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+ * SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
+ * LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF
+ * USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND
+ * ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
+ * OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT
+ * OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
+ * SUCH DAMAGE.
+ */
+
+===== apk-tools-v2.14.13/src/apk.c =====
+/* apk.c - Alpine Package Keeper (APK)
+ *
+ * Copyright (C) 2005-2008 Natanael Copa <n@tanael.org>
+ * Copyright (C) 2008-2011 Timo Teräs <timo.teras@iki.fi>
+ * All rights reserved.
+ *
+ * SPDX-License-Identifier: GPL-2.0-only
+ */
+
+===== apk-tools-v2.14.13/src/apk_applet.h =====
+/* apk_applet.h - Alpine Package Keeper (APK)
+ *
+ * Copyright (C) 2005-2008 Natanael Copa <n@tanael.org>
+ * Copyright (C) 2008-2011 Timo Teräs <timo.teras@iki.fi>
+ * All rights reserved.
+ *
+ * SPDX-License-Identifier: GPL-2.0-only
+ */
+
+===== apk-tools-v2.14.13/src/apk_archive.h =====
+/* apk_archive.c - Alpine Package Keeper (APK)
+ *
+ * Copyright (C) 2005-2008 Natanael Copa <n@tanael.org>
+ * Copyright (C) 2008-2011 Timo Teräs <timo.teras@iki.fi>
+ * All rights reserved.
+ *
+ * SPDX-License-Identifier: GPL-2.0-only
+ */
+
+===== apk-tools-v2.14.13/src/apk_atom.h =====
+/* apk_atom.h - Alpine Package Keeper (APK)
+ *
+ * Copyright (C) 2005-2008 Natanael Copa <n@tanael.org>
+ * Copyright (C) 2008-2020 Timo Teräs <timo.teras@iki.fi>
+ * All rights reserved.
+ *
+ * SPDX-License-Identifier: GPL-2.0-only
+ */
+
+===== apk-tools-v2.14.13/src/apk_blob.h =====
+/* apk_blob.h - Alpine Package Keeper (APK)
+ *
+ * Copyright (C) 2005-2008 Natanael Copa <n@tanael.org>
+ * Copyright (C) 2008-2011 Timo Teräs <timo.teras@iki.fi>
+ * All rights reserved.
+ *
+ * SPDX-License-Identifier: GPL-2.0-only
+ */
+
+===== apk-tools-v2.14.13/src/apk_database.h =====
+/* apk_database.h - Alpine Package Keeper (APK)
+ *
+ * Copyright (C) 2005-2008 Natanael Copa <n@tanael.org>
+ * Copyright (C) 2008-2011 Timo Teräs <timo.teras@iki.fi>
+ * All rights reserved.
+ *
+ * SPDX-License-Identifier: GPL-2.0-only
+ */
+
+===== apk-tools-v2.14.13/src/apk_defines.h =====
+/* apk_defines.c - Alpine Package Keeper (APK)
+ *
+ * Copyright (C) 2005-2008 Natanael Copa <n@tanael.org>
+ * Copyright (C) 2008-2011 Timo Teräs <timo.teras@iki.fi>
+ * All rights reserved.
+ *
+ * SPDX-License-Identifier: GPL-2.0-only
+ */
+
+===== apk-tools-v2.14.13/src/apk_hash.h =====
+/* apk_hash.h - Alpine Package Keeper (APK)
+ *
+ * Copyright (C) 2005-2008 Natanael Copa <n@tanael.org>
+ * Copyright (C) 2008-2011 Timo Teräs <timo.teras@iki.fi>
+ * All rights reserved.
+ *
+ * SPDX-License-Identifier: GPL-2.0-only
+ */
+
+===== apk-tools-v2.14.13/src/apk_io.h =====
+/* apk_io.h - Alpine Package Keeper (APK)
+ *
+ * Copyright (C) 2008-2011 Timo Teräs <timo.teras@iki.fi>
+ * All rights reserved.
+ *
+ * SPDX-License-Identifier: GPL-2.0-only
+ */
+
+===== apk-tools-v2.14.13/src/apk_openssl.h =====
+/* apk_openssl.h - Alpine Package Keeper (APK)
+ *
+ * Copyright (C) 2005-2008 Natanael Copa <n@tanael.org>
+ * Copyright (C) 2008-2011 Timo Teräs <timo.teras@iki.fi>
+ * All rights reserved.
+ *
+ * SPDX-License-Identifier: GPL-2.0-only
+ */
+
+===== apk-tools-v2.14.13/src/apk_package.h =====
+/* apk_package.h - Alpine Package Keeper (APK)
+ *
+ * Copyright (C) 2005-2008 Natanael Copa <n@tanael.org>
+ * Copyright (C) 2008-2011 Timo Teräs <timo.teras@iki.fi>
+ * All rights reserved.
+ *
+ * SPDX-License-Identifier: GPL-2.0-only
+ */
+
+===== apk-tools-v2.14.13/src/apk_print.h =====
+/* apk_print.h - Alpine Package Keeper (APK)
+ *
+ * Copyright (C) 2005-2008 Natanael Copa <n@tanael.org>
+ * Copyright (C) 2008-2011 Timo Teräs <timo.teras@iki.fi>
+ * All rights reserved.
+ *
+ * SPDX-License-Identifier: GPL-2.0-only
+ */
+
+===== apk-tools-v2.14.13/src/apk_provider_data.h =====
+/* apk_provider_data.h - Alpine Package Keeper (APK)
+ *
+ * Copyright (C) 2005-2008 Natanael Copa <n@tanael.org>
+ * Copyright (C) 2008-2012 Timo Teräs <timo.teras@iki.fi>
+ * All rights reserved.
+ *
+ * SPDX-License-Identifier: GPL-2.0-only
+ */
+
+===== apk-tools-v2.14.13/src/apk_solver.h =====
+/* apk_solver.h - Alpine Package Keeper (APK)
+ *
+ * Copyright (C) 2005-2008 Natanael Copa <n@tanael.org>
+ * Copyright (C) 2008-2013 Timo Teräs <timo.teras@iki.fi>
+ * All rights reserved.
+ *
+ * SPDX-License-Identifier: GPL-2.0-only
+ */
+
+===== apk-tools-v2.14.13/src/apk_solver_data.h =====
+/* apk_solver_data.h - Alpine Package Keeper (APK)
+ *
+ * Copyright (C) 2005-2008 Natanael Copa <n@tanael.org>
+ * Copyright (C) 2008-2012 Timo Teräs <timo.teras@iki.fi>
+ * All rights reserved.
+ *
+ * SPDX-License-Identifier: GPL-2.0-only
+ */
+
+===== apk-tools-v2.14.13/src/apk_version.h =====
+/* apk_version.h - Alpine Package Keeper (APK)
+ *
+ * Copyright (C) 2005-2008 Natanael Copa <n@tanael.org>
+ * Copyright (C) 2008-2011 Timo Teräs <timo.teras@iki.fi>
+ * All rights reserved.
+ *
+ * SPDX-License-Identifier: GPL-2.0-only
+ */
+
+===== apk-tools-v2.14.13/src/app_add.c =====
+/* app_add.c - Alpine Package Keeper (APK)
+ *
+ * Copyright (C) 2005-2008 Natanael Copa <n@tanael.org>
+ * Copyright (C) 2008-2011 Timo Teräs <timo.teras@iki.fi>
+ * All rights reserved.
+ *
+ * SPDX-License-Identifier: GPL-2.0-only
+ */
+
+===== apk-tools-v2.14.13/src/app_audit.c =====
+/* app_audit.c - Alpine Package Keeper (APK)
+ *
+ * Copyright (C) 2005-2008 Natanael Copa <n@tanael.org>
+ * Copyright (C) 2008-2011 Timo Teräs <timo.teras@iki.fi>
+ * All rights reserved.
+ *
+ * SPDX-License-Identifier: GPL-2.0-only
+ */
+
+===== apk-tools-v2.14.13/src/app_cache.c =====
+/* app_cache.c - Alpine Package Keeper (APK)
+ *
+ * Copyright (C) 2005-2008 Natanael Copa <n@tanael.org>
+ * Copyright (C) 2008-2011 Timo Teräs <timo.teras@iki.fi>
+ * All rights reserved.
+ *
+ * SPDX-License-Identifier: GPL-2.0-only
+ */
+
+===== apk-tools-v2.14.13/src/app_del.c =====
+/* app_del.c - Alpine Package Keeper (APK)
+ *
+ * Copyright (C) 2005-2008 Natanael Copa <n@tanael.org>
+ * Copyright (C) 2008-2011 Timo Teräs <timo.teras@iki.fi>
+ * All rights reserved.
+ *
+ * SPDX-License-Identifier: GPL-2.0-only
+ */
+
+===== apk-tools-v2.14.13/src/app_dot.c =====
+/* app_dot.c - Alpine Package Keeper (APK)
+ *
+ * Copyright (C) 2008-2011 Timo Teräs <timo.teras@iki.fi>
+ * All rights reserved.
+ *
+ * SPDX-License-Identifier: GPL-2.0-only
+ */
+
+===== apk-tools-v2.14.13/src/app_fetch.c =====
+/* app_fetch.c - Alpine Package Keeper (APK)
+ *
+ * Copyright (C) 2005-2008 Natanael Copa <n@tanael.org>
+ * Copyright (C) 2008-2011 Timo Teräs <timo.teras@iki.fi>
+ * All rights reserved.
+ *
+ * SPDX-License-Identifier: GPL-2.0-only
+ */
+
+===== apk-tools-v2.14.13/src/app_fix.c =====
+/* app_fix.c - Alpine Package Keeper (APK)
+ *
+ * Copyright (C) 2005-2008 Natanael Copa <n@tanael.org>
+ * Copyright (C) 2008-2011 Timo Teräs <timo.teras@iki.fi>
+ * All rights reserved.
+ *
+ * SPDX-License-Identifier: GPL-2.0-only
+ */
+
+===== apk-tools-v2.14.13/src/app_index.c =====
+/* app_index.c - Alpine Package Keeper (APK)
+ *
+ * Copyright (C) 2005-2008 Natanael Copa <n@tanael.org>
+ * Copyright (C) 2008-2011 Timo Teräs <timo.teras@iki.fi>
+ * All rights reserved.
+ *
+ * SPDX-License-Identifier: GPL-2.0-only
+ */
+
+===== apk-tools-v2.14.13/src/app_info.c =====
+/* app_info.c - Alpine Package Keeper (APK)
+ *
+ * Copyright (C) 2005-2009 Natanael Copa <n@tanael.org>
+ * Copyright (C) 2008-2011 Timo Teräs <timo.teras@iki.fi>
+ * All rights reserved.
+ *
+ * SPDX-License-Identifier: GPL-2.0-only
+ */
+
+===== apk-tools-v2.14.13/src/app_list.c =====
+/* app_list.c - Alpine Package Keeper (APK)
+ *
+ * Copyright (C) 2005-2009 Natanael Copa <n@tanael.org>
+ * Copyright (C) 2008-2011 Timo Teräs <timo.teras@iki.fi>
+ * Copyright (C) 2018 William Pitcock <nenolod@dereferenced.org>
+ * All rights reserved.
+ *
+ * SPDX-License-Identifier: GPL-2.0-only
+ */
+
+===== apk-tools-v2.14.13/src/app_manifest.c =====
+/* app_manifest.c - Alpine Package Keeper (APK)
+ *
+ * Copyright (C) 2005-2017 Natanael Copa <n@tanael.org>
+ * Copyright (C) 2008-2017 Timo Teräs <timo.teras@iki.fi>
+ * Copyright (C) 2017 William Pitcock <nenolod@dereferenced.org>
+ * All rights reserved.
+ *
+ * SPDX-License-Identifier: GPL-2.0-only
+ */
+
+===== apk-tools-v2.14.13/src/app_policy.c =====
+/* app_policy.c - Alpine Package Keeper (APK)
+ *
+ * Copyright (C) 2013 Timo Teräs <timo.teras@iki.fi>
+ * All rights reserved.
+ *
+ * SPDX-License-Identifier: GPL-2.0-only
+ */
+
+===== apk-tools-v2.14.13/src/app_search.c =====
+/* app_search.c - Alpine Package Keeper (APK)
+ *
+ * Copyright (C) 2005-2009 Natanael Copa <n@tanael.org>
+ * Copyright (C) 2008-2011 Timo Teräs <timo.teras@iki.fi>
+ * All rights reserved.
+ *
+ * SPDX-License-Identifier: GPL-2.0-only
+ */
+
+===== apk-tools-v2.14.13/src/app_stats.c =====
+/* app_stats.c - Alpine Package Keeper (APK)
+ *
+ * Copyright (C) 2013 Timo Teräs <timo.teras@iki.fi>
+ * All rights reserved.
+ *
+ * SPDX-License-Identifier: GPL-2.0-only
+ */
+
+===== apk-tools-v2.14.13/src/app_update.c =====
+/* app_update.c - Alpine Package Keeper (APK)
+ *
+ * Copyright (C) 2005-2008 Natanael Copa <n@tanael.org>
+ * Copyright (C) 2008-2011 Timo Teräs <timo.teras@iki.fi>
+ * All rights reserved.
+ *
+ * SPDX-License-Identifier: GPL-2.0-only
+ */
+
+===== apk-tools-v2.14.13/src/app_upgrade.c =====
+/* app_upgrade.c - Alpine Package Keeper (APK)
+ *
+ * Copyright (C) 2005-2008 Natanael Copa <n@tanael.org>
+ * Copyright (C) 2008-2011 Timo Teräs <timo.teras@iki.fi>
+ * All rights reserved.
+ *
+ * SPDX-License-Identifier: GPL-2.0-only
+ */
+
+===== apk-tools-v2.14.13/src/app_verify.c =====
+/* app_verify.c - Alpine Package Keeper (APK)
+ *
+ * Copyright (C) 2008-2011 Timo Teräs <timo.teras@iki.fi>
+ * All rights reserved.
+ *
+ * SPDX-License-Identifier: GPL-2.0-only
+ */
+
+===== apk-tools-v2.14.13/src/app_version.c =====
+/* app_version.c - Alpine Package Keeper (APK)
+ *
+ * Copyright (C) 2005-2008 Natanael Copa <n@tanael.org>
+ * Copyright (C) 2008-2011 Timo Teräs <timo.teras@iki.fi>
+ * All rights reserved.
+ *
+ * SPDX-License-Identifier: GPL-2.0-only
+ */
+
+===== apk-tools-v2.14.13/src/atom.c =====
+/* apk_atom.c - Alpine Package Keeper (APK)
+ *
+ * Copyright (C) 2005-2008 Natanael Copa <n@tanael.org>
+ * Copyright (C) 2008-2020 Timo Teräs <timo.teras@iki.fi>
+ * All rights reserved.
+ *
+ * SPDX-License-Identifier: GPL-2.0-only
+ */
+
+===== apk-tools-v2.14.13/src/blob.c =====
+/* blob.c - Alpine Package Keeper (APK)
+ *
+ * Copyright (C) 2005-2008 Natanael Copa <n@tanael.org>
+ * Copyright (C) 2008-2011 Timo Teräs <timo.teras@iki.fi>
+ * All rights reserved.
+ *
+ * SPDX-License-Identifier: GPL-2.0-only
+ */
+
+===== apk-tools-v2.14.13/src/commit.c =====
+/* commit.c - Alpine Package Keeper (APK)
+ * Apply solver calculated changes to database.
+ *
+ * Copyright (C) 2008-2013 Timo Teräs <timo.teras@iki.fi>
+ * All rights reserved.
+ *
+ * SPDX-License-Identifier: GPL-2.0-only
+ */
+
+===== apk-tools-v2.14.13/src/common.c =====
+/* common.c - Alpine Package Keeper (APK)
+ *
+ * Copyright (C) 2008-2011 Timo Teräs <timo.teras@iki.fi>
+ * All rights reserved.
+ *
+ * SPDX-License-Identifier: GPL-2.0-only
+ */
+
+===== apk-tools-v2.14.13/src/database.c =====
+/* database.c - Alpine Package Keeper (APK)
+ *
+ * Copyright (C) 2005-2008 Natanael Copa <n@tanael.org>
+ * Copyright (C) 2008-2011 Timo Teräs <timo.teras@iki.fi>
+ * All rights reserved.
+ *
+ * SPDX-License-Identifier: GPL-2.0-only
+ */
+
+===== apk-tools-v2.14.13/src/hash.c =====
+/* hash.c - Alpine Package Keeper (APK)
+ *
+ * Copyright (C) 2005-2008 Natanael Copa <n@tanael.org>
+ * Copyright (C) 2008-2011 Timo Teräs <timo.teras@iki.fi>
+ * All rights reserved.
+ *
+ * SPDX-License-Identifier: GPL-2.0-only
+ */
+
+===== apk-tools-v2.14.13/src/help.c =====
+/* help.c - Alpine Package Keeper (APK)
+ *
+ * Copyright (C) 2020 Timo Teräs <timo.teras@iki.fi>
+ * All rights reserved.
+ *
+ * SPDX-License-Identifier: GPL-2.0-only
+ */
+
+===== apk-tools-v2.14.13/src/io.c =====
+/* io.c - Alpine Package Keeper (APK)
+ *
+ * Copyright (C) 2005-2008 Natanael Copa <n@tanael.org>
+ * Copyright (C) 2008-2011 Timo Teräs <timo.teras@iki.fi>
+ * All rights reserved.
+ *
+ * SPDX-License-Identifier: GPL-2.0-only
+ */
+
+===== apk-tools-v2.14.13/src/io_archive.c =====
+/* io_archive.c - Alpine Package Keeper (APK)
+ *
+ * Copyright (C) 2005-2008 Natanael Copa <n@tanael.org>
+ * Copyright (C) 2008-2011 Timo Teräs <timo.teras@iki.fi>
+ * All rights reserved.
+ *
+ * SPDX-License-Identifier: GPL-2.0-only
+ */
+
+===== apk-tools-v2.14.13/src/io_gunzip.c =====
+/* io_gunzip.c - Alpine Package Keeper (APK)
+ *
+ * Copyright (C) 2008-2011 Timo Teräs <timo.teras@iki.fi>
+ * All rights reserved.
+ *
+ * SPDX-License-Identifier: GPL-2.0-only
+ */
+
+===== apk-tools-v2.14.13/src/io_url.c =====
+/* io_url.c - Alpine Package Keeper (APK)
+ *
+ * Copyright (C) 2005-2008 Natanael Copa <n@tanael.org>
+ * Copyright (C) 2008-2011 Timo Teräs <timo.teras@iki.fi>
+ * All rights reserved.
+ *
+ * SPDX-License-Identifier: GPL-2.0-only
+ */
+
+===== apk-tools-v2.14.13/src/lua-apk.c =====
+/* src/lua-apk.c - Alpine Package Keeper (APK)
+ *
+ * Copyright (C) 2005-2008 Natanael Copa <n@tanael.org>
+ * Copyright (C) 2008-2011 Timo Teräs <timo.teras@iki.fi>
+ * All rights reserved.
+ *
+ * SPDX-License-Identifier: GPL-2.0-only
+ */
+
+===== apk-tools-v2.14.13/src/package.c =====
+/* package.c - Alpine Package Keeper (APK)
+ *
+ * Copyright (C) 2005-2008 Natanael Copa <n@tanael.org>
+ * Copyright (C) 2008-2011 Timo Teräs <timo.teras@iki.fi>
+ * All rights reserved.
+ *
+ * SPDX-License-Identifier: GPL-2.0-only
+ */
+
+===== apk-tools-v2.14.13/src/print.c =====
+/* print.c - Alpine Package Keeper (APK)
+ *
+ * Copyright (C) 2005-2008 Natanael Copa <n@tanael.org>
+ * Copyright (C) 2008-2011 Timo Teräs <timo.teras@iki.fi>
+ * All rights reserved.
+ *
+ * SPDX-License-Identifier: GPL-2.0-only
+ */
+
+===== apk-tools-v2.14.13/src/solver.c =====
+/* solver.c - Alpine Package Keeper (APK)
+ * Up- and down-propagating, forwarding checking, deductive dependency solver.
+ *
+ * Copyright (C) 2008-2013 Timo Teräs <timo.teras@iki.fi>
+ * All rights reserved.
+ *
+ * SPDX-License-Identifier: GPL-2.0-only
+ */
+
+===== apk-tools-v2.14.13/src/template.c =====
+/* template.c - Alpine Package Keeper (APK)
+ *
+ * Copyright (C) 2005-2008 Natanael Copa <n@tanael.org>
+ * Copyright (C) 2008-2011 Timo Teräs <timo.teras@iki.fi>
+ * All rights reserved.
+ *
+ * SPDX-License-Identifier: GPL-2.0-only
+ */
+
+===== apk-tools-v2.14.13/src/version.c =====
+/* version.c - Alpine Package Keeper (APK)
+ *
+ * Copyright (C) 2005-2008 Natanael Copa <n@tanael.org>
+ * Copyright (C) 2008-2011 Timo Teräs <timo.teras@iki.fi>
+ * All rights reserved.
+ *
+ * SPDX-License-Identifier: GPL-2.0-only
+ */

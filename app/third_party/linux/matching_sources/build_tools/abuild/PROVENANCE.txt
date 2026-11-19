@@ -1,0 +1,1 @@
+abuild 3.15.0-r1 is recorded by the exact BusyBox package PKGINFO and official build log. This source archive is official version 3.15.0; local SHA and expected-checksum qualification are recorded in notice/source-provenance.json. Source is compilation/installation-control material, not an installed minimal runtime package. No rebuild is claimed.
