@@ -24,6 +24,7 @@ import java.util.concurrent.TimeoutException
 class PrivilegedBackendController(private val context: Context) : Closeable {
     data class Info(val running: Boolean, val uid: Int, val pid: Int, val reply: String)
     data class DisplayInfo(val active: Boolean, val displayId: Int)
+    data class CapabilitySnapshot(val ready: Boolean, val displayId: Int, val queryGeneration: Long)
     data class ScreenshotInfo(
         val displayId: Int,
         val width: Int,
@@ -236,6 +237,22 @@ class PrivilegedBackendController(private val context: Context) : Closeable {
     fun invalidateQueries() = synchronized(lock) { invalidateQueriesLocked() }
 
     fun queryGeneration(): Long = synchronized(lock) { generation }
+
+    fun capabilitySnapshot(): CapabilitySnapshot = synchronized(lock) {
+        val current = service
+        if (current == null || serviceBinder?.isBinderAlive != true) {
+            return@synchronized CapabilitySnapshot(false, -1, generation)
+        }
+        val id = current.displayId
+        CapabilitySnapshot(id > 0 && lastInfo.uid == Process.SHELL_UID, id, generation)
+    }
+
+    fun invalidateQueriesIfCurrent(expectedDisplayId: Int, expectedGeneration: Long): Boolean = synchronized(lock) {
+        if (generation != expectedGeneration || serviceBinder?.isBinderAlive != true ||
+            service?.displayId != expectedDisplayId) return@synchronized false
+        invalidateQueriesLocked()
+        true
+    }
 
     private fun querySession(expectedDisplayId: Int, expectedGeneration: Long): QuerySession = synchronized(lock) {
         require(expectedDisplayId > 0) { "expectedDisplayId 必须为正整数。" }

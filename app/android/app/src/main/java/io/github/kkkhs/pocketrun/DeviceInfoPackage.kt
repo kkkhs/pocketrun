@@ -14,6 +14,7 @@ class DeviceInfoPackage : BaseReactPackage() {
         WorkspaceModule.NAME -> WorkspaceModule(reactContext)
         LinuxModule.NAME -> LinuxModule(reactContext)
         PtyModule.NAME -> PtyModule(reactContext)
+        TaskHostModule.NAME -> TaskHostModule(reactContext)
         else -> null
       }
 
@@ -59,7 +60,14 @@ class DeviceInfoPackage : BaseReactPackage() {
             false,
             true,
         ),
-
+        TaskHostModule.NAME to ReactModuleInfo(
+            TaskHostModule.NAME,
+            TaskHostModule.NAME,
+            false,
+            false,
+            false,
+            true,
+        )
     )
   }
 }
