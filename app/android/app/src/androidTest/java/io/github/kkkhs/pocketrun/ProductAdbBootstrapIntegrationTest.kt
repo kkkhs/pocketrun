@@ -6,6 +6,8 @@ import android.os.Build
 import android.os.Bundle
 import android.os.Process
 import android.provider.Settings
+import android.system.Os
+import android.system.OsConstants
 import android.util.Log
 import android.view.accessibility.AccessibilityNodeInfo
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -20,8 +22,8 @@ import androidx.test.uiautomator.Until
 import java.io.ByteArrayOutputStream
 import java.io.File
 import java.security.MessageDigest
-import java.util.concurrent.TimeUnit
 import java.util.regex.Pattern
+import org.json.JSONObject
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -47,12 +49,7 @@ class ProductAdbBootstrapIntegrationTest {
     private var wroteInputs = false
 
     @Test fun pairConnectStartBackendAndCreateDisplayViaProductionUi() {
-        authorizeBeforeObserver()
-        apkSha = sha256(File(context.applicationInfo.sourceDir))
-        arguments.getString("sourceApkSha256")?.let { expected ->
-            assertTrue("sourceApkSha256 must be a SHA256 digest", expected.matches(Regex("[0-9a-f]{64}")))
-            assertEquals("Installed source APK must match the selected artifact", expected, apkSha)
-        }
+        authorizeBeforeObserver() // Strict private binding validation AND one-shot consumption precede any observer.
         val observer = OwnedInstrumentationObserver(instrumentation, Configurator.getInstance().uiAutomationFlags)
         var failure: AssertionError? = null
         try {
@@ -135,38 +132,96 @@ class ProductAdbBootstrapIntegrationTest {
         failure?.let { throw it }
     }
 
+    /**
+     * Normal App UID cannot read the hardware serial on this Pixel. The main's same-run fresh
+     * provider/native serial + boot guard writes this App-private nonce-bound receipt via run-as.
+     * This is an explicit host identity attestation, NOT a boolean bypass or privileged phone API.
+     */
     private fun authorizeBeforeObserver() {
-        assertEquals("Only this explicitly selected hardware device is authorized", AUTHORIZED_SERIAL,
-            arguments.getString("authorizedSerial"))
-        assertEquals("Explicit authorizedApi=35 is required", "35", arguments.getString("authorizedApi"))
-        assertEquals("This fixture is only for the authorized Android 15 device", 35, Build.VERSION.SDK_INT)
-        assertEquals("Device identity must be verified before observer acquisition", AUTHORIZED_SERIAL, readSerial())
-        assertEquals("Developer options must already be enabled by the user", 1,
-            Settings.Global.getInt(context.contentResolver, Settings.Global.DEVELOPMENT_SETTINGS_ENABLED, 0))
-    }
-
-    private fun readSerial(): String {
-        val process = ProcessBuilder("/system/bin/getprop", "ro.serialno").redirectErrorStream(true).start()
+        var point = "explicit-arguments"
         try {
-            assertTrue("Fixed read-only owner probe timed out", process.waitFor(3, TimeUnit.SECONDS))
-            assertEquals("Fixed read-only owner probe failed", 0, process.exitValue())
-            val output = ByteArrayOutputStream()
-            process.inputStream.use { input ->
-                val buffer = ByteArray(256)
+            check(arguments.getString("authorizedSerial") == AUTHORIZED_SERIAL)
+            check(arguments.getString("authorizedApi") == "35" && Build.VERSION.SDK_INT == 35)
+            check(context.packageName == "io.github.kkkhs.pocketrun")
+            check(context.applicationInfo.uid == Process.myUid())
+            val nonce = checkNotNull(arguments.getString("deviceBindingNonce"))
+            val expectedApk = checkNotNull(arguments.getString("sourceApkSha256"))
+            check(nonce.matches(Regex("[0-9a-f]{64}")) && expectedApk.matches(Regex("[0-9a-f]{64}")))
+
+            point = "fixed-private-file"
+            val directory = File(context.filesDir, "device-bindings")
+            check(directory.canonicalFile.parentFile == context.filesDir.canonicalFile)
+            val directoryStat = Os.lstat(directory.absolutePath)
+            check(directoryStat.st_uid == Process.myUid())
+            check((directoryStat.st_mode and OsConstants.S_IFMT) == OsConstants.S_IFDIR)
+            check((directoryStat.st_mode and 0xfff) == 0x1c0) // Exactly 0700, no special/group/other bits.
+            val receipt = File(directory, "product-adb-bootstrap.json") // Never supplied by arguments.
+            val fd = Os.open(receipt.absolutePath, OsConstants.O_RDONLY or OsConstants.O_NOFOLLOW or OsConstants.O_CLOEXEC, 0)
+            val opened: android.system.StructStat
+            val text: String
+            try {
+                opened = Os.fstat(fd)
+                check(opened.st_uid == Process.myUid())
+                check((opened.st_mode and OsConstants.S_IFMT) == OsConstants.S_IFREG)
+                check((opened.st_mode and 0xfff) == 0x180 && opened.st_size in 1..4096 && opened.st_nlink == 1L) // 0600, one bounded regular file.
+                val output = ByteArrayOutputStream()
+                val buffer = ByteArray(512)
                 while (true) {
-                    val count = input.read(buffer)
-                    if (count < 0) break
-                    check(output.size() + count <= 1024) { "Owner probe output exceeded its bound." }
+                    val count = Os.read(fd, buffer, 0, buffer.size)
+                    if (count == 0) break
+                    check(count > 0 && output.size() + count <= 4096)
                     output.write(buffer, 0, count)
                 }
+                text = output.toString("UTF-8")
+            } finally { Os.close(fd) }
+
+            point = "strict-schema-and-nonce"
+            val binding = JSONObject(text)
+            check(binding.keys().asSequence().toSet() == BINDING_KEYS)
+            fun number(key: String): Long {
+                val value = binding.get(key)
+                check(value is Int || value is Long) // No numeric-string/boolean/double coercion.
+                return (value as Number).toLong()
             }
-            return output.toString("UTF-8").trim()
-        } finally {
-            if (process.isAlive) process.destroyForcibly() // Only the fixed child created above, never any backend PID.
-            process.waitFor(2, TimeUnit.SECONDS)
-            runCatching { process.inputStream.close() }
-            runCatching { process.errorStream.close() }
-            runCatching { process.outputStream.close() }
+            fun string(key: String): String = (binding.get(key) as? String)
+                ?: error("Invalid binding string type.")
+            check(number("schema_v") == 1L)
+            check(MessageDigest.isEqual(string("nonce").toByteArray(Charsets.US_ASCII), nonce.toByteArray(Charsets.US_ASCII)))
+
+            point = "current-device-identity"
+            check(string("serial") == AUTHORIZED_SERIAL)
+            check(number("api") == Build.VERSION.SDK_INT.toLong())
+            val abi = checkNotNull(Build.SUPPORTED_ABIS.firstOrNull())
+            check(abi == "arm64-v8a" && string("abi") == abi)
+            check(number("app_uid") == Process.myUid().toLong())
+            point = "current-boot-count"
+            val bootCount = Settings.Global.getInt(context.contentResolver, Settings.Global.BOOT_COUNT, -1)
+            check(bootCount >= 0 && number("boot_count") == bootCount.toLong())
+            check(Settings.Global.getInt(context.contentResolver, Settings.Global.DEVELOPMENT_SETTINGS_ENABLED, 0) == 1)
+
+            point = "installed-source-apk"
+            apkSha = sha256(File(context.applicationInfo.sourceDir))
+            check(string("source_apk_sha256") == expectedApk && apkSha == expectedApk)
+            point = "short-ttl"
+            val expires = number("expires_at_epoch")
+            val remaining = expires - System.currentTimeMillis() / 1000
+            check(remaining in 1..120) // Host uses this device's current epoch, never a stale/long lease.
+
+            point = "one-shot-consume"
+            synchronized(CONSUMED_BINDINGS) {
+                check(nonce !in CONSUMED_BINDINGS)
+                val current = Os.lstat(receipt.absolutePath)
+                check(current.st_ino == opened.st_ino && current.st_dev == opened.st_dev)
+                check(expires > System.currentTimeMillis() / 1000)
+                check(receipt.delete()) // Public File.delete unlinks this regular file; success is required BEFORE observer.
+                CONSUMED_BINDINGS.add(nonce)
+            }
+            Log.i("PocketRun-ProductAdb", "phase=device-binding-consumed bindingSerial=$AUTHORIZED_SERIAL " +
+                "API=${Build.VERSION.SDK_INT} ABI=$abi appUID=${Process.myUid()} bootCount=$bootCount " +
+                "sourceAPKsha256=$apkSha") // No nonce, receipt body, pairing code, or port is published.
+        } catch (error: Throwable) {
+            // JSON/OS exceptions can include receipt contents. Publish only a fixed checkpoint/class.
+            throw AssertionError("Device binding rejected BEFORE observer at $point (${error.javaClass.simpleName}).")
         }
     }
 
@@ -269,6 +324,9 @@ class ProductAdbBootstrapIntegrationTest {
     }
 
     companion object {
+        private val CONSUMED_BINDINGS = mutableSetOf<String>()
+        private val BINDING_KEYS = setOf("schema_v", "serial", "api", "abi", "app_uid", "boot_count",
+            "source_apk_sha256", "expires_at_epoch", "nonce")
         private const val AUTHORIZED_SERIAL = "58131JEBF07460"
         private const val SETTINGS_PACKAGE = "com.android.settings"
         private val WIRELESS_ENTRY = Pattern.compile("无线调试|Wireless debugging")
