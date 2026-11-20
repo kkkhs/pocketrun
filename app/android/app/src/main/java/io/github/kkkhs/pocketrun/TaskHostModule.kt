@@ -11,6 +11,11 @@ import io.github.kkkhs.pocketrun.taskhost.AndroidTaskCapabilities
 import io.github.kkkhs.pocketrun.taskhost.AppUiDecision
 import io.github.kkkhs.pocketrun.taskhost.CleanupState
 import io.github.kkkhs.pocketrun.taskhost.ContextStatus
+import io.github.kkkhs.pocketrun.taskhost.AgentLoop
+import io.github.kkkhs.pocketrun.taskhost.AgentStatus
+import io.github.kkkhs.pocketrun.taskhost.AnthropicModelTransport
+import io.github.kkkhs.pocketrun.taskhost.ModelCredentialStore
+import io.github.kkkhs.pocketrun.taskhost.ModelSettings
 import io.github.kkkhs.pocketrun.taskhost.DisplayTarget
 import io.github.kkkhs.pocketrun.taskhost.SingleTaskContext
 import org.json.JSONArray
@@ -31,6 +36,8 @@ class TaskHostModule(context: ReactApplicationContext) : NativePocketRunTaskHost
     private val adapter = AndroidTaskCapabilities(context)
     private val host = TaskHost(adapter)
     private val task = SingleTaskContext(host)
+    private val agent = AgentLoop(task)
+    private val modelStore = ModelCredentialStore(context)
     private val worker = Executors.newSingleThreadExecutor { runnable ->
         Thread(runnable, "PocketRun-TaskHostModule")
     }
@@ -57,11 +64,74 @@ class TaskHostModule(context: ReactApplicationContext) : NativePocketRunTaskHost
         task.withoutActiveTask { stateMap(host.submit(parseCall(tool, argumentsJson))) }
     }
 
+    override fun getModelConfiguration(promise: Promise) = executeModel(promise) { modelConfigurationMap() }
+
+    override fun saveModelConfiguration(endpoint: String, model: String, apiKey: String, promise: Promise) = executeModel(promise) {
+        agent.cancel("MODEL_CONFIG_CHANGED")
+        modelStore.save(ModelSettings(endpoint, model), apiKey)
+        modelConfigurationMap()
+    }
+
+    override fun clearModelConfiguration(promise: Promise) = executeModel(promise) {
+        agent.cancel("MODEL_CONFIG_CLEARED")
+        modelStore.clear()
+        modelConfigurationMap()
+    }
+
+    override fun startAgent(goal: String, promise: Promise) = executeModel(promise) {
+        check(android.os.Build.VERSION.SDK_INT >= 26) { "MODEL_RUNTIME_REQUIRES_API_26" }
+        val credential = checkNotNull(modelStore.load()) { "MODEL_CREDENTIAL_REQUIRED" }
+        val source = AnthropicModelTransport(credential)
+        try {
+            val ready = adapter.readiness()
+            val observation = "linuxReady=${ready.linuxReady}; displayReady=${ready.displayReady}; " +
+                "displayId=${ready.displayId}; displayEpoch=${ready.displayEpoch}"
+            agentMap(agent.start(goal, source, observation))
+        } catch (error: Exception) {
+            source.close()
+            throw error
+        }
+    }
+
+    override fun getAgentState(promise: Promise) { resolve(promise) { agentMap(agent.state()) } }
+    override fun cancelAgent(promise: Promise) = executeModel(promise) { agentMap(agent.cancel()) }
+
+    private fun executeModel(promise: Promise, action: () -> Any?) {
+        try {
+            worker.execute {
+                try { promise.resolve(action()) }
+                catch (_: Exception) { promise.reject("E_MODEL_CONFIGURATION", "Model operation failed; check configuration, task ownership and credential store.") }
+            }
+        } catch (_: RejectedExecutionException) { promise.reject("E_MODEL_CLOSED", "Model module is closed.") }
+    }
+
+    private fun modelConfigurationMap(): WritableMap {
+        val saved = modelStore.load()
+        val settings = saved?.settings ?: ModelSettings.DEFAULT
+        return Arguments.createMap().apply {
+            putString("endpoint", settings.endpoint)
+            putString("model", settings.model)
+            putBoolean("hasCredential", saved != null)
+        }
+    }
+
+    private fun agentMap(value: AgentStatus): WritableMap = Arguments.createMap().apply {
+        putString("phase", value.phase.name.lowercase())
+        putNullableString("taskId", value.taskId)
+        putInt("rounds", value.rounds)
+        putDouble("outputTokens", value.outputTokens.toDouble())
+        putInt("contextBytes", value.contextBytes)
+        putNullableString("finalText", value.finalText)
+        putNullableString("code", value.code)
+    }
+
     override fun beginTask(goal: String, promise: Promise) = execute(promise) {
+        if (agent.isActive()) throw HostBusyException()
         contextMap(task.begin(goal))
     }
 
     override fun submitTaskStep(taskId: String, tool: String, argumentsJson: String, promise: Promise) = execute(promise) {
+        if (agent.isActive()) throw HostBusyException()
         val call = try {
             parseCall(tool, argumentsJson)
         } catch (_: IllegalArgumentException) {
@@ -75,10 +145,13 @@ class TaskHostModule(context: ReactApplicationContext) : NativePocketRunTaskHost
     }
 
     override fun finishTask(taskId: String, promise: Promise) = execute(promise) {
+        if (agent.isActive()) throw HostBusyException()
         contextMap(task.finish(taskId))
     }
 
     override fun cancelTask(taskId: String, promise: Promise) = execute(promise) {
+        check(task.state().taskId == taskId) { "Task identity is stale." }
+        if (agent.isActive()) agent.cancel()
         contextMap(task.cancel(taskId))
     }
 
@@ -221,6 +294,7 @@ class TaskHostModule(context: ReactApplicationContext) : NativePocketRunTaskHost
         disposed = true
         displayDeathRegistration.close()
         backendDeathWorker.shutdownNow()
+        agent.close()
         task.close()
         // If cleanup is unproven, the adapter retains its source owner until process teardown.
         if (host.state().cleanupState != CleanupState.UNPROVEN) adapter.close()

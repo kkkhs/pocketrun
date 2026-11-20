@@ -19,6 +19,7 @@
 - [第 8 章：真正的交互式 PTY（本地草稿，待真机验收）](website/docs/chapter-8.md)
 - [第 9 章：工具校验、手机审批与宿主（待真机验收）](website/docs/chapter-9.md)
 - [第 10 章：把两次调用放进同一个任务（Draft PR #17）](website/docs/chapter-10.md)
+- [第 11 章：让模型选下一步，仍由手机批准（Draft PR #18）](website/docs/chapter-11.md)
 - [已发布章节源码快照](https://github.com/kkkhs/pocketrun/releases)
 - [参考：系统概览](https://kkkhs.github.io/pocketrun/architecture/)
 - [参考：运行与发布教程站](https://kkkhs.github.io/pocketrun/chapter-0/)
