@@ -123,6 +123,59 @@ class SingleTaskContextTest {
         assertEquals(0, source.starts)
     }
 
+    @Test fun phoneApprovalAfterTaskDeadlineCannotStartWithoutAnyContextQuery() {
+        task = SingleTaskContext(host, budget = ContextBudget(maxDurationMillis = 120_000))
+        val id = task.begin("one").taskId!!
+        now += TimeUnit.SECONDS.toNanos(119)
+        val pending = task.submit(id, csv)
+        now += TimeUnit.MILLISECONDS.toNanos(1050)
+        // Same shared host entry as the TurboModule; deliberately no task.state() before approval.
+        assertFalse(host.onAppUiDecision(pending.steps.single().status.requestNonce!!, AppUiDecision.APPROVE))
+        assertEquals(0, source.starts)
+        assertEquals(ContextPhase.BUDGET_EXHAUSTED, task.state().phase)
+    }
+
+    @Test fun taskDeadlineReachedDuringHostPreStartProbeCannotStart() {
+        val guarded = TaskHost.withStartProbe(source, clock, NonceSource { "abcdefghijklmnop" },
+            30_000, 5000) { now += TimeUnit.MILLISECONDS.toNanos(10) }
+        task = SingleTaskContext(guarded, clock, ContextBudget(maxDurationMillis = 10))
+        val id = task.begin("one").taskId!!
+        task.submit(id, device)
+        assertEquals(0, source.starts)
+        assertEquals(ContextPhase.BUDGET_EXHAUSTED, task.state().phase)
+    }
+
+    @Test fun closePendingAndRunningStayClosedAndRejectNewGoals() {
+        var id = task.begin("pending").taskId!!
+        task.submit(id, csv)
+        task.close()
+        assertEquals(ContextPhase.CLOSED, task.state().phase)
+        assertThrows(IllegalStateException::class.java) { task.begin("next") }
+        val otherHost = TaskHost(source, clock, NonceSource { "abcdefghijklmnop" })
+        task = SingleTaskContext(otherHost, clock)
+        id = task.begin("running").taskId!!
+        task.submit(id, device)
+        val callback = source.callback!!
+        task.close()
+        callback(ExecutionOutcome.Success(ToolResult(mapOf("late" to "demo"))))
+        assertEquals(ContextPhase.CLOSED, task.state().phase)
+        assertEquals(CleanupState.PROVEN, task.state().steps.single().status.cleanupState)
+        assertThrows(IllegalStateException::class.java) { task.begin("next") }
+    }
+
+    @Test fun closedContextKeepsUnprovenOwnerUntilHostRetry() {
+        val id = task.begin("running").taskId!!
+        task.submit(id, device)
+        source.failClose = true
+        task.close()
+        assertEquals(ContextPhase.CLOSED, task.state().phase)
+        assertEquals(CleanupState.UNPROVEN, task.state().steps.single().status.cleanupState)
+        assertThrows(IllegalStateException::class.java) { task.begin("next") }
+        source.failClose = false
+        assertTrue(host.retryCleanup())
+        assertEquals(ContextPhase.CLOSED, task.state().phase)
+    }
+
     @Test fun unprovenCleanupRetainsSlotAndRecoveryDoesNotClaimSuccess() {
         val id = task.begin("one").taskId!!
         task.submit(id, device)
