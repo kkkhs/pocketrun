@@ -35,6 +35,8 @@ let screen: ReactTestRenderer.ReactTestRenderer;
 const text = () => JSON.stringify(screen.toJSON());
 const button = (label: string) => screen.root.find(node =>
   node.props.accessibilityLabel === label && typeof node.props.onPress === 'function');
+const unexpectedCount = () => screen.root.find(node =>
+  Array.isArray(node.props.children) && node.props.children[0] === 'unexpected count：').props.children[1];
 
 beforeEach(async () => {
   jest.resetAllMocks();
@@ -198,6 +200,56 @@ it('renders real display screenshot and bounded UI tree text without treating ac
   expect(screen.root.find(node => node.props.source?.uri === 'file:///app/cache/taskhost-frame.jpg')).toBeTruthy();
   expect(text()).toContain('UI 树实际文字');
   expect(text()).toContain('不能据此声称已经填对');
+});
+
+it('runs fixed JS to Codegen rejection samples and reports only rejection codes', async () => {
+  const codes = [
+    'E_TASK_HOST', 'E_TASK_HOST', 'E_TASK_UNKNOWN_TOOL',
+    'E_TASK_UNKNOWN_ARGUMENT', 'E_TASK_UNKNOWN_ARGUMENT', 'E_TASK_UNKNOWN_ARGUMENT',
+    'E_TASK_INVALID_DISPLAY_ID', 'E_TASK_INVALID_TAP', 'E_TASK_INVALID_TEXT',
+  ];
+  for (const code of codes) (native.submitTool as jest.Mock).mockRejectedValueOnce({ code });
+  await ReactTestRenderer.act(() => button('展开工具参数拒绝示例').props.onPress());
+  await ReactTestRenderer.act(async () => button('运行固定工具拒绝示例').props.onPress());
+  expect(native.submitTool).toHaveBeenCalledTimes(codes.length);
+  expect(native.decideFromAppUi).not.toHaveBeenCalled();
+  expect(text()).toContain('E_TASK_UNKNOWN_TOOL');
+  expect(text()).toContain('E_TASK_INVALID_TEXT');
+  expect(text()).toContain('旧 display epoch：当前没有可用');
+  expect(unexpectedCount()).toBe(0);
+  expect(text()).not.toContain('fixed-rejected');
+});
+
+it('stops fixed diagnostics immediately on an unexpected resolve', async () => {
+  (native.submitTool as jest.Mock).mockResolvedValueOnce(state({ phase: 'idle' }));
+  await ReactTestRenderer.act(() => button('展开工具参数拒绝示例').props.onPress());
+  await ReactTestRenderer.act(async () => button('运行固定工具拒绝示例').props.onPress());
+  expect(native.submitTool).toHaveBeenCalledTimes(1);
+  expect(text()).toContain('UNEXPECTED_RESOLVE');
+  expect(unexpectedCount()).toBe(1);
+  expect(native.decideFromAppUi).not.toHaveBeenCalled();
+});
+
+it('builds the old-epoch rejection only from a fresh ready display snapshot', async () => {
+  (native.getHostReadiness as jest.Mock).mockResolvedValue(readiness({
+    displayReady: true, displayId: 31, displayEpoch: '10',
+  }));
+  const codes = [
+    'E_TASK_HOST', 'E_TASK_HOST', 'E_TASK_UNKNOWN_TOOL',
+    'E_TASK_UNKNOWN_ARGUMENT', 'E_TASK_UNKNOWN_ARGUMENT', 'E_TASK_UNKNOWN_ARGUMENT',
+    'E_TASK_INVALID_DISPLAY_ID', 'E_TASK_INVALID_TAP', 'E_TASK_INVALID_TEXT',
+    'E_TASK_DISPLAY_TARGET_MISMATCH',
+  ];
+  for (const code of codes) (native.submitTool as jest.Mock).mockRejectedValueOnce({ code });
+  await ReactTestRenderer.act(() => button('展开工具参数拒绝示例').props.onPress());
+  await ReactTestRenderer.act(async () => button('运行固定工具拒绝示例').props.onPress());
+  const calls = (native.submitTool as jest.Mock).mock.calls;
+  const [tool, json] = calls[calls.length - 1];
+  expect(tool).toBe('android.virtual_display_observe_or_demo_input');
+  expect(JSON.parse(json)).toEqual({ action: 'observe', expectedDisplayId: 31, expectedDisplayEpoch: 9 });
+  expect(text()).toContain('旧 display epoch');
+  expect(text()).toContain('E_TASK_DISPLAY_TARGET_MISMATCH');
+  expect(text()).not.toContain('未执行该样例');
 });
 
 it('documents the single deterministic host boundary', () => {

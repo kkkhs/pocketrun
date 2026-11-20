@@ -10,6 +10,34 @@ type ToolChoice = 'device' | 'linux' | 'observe' | 'demoText';
 type PanelActionResult = TaskHostState | TaskHostReadiness |
   { state: TaskHostState; readiness: TaskHostReadiness };
 const FIXED_DEMO_TEXT = 'PocketRun_TaskHost_9';
+type RejectionSample = { label: string; tool: string; argumentsJson: string; expectedCode: string };
+type RejectionResult = { label: string; code: string };
+const FIXED_REJECTION_SAMPLES: ReadonlyArray<RejectionSample> = [
+  { label: '坏 JSON', tool: 'android.device_info', argumentsJson: '{', expectedCode: 'E_TASK_HOST' },
+  { label: '重复 JSON 键', tool: 'android.device_info', argumentsJson: '{"x":1,"x":2}', expectedCode: 'E_TASK_HOST' },
+  { label: '未知工具', tool: 'linux.shell', argumentsJson: '{}', expectedCode: 'E_TASK_UNKNOWN_TOOL' },
+  { label: '额外 path', tool: 'linux.count_demo_csv', argumentsJson: '{"path":"fixed-rejected"}', expectedCode: 'E_TASK_UNKNOWN_ARGUMENT' },
+  { label: '额外 argv', tool: 'linux.count_demo_csv', argumentsJson: '{"argv":"fixed-rejected"}', expectedCode: 'E_TASK_UNKNOWN_ARGUMENT' },
+  { label: '额外 env', tool: 'linux.count_demo_csv', argumentsJson: '{"env":"fixed-rejected"}', expectedCode: 'E_TASK_UNKNOWN_ARGUMENT' },
+  { label: 'displayId 0', tool: 'android.virtual_display_observe_or_demo_input', argumentsJson: '{"action":"observe","expectedDisplayId":0,"expectedDisplayEpoch":1}', expectedCode: 'E_TASK_INVALID_DISPLAY_ID' },
+  { label: '越界坐标', tool: 'android.virtual_display_observe_or_demo_input', argumentsJson: '{"action":"demo_tap","expectedDisplayId":1,"expectedDisplayEpoch":1,"x":720,"y":0}', expectedCode: 'E_TASK_INVALID_TAP' },
+  { label: '非法文本', tool: 'android.virtual_display_observe_or_demo_input', argumentsJson: '{"action":"demo_text","expectedDisplayId":1,"expectedDisplayEpoch":1,"text":"bad\\ntext"}', expectedCode: 'E_TASK_INVALID_TEXT' },
+];
+
+function rejectedCode(failure: unknown): string {
+  if (typeof failure === 'object' && failure !== null && 'code' in failure &&
+      typeof failure.code === 'string' && /^[A-Z0-9_]{1,64}$/.test(failure.code)) return failure.code;
+  return 'NO_CODE';
+}
+
+function decrementPositiveDecimal(value: string): string | null {
+  if (!/^[1-9][0-9]*$/.test(value) || value === '1') return null;
+  const digits = value.split('');
+  let index = digits.length - 1;
+  while (digits[index] === '0') { digits[index] = '9'; index--; }
+  digits[index] = String(Number(digits[index]) - 1);
+  return digits.join('').replace(/^0+/, '') || '0';
+}
 
 function taskHostModule() {
   if (!NativeTaskHost) throw new Error('TaskHost 原生模块未注册，请重新构建 Android 应用。');
@@ -31,6 +59,11 @@ export default function TaskHostPanel({ colors }: { colors: Colors }) {
   const [state, setState] = useState<TaskHostState | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [diagnosticsExpanded, setDiagnosticsExpanded] = useState(false);
+  const [diagnosticsRunning, setDiagnosticsRunning] = useState(false);
+  const [rejectionResults, setRejectionResults] = useState<ReadonlyArray<RejectionResult>>([]);
+  const [diagnosticsSkipped, setDiagnosticsSkipped] = useState<string | null>(null);
+  const [unexpectedResolves, setUnexpectedResolves] = useState(0);
   const live = useRef(true);
   const inFlight = useRef(false);
   const actionBusy = useRef(false);
@@ -114,6 +147,57 @@ export default function TaskHostPanel({ colors }: { colors: Colors }) {
     });
   }
 
+  async function runFixedRejectionSamples() {
+    const taskActive = state?.phase === 'pending_approval' || state?.phase === 'executing';
+    if (actionBusy.current || taskActive || state?.cleanupState === 'unproven' || busy) return;
+    actionBusy.current = true;
+    setDiagnosticsRunning(true);
+    setRejectionResults([]);
+    setDiagnosticsSkipped(null);
+    setUnexpectedResolves(0);
+    setError(null);
+    const results: RejectionResult[] = [];
+    let unexpected = 0;
+    try {
+      const native = taskHostModule();
+      const fresh = await native.getHostReadiness();
+      const samples = [...FIXED_REJECTION_SAMPLES];
+      const staleEpoch = fresh.displayEpoch ? decrementPositiveDecimal(fresh.displayEpoch) : null;
+      if (fresh.displayReady && fresh.displayId !== null && fresh.displayId > 0 && staleEpoch !== null) {
+        samples.push({
+          label: '旧 display epoch',
+          tool: 'android.virtual_display_observe_or_demo_input',
+          argumentsJson: `{"action":"observe","expectedDisplayId":${fresh.displayId},"expectedDisplayEpoch":${staleEpoch}}`,
+          expectedCode: 'E_TASK_DISPLAY_TARGET_MISMATCH',
+        });
+      } else {
+        setDiagnosticsSkipped('旧 display epoch：当前没有可用且 epoch>1 的 App 虚拟屏，未执行该样例。');
+      }
+      for (const sample of samples) {
+        try {
+          await native.submitTool(sample.tool, sample.argumentsJson);
+          results.push({ label: sample.label, code: 'UNEXPECTED_RESOLVE' });
+          unexpected++;
+          break;
+        } catch (failure) {
+          const code = rejectedCode(failure);
+          results.push({ label: sample.label, code });
+          if (code !== sample.expectedCode) { unexpected++; break; }
+        }
+      }
+      if (live.current) {
+        setReadiness(fresh);
+        setRejectionResults(results);
+        setUnexpectedResolves(unexpected);
+      }
+    } catch (failure) {
+      if (live.current) setError(failure instanceof Error ? failure.message : '固定拒绝样例运行失败。');
+    } finally {
+      actionBusy.current = false;
+      if (live.current) setDiagnosticsRunning(false);
+    }
+  }
+
   function button(label: string, disabled: boolean, action: () => void) {
     return <Pressable accessibilityRole="button" accessibilityLabel={label}
       accessibilityState={{ disabled }} disabled={disabled} onPress={action}
@@ -143,6 +227,21 @@ export default function TaskHostPanel({ colors }: { colors: Colors }) {
     <Text style={{ color: colors.text }}>typed Binder 虚拟屏：{readiness?.displayReady
       ? `display ${readiness.displayId} · epoch ${readiness.displayEpoch}`
       : '不可用（明确拒绝，不回退默认屏）'}</Text>
+
+    {__DEV__ && <View style={styles.diagnostics}>
+      {button(diagnosticsExpanded ? '收起工具参数拒绝示例' : '展开工具参数拒绝示例', false,
+        () => setDiagnosticsExpanded(value => !value))}
+      {diagnosticsExpanded && <>
+        <Text style={{ color: colors.muted }}>仅发送内置、非敏感的固定坏样本，经 JS → Codegen → Kotlin 验证拒绝边界；不提供自由 JSON、命令或自动审批。</Text>
+        {button('运行固定工具拒绝示例', busy || active || cleanupUnproven || diagnosticsRunning,
+          () => { runFixedRejectionSamples().catch(failure =>
+            setError(failure instanceof Error ? failure.message : '固定拒绝样例运行失败。')); })}
+        {diagnosticsRunning && <Text style={{ color: colors.muted }}>正在逐项验证；首次异常 resolve 或错误 code 将立即停止。</Text>}
+        {rejectionResults.map(item => <Text key={item.label} style={{ color: colors.text }}>{item.label}：{item.code}</Text>)}
+        {diagnosticsSkipped && <Text style={{ color: colors.muted }}>{diagnosticsSkipped}</Text>}
+        <Text style={{ color: colors.text }}>unexpected count：{unexpectedResolves}</Text>
+      </>}
+    </View>}
 
     {button('运行 android.device_info', busy || active || cleanupUnproven, () => submit('device'))}
     {button('申请读取固定演示 CSV 行数', busy || active || cleanupUnproven || !readiness?.linuxReady,
@@ -204,6 +303,7 @@ const styles = StyleSheet.create({
   buttonText: { color: '#fff', fontSize: 16, fontWeight: '600' },
   disabled: { opacity: 0.45 },
   approval: { gap: 8, borderWidth: 1, borderColor: '#64748b', borderRadius: 8, padding: 10 },
+  diagnostics: { gap: 8, borderWidth: 1, borderColor: '#64748b', borderRadius: 8, padding: 10 },
   result: { gap: 6 },
   screenshot: { width: '100%', height: 360 },
 });
