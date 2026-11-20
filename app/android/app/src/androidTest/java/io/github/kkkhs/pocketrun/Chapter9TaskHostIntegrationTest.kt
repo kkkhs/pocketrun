@@ -7,6 +7,7 @@ import io.github.kkkhs.pocketrun.taskhost.AndroidTaskCapabilities
 import io.github.kkkhs.pocketrun.taskhost.HostPhase
 import io.github.kkkhs.pocketrun.taskhost.RawToolCall
 import io.github.kkkhs.pocketrun.taskhost.TaskHost
+import io.github.kkkhs.pocketrun.taskhost.TaskHostJson
 import io.github.kkkhs.pocketrun.taskhost.ToolValidationException
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
@@ -69,6 +70,54 @@ class Chapter9TaskHostIntegrationTest {
             host.close()
             adapter.close()
         }
+    }
+
+    @Test
+    fun nativeBoundaryRejectsFixedBadSamplesWithoutRunningATool() {
+        // This validates the actual Android native entry boundary, not a JS click or phone approval.
+        assertEquals("duplicate", failureText {
+            TaskHostJson.parseObject("{\"x\":1,\"x\":2}")
+        }.substringBefore(' '))
+        val adapter = adapter()
+        val host = TaskHost(adapter)
+        try {
+            assertCode("UNKNOWN_TOOL") { host.submit(RawToolCall("linux.shell", emptyMap())) }
+            for (key in listOf("path", "argv", "env")) {
+                assertCode("UNKNOWN_ARGUMENT") {
+                    host.submit(RawToolCall("linux.count_demo_csv", mapOf(key to "forbidden")))
+                }
+            }
+            assertCode("INVALID_DISPLAY_ID") {
+                host.submit(RawToolCall("android.virtual_display_observe_or_demo_input", mapOf(
+                    "action" to "observe", "expectedDisplayId" to 0,
+                    "expectedDisplayEpoch" to 1L)))
+            }
+            assertCode("INVALID_TAP") {
+                host.submit(RawToolCall("android.virtual_display_observe_or_demo_input", mapOf(
+                    "action" to "demo_tap", "expectedDisplayId" to 1,
+                    "expectedDisplayEpoch" to 1L, "x" to 720, "y" to 0)))
+            }
+            assertCode("INVALID_TEXT") {
+                host.submit(RawToolCall("android.virtual_display_observe_or_demo_input", mapOf(
+                    "action" to "demo_text", "expectedDisplayId" to 1,
+                    "expectedDisplayEpoch" to 1L, "text" to "bad\ntext")))
+            }
+        } finally {
+            host.close()
+            adapter.close()
+        }
+    }
+
+    private fun assertCode(expected: String, action: () -> Unit) {
+        val error = try { action(); null } catch (failure: ToolValidationException) { failure }
+        assertEquals(expected, error?.code)
+    }
+
+    private fun failureText(action: () -> Unit): String = try {
+        action()
+        "missing failure"
+    } catch (error: IllegalArgumentException) {
+        error.message.orEmpty().lowercase()
     }
 
     private fun adapter() = AndroidTaskCapabilities(

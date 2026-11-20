@@ -1,5 +1,6 @@
 package io.github.kkkhs.pocketrun
 
+import android.util.Log
 import com.facebook.react.bridge.Arguments
 import com.facebook.react.bridge.Promise
 import com.facebook.react.bridge.ReactApplicationContext
@@ -9,10 +10,13 @@ import io.github.kkkhs.pocketrun.taskhost.AndroidHostReadiness
 import io.github.kkkhs.pocketrun.taskhost.AndroidTaskCapabilities
 import io.github.kkkhs.pocketrun.taskhost.AppUiDecision
 import io.github.kkkhs.pocketrun.taskhost.CleanupState
+import io.github.kkkhs.pocketrun.taskhost.DisplayTarget
 import io.github.kkkhs.pocketrun.taskhost.HostBusyException
 import io.github.kkkhs.pocketrun.taskhost.HostStatus
 import io.github.kkkhs.pocketrun.taskhost.RawToolCall
 import io.github.kkkhs.pocketrun.taskhost.TaskHost
+import io.github.kkkhs.pocketrun.taskhost.TaskHostBackendDeath
+import io.github.kkkhs.pocketrun.taskhost.TaskHostDisplayPortRegistry
 import io.github.kkkhs.pocketrun.taskhost.TaskHostJson
 import io.github.kkkhs.pocketrun.taskhost.ToolValidationException
 import org.json.JSONObject
@@ -26,6 +30,11 @@ class TaskHostModule(context: ReactApplicationContext) : NativePocketRunTaskHost
     private val worker = Executors.newSingleThreadExecutor { runnable ->
         Thread(runnable, "PocketRun-TaskHostModule")
     }
+    private val backendDeathWorker = Executors.newSingleThreadExecutor { runnable ->
+        Thread(runnable, "PocketRun-TaskHostDeath")
+    }
+    @Volatile private var disposed = false
+    private val displayDeathRegistration = TaskHostDisplayPortRegistry.addDeathListener(::onDisplayDeath)
 
     override fun getName() = NAME
 
@@ -73,6 +82,23 @@ class TaskHostModule(context: ReactApplicationContext) : NativePocketRunTaskHost
     override fun retryCleanup(promise: Promise) = execute(promise) {
         check(host.retryCleanup()) { "Cleanup is still unproven or no retryable owner exists." }
         stateMap(host.state())
+    }
+
+    private fun onDisplayDeath(target: DisplayTarget) {
+        if (disposed) return
+        try {
+            backendDeathWorker.execute death@{
+                if (disposed) return@death
+                try {
+                    val binding = TaskHostBackendDeath.binding(host.state(), target) ?: return@death
+                    host.onBackendDeath(binding.requestNonce, binding.backendEpoch)
+                } catch (error: Throwable) {
+                    Log.e(NAME, "TaskHost backend-death transition failed", error)
+                }
+            }
+        } catch (error: RejectedExecutionException) {
+            if (!disposed) throw error
+        }
     }
 
     private fun execute(promise: Promise, action: () -> Any?) {
@@ -127,6 +153,9 @@ class TaskHostModule(context: ReactApplicationContext) : NativePocketRunTaskHost
     }
 
     override fun invalidate() {
+        disposed = true
+        displayDeathRegistration.close()
+        backendDeathWorker.shutdownNow()
         host.close()
         // If cleanup is unproven, the adapter retains its source owner until process teardown.
         if (host.state().cleanupState != CleanupState.UNPROVEN) adapter.close()

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
 import NativeTaskHost, {
   type TaskHostReadiness,
   type TaskHostState,
@@ -116,6 +116,8 @@ export default function TaskHostPanel({ colors }: { colors: Colors }) {
   const cleanupUnproven = state?.cleanupState === 'unproven';
   let result: Record<string, unknown> = {};
   try { result = state?.resultJson ? JSON.parse(state.resultJson) : {}; } catch { result = {}; }
+  const screenshotUri = typeof result.screenshotUri === 'string' && result.screenshotUri.startsWith('file://')
+    ? result.screenshotUri : null;
 
   return <View style={styles.panel}>
     <Text style={[styles.heading, { color: colors.text }]}>第 9 章 · 确定性工具宿主与手机审批</Text>
@@ -163,7 +165,16 @@ export default function TaskHostPanel({ colors }: { colors: Colors }) {
       <Text style={{ color: colors.text }}>资源清理：{String(result.cleanupStatus ?? state.cleanupState)}</Text>
       <Text selectable style={{ color: colors.muted }}>绑定：{state.backendEpoch ?? '(none)'}</Text>
       {'lineCount' in result && <Text style={{ color: colors.text }}>固定 /workspace/items.csv 行数：{String(result.lineCount)}</Text>}
+      {'guestUid' in result && <Text style={{ color: colors.text }}>guest UID：{String(result.guestUid || '(未取得)')} · cwd：{String(result.cwd || '(未取得)')}</Text>}
+      {'stageExitCodes' in result && <Text style={{ color: colors.text }}>阶段退出码：{String(result.stageExitCodes || '(none)')}</Text>}
+      {'exitCodes' in result && <Text style={{ color: colors.text }}>PRoot tracer / host 退出码：{String(result.exitCodes || '(none)')}</Text>}
+      {'stdout' in result && <Text selectable style={{ color: colors.text }}>stdout：{String(result.stdout || '(empty)')}</Text>}
+      {'stderr' in result && <Text selectable style={{ color: colors.text }}>stderr：{String(result.stderr || '(empty)')}</Text>}
       {'androidVersion' in result && <Text style={{ color: colors.text }}>Android：{String(result.androidVersion)} · API {String(result.apiLevel)}</Text>}
+      {screenshotUri && <Image accessibilityLabel="TaskHost 虚拟屏实际截图" source={{ uri: screenshotUri }} style={styles.screenshot} resizeMode="contain" />}
+      {'uiTreeStatus' in result && <Text style={{ color: colors.text }}>UI 树：{String(result.uiTreeStatus)} · 节点 {String(result.nodeCount)} · truncated {String(result.treeTruncated)}</Text>}
+      {'uiTreeText' in result && <Text selectable style={{ color: colors.text }}>UI 树实际文字：{String(result.uiTreeText || '(empty)')}</Text>}
+      {result.accepted === 'true' && <Text style={{ color: colors.muted }}>Binder 仅确认输入事件被接收；需再次观察实际截图与 UI 树，不能据此声称已经填对。</Text>}
       {state.message && <Text accessibilityRole="alert" style={{ color: colors.text }}>{state.message}</Text>}
     </View>}
     {error && <Text accessibilityRole="alert" style={{ color: colors.text }}>{error}</Text>}
@@ -181,4 +192,5 @@ const styles = StyleSheet.create({
   disabled: { opacity: 0.45 },
   approval: { gap: 8, borderWidth: 1, borderColor: '#64748b', borderRadius: 8, padding: 10 },
   result: { gap: 6 },
+  screenshot: { width: '100%', height: 360 },
 });

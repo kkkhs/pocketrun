@@ -7,6 +7,7 @@ import android.os.IBinder
 import android.os.Process
 import android.net.Uri
 import android.util.Base64
+import android.util.Log
 import android.system.Os
 import android.system.OsConstants
 import org.json.JSONArray
@@ -18,6 +19,8 @@ import java.util.concurrent.CancellationException
 import java.util.concurrent.CompletableFuture
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.ExecutionException
+import java.util.concurrent.Executors
+import java.util.concurrent.RejectedExecutionException
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.TimeoutException
 
@@ -25,6 +28,7 @@ class PrivilegedBackendController(private val context: Context) : Closeable {
     data class Info(val running: Boolean, val uid: Int, val pid: Int, val reply: String)
     data class DisplayInfo(val active: Boolean, val displayId: Int)
     data class CapabilitySnapshot(val ready: Boolean, val displayId: Int, val queryGeneration: Long)
+    data class CapabilityDeath(val displayId: Int, val queryGeneration: Long)
     data class ScreenshotInfo(
         val displayId: Int,
         val width: Int,
@@ -50,7 +54,12 @@ class PrivilegedBackendController(private val context: Context) : Closeable {
     private var lastInfo = stoppedInfo()
     private var pendingToken: String? = null
     private var generation = 0L
+    private var lastDisplayId = -1
     private var cacheFile: File? = null
+    private val capabilityDeathListeners = LinkedHashSet<(CapabilityDeath) -> Unit>()
+    private val capabilityDeathExecutor = Executors.newSingleThreadExecutor { runnable ->
+        Thread(runnable, "PocketRun-BackendDeath").apply { isDaemon = true }
+    }
 
     fun start(runCommand: (String) -> String): Info {
         synchronized(lock) {
@@ -128,6 +137,7 @@ class PrivilegedBackendController(private val context: Context) : Closeable {
         val current = requireServiceLocked()
         val id = current.createDemoDisplay()
         require(id > 0) { "后端返回了无效 displayId。" }
+        lastDisplayId = id
         invalidateQueriesLocked()
         DisplayInfo(true, id)
     }
@@ -135,15 +145,27 @@ class PrivilegedBackendController(private val context: Context) : Closeable {
     fun displayStatus(): DisplayInfo = synchronized(lock) {
         val current = requireServiceLocked()
         val id = current.displayId
+        lastDisplayId = id.takeIf { it > 0 } ?: -1
         if (id <= 0) invalidateQueriesLocked()
         DisplayInfo(id > 0, id)
     }
 
-    fun releaseDisplay(): DisplayInfo = synchronized(lock) {
-        invalidateQueriesLocked()
-        val current = requireServiceLocked()
-        current.releaseDisplay()
-        DisplayInfo(false, -1)
+    fun releaseDisplay(): DisplayInfo {
+        val outcome = synchronized(lock) {
+            val event = lastDisplayId.takeIf { it > 0 }?.let { CapabilityDeath(it, generation) }
+            val notification = event?.let { it to capabilityDeathListeners.toList() }
+            invalidateQueriesLocked()
+            val result = try {
+                requireServiceLocked().releaseDisplay()
+                lastDisplayId = -1
+                Result.success(DisplayInfo(false, -1))
+            } catch (error: Throwable) {
+                Result.failure(error)
+            }
+            result to notification
+        }
+        outcome.second?.let { (event, listeners) -> notifyCapabilityDeath(event, listeners) }
+        return outcome.first.getOrThrow()
     }
 
     fun captureScreenshot(expectedDisplayId: Int, expectedGeneration: Long = queryGeneration()): ScreenshotInfo {
@@ -234,7 +256,14 @@ class PrivilegedBackendController(private val context: Context) : Closeable {
         return result
     }
 
-    fun invalidateQueries() = synchronized(lock) { invalidateQueriesLocked() }
+    fun invalidateQueries() {
+        val notification = synchronized(lock) {
+            val event = lastDisplayId.takeIf { it > 0 }?.let { CapabilityDeath(it, generation) }
+            invalidateQueriesLocked()
+            event?.let { it to capabilityDeathListeners.toList() }
+        }
+        notification?.let { (event, listeners) -> notifyCapabilityDeath(event, listeners) }
+    }
 
     fun queryGeneration(): Long = synchronized(lock) { generation }
 
@@ -244,7 +273,13 @@ class PrivilegedBackendController(private val context: Context) : Closeable {
             return@synchronized CapabilitySnapshot(false, -1, generation)
         }
         val id = current.displayId
+        lastDisplayId = id.takeIf { it > 0 } ?: -1
         CapabilitySnapshot(id > 0 && lastInfo.uid == Process.SHELL_UID, id, generation)
+    }
+
+    fun addCapabilityDeathListener(listener: (CapabilityDeath) -> Unit): Closeable {
+        synchronized(lock) { capabilityDeathListeners.add(listener) }
+        return Closeable { synchronized(lock) { capabilityDeathListeners.remove(listener) } }
     }
 
     fun invalidateQueriesIfCurrent(expectedDisplayId: Int, expectedGeneration: Long): Boolean = synchronized(lock) {
@@ -263,6 +298,13 @@ class PrivilegedBackendController(private val context: Context) : Closeable {
     private fun checkSessionLocked(snapshot: QuerySession) {
         check(service === snapshot.service && serviceBinder === snapshot.binder &&
             snapshot.binder.isBinderAlive && generation == snapshot.generation) { "后端或虚拟屏已失效，结果已丢弃。" }
+    }
+
+    private fun notifyCapabilityDeath(event: CapabilityDeath, listeners: List<(CapabilityDeath) -> Unit>) {
+        for (listener in listeners) {
+            try { listener(event) }
+            catch (error: Throwable) { Log.e(TAG, "TaskHost backend-death listener failed", error) }
+        }
     }
 
     private fun deleteCacheLocked() {
@@ -311,7 +353,11 @@ class PrivilegedBackendController(private val context: Context) : Closeable {
         invalidateQueries()
         cancelStart()
         runCatching { stop() }
-        synchronized(lock) { clearLocked() }
+        synchronized(lock) {
+            clearLocked()
+            capabilityDeathListeners.clear()
+        }
+        capabilityDeathExecutor.shutdown()
     }
 
     private fun requireServiceLocked(): IPrivilegedBackend {
@@ -336,7 +382,20 @@ class PrivilegedBackendController(private val context: Context) : Closeable {
         reply = current.ping(),
     )
 
+    private fun scheduleCapabilityDeathLocked() {
+        val id = lastDisplayId
+        if (id <= 0 || capabilityDeathListeners.isEmpty()) return
+        val event = CapabilityDeath(id, generation)
+        val listeners = capabilityDeathListeners.toList()
+        try {
+            capabilityDeathExecutor.execute { notifyCapabilityDeath(event, listeners) }
+        } catch (error: RejectedExecutionException) {
+            Log.e(TAG, "TaskHost backend-death dispatch rejected", error)
+        }
+    }
+
     private fun clearLocked() {
+        scheduleCapabilityDeathLocked()
         invalidateQueriesLocked()
         val binder = serviceBinder
         val recipient = deathRecipient
@@ -349,6 +408,7 @@ class PrivilegedBackendController(private val context: Context) : Closeable {
         deathRecipient = null
         deathSignal?.countDown()
         deathSignal = null
+        lastDisplayId = -1
         lastInfo = stoppedInfo()
     }
 
@@ -367,6 +427,7 @@ class PrivilegedBackendController(private val context: Context) : Closeable {
     }
 
     companion object {
+        private const val TAG = "PocketRunBackend"
         private const val UID_PER_USER = 100_000
         private const val DISPLAY_WIDTH = 720
         private const val DISPLAY_HEIGHT = 1280

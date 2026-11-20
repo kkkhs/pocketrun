@@ -141,6 +141,37 @@ it('renders source and cleanup separately and retries an unproven owner before n
   expect(native.retryCleanup).toHaveBeenCalledWith();
 });
 
+it('renders actual Linux stdout stderr identity cwd and exit metadata separately', async () => {
+  (native.submitTool as jest.Mock).mockResolvedValue(state({
+    phase: 'succeeded', cleanupState: 'proven', resultJson: JSON.stringify({
+      sourceStatus: 'completed', cleanupStatus: 'done', lineCount: '3', guestUid: '10469',
+      cwd: '/workspace', stageExitCodes: '0,0,0,0,0', exitCodes: '0',
+      stdout: '3.22.8\n/workspace\n10469\n3', stderr: '',
+    }),
+  }));
+  await ReactTestRenderer.act(async () => button('运行 android.device_info').props.onPress());
+  expect(text()).toContain('guest UID');
+  expect(text()).toContain('/workspace');
+  expect(text()).toContain('阶段退出码');
+  expect(text()).toContain('PRoot tracer / host 退出码');
+  expect(text()).toContain('stdout');
+  expect(text()).toContain('stderr');
+});
+
+it('renders real display screenshot and bounded UI tree text without treating accepted as filled', async () => {
+  (native.submitTool as jest.Mock).mockResolvedValue(state({
+    phase: 'succeeded', cleanupState: 'proven', resultJson: JSON.stringify({
+      screenshotUri: 'file:///app/cache/taskhost-frame.jpg', uiTreeStatus: 'available',
+      uiTreeText: '演示输入框 | PocketRun_TaskHost_9', nodeCount: '12', treeTruncated: 'false',
+      accepted: 'true',
+    }),
+  }));
+  await ReactTestRenderer.act(async () => button('运行 android.device_info').props.onPress());
+  expect(screen.root.find(node => node.props.source?.uri === 'file:///app/cache/taskhost-frame.jpg')).toBeTruthy();
+  expect(text()).toContain('UI 树实际文字');
+  expect(text()).toContain('不能据此声称已经填对');
+});
+
 it('documents the single deterministic host boundary', () => {
   expect(text()).toContain('不运行模型循环');
   expect(text()).toContain('不接受任意命令、argv、环境、绑定路径或可执行文件');

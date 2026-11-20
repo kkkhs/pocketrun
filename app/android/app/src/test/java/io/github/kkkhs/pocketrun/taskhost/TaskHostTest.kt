@@ -222,6 +222,35 @@ class TaskHostTest {
     }
 
     @Test
+    fun backendDeathConsumesPendingApprovalWithoutCallingAdapter() {
+        val pending = host.submit(displayTap(3, 4))
+        assertTrue(host.onBackendDeath(notNull(pending.requestNonce), notNull(pending.backendEpoch)))
+        assertEquals(HostPhase.INVALIDATED, host.state().phase)
+        assertEquals(ApprovalState.INVALIDATED, host.state().approvalState)
+        assertEquals(0, capabilities.prepareDisplayCalls)
+        assertFalse(host.onAppUiDecision(notNull(pending.requestNonce), AppUiDecision.APPROVE))
+    }
+
+    @Test
+    fun backendDeathCleanupFailureRetainsRunningSlotUntilRetry() {
+        capabilities.closeFailures = 1
+        val pending = host.submit(displayTap(3, 4))
+        host.onAppUiDecision(notNull(pending.requestNonce), AppUiDecision.APPROVE)
+        assertTrue(host.onBackendDeath(notNull(pending.requestNonce), notNull(pending.backendEpoch)))
+        assertEquals(HostPhase.FAILED, host.state().phase)
+        assertEquals(CleanupState.UNPROVEN, host.state().cleanupState)
+        try {
+            host.submit(RawToolCall("android.device_info", emptyMap()))
+            fail("Backend-death cleanup must retain the slot")
+        } catch (_: HostBusyException) {
+            assertEquals(0, capabilities.prepareDeviceCalls)
+        }
+        assertTrue(host.retryCleanup())
+        assertEquals("CLEANUP_RECOVERED", host.state().code)
+        assertEquals(CleanupState.PROVEN, host.state().cleanupState)
+    }
+
+    @Test
     fun lateCallbackCannotCompleteOrCancelNextRun() {
         val first = host.submit(displayTap(3, 4))
         host.onAppUiDecision(notNull(first.requestNonce), AppUiDecision.APPROVE)
