@@ -118,6 +118,34 @@ it('supports explicit reject and cancel without an actor argument', async () => 
   expect((native.cancelFromAppUi as jest.Mock).mock.calls[0]).toHaveLength(1);
 });
 
+it('refreshes display readiness and re-reads recreated epoch immediately before submit', async () => {
+  (native.getHostReadiness as jest.Mock).mockResolvedValueOnce(readiness({
+    linuxReady: true, rootfsGeneration: 'gen-1', displayReady: false,
+  }));
+  await ReactTestRenderer.act(async () => {
+    screen.unmount();
+    screen = ReactTestRenderer.create(<TaskHostPanel colors={{ text: '#000', muted: '#777' }} />);
+    await Promise.resolve();
+  });
+  (native.getHostReadiness as jest.Mock).mockResolvedValueOnce(readiness({
+    linuxReady: true, rootfsGeneration: 'gen-1', displayReady: true,
+    displayId: 11, displayEpoch: '7',
+  }));
+  await ReactTestRenderer.act(async () => button('刷新工具目标').props.onPress());
+  expect(button('观察 App 演示虚拟屏').props.disabled).toBe(false);
+
+  (native.getHostReadiness as jest.Mock).mockResolvedValueOnce(readiness({
+    linuxReady: true, rootfsGeneration: 'gen-1', displayReady: true,
+    displayId: 12, displayEpoch: '8',
+  }));
+  (native.submitTool as jest.Mock).mockResolvedValue(state({ phase: 'executing' }));
+  await ReactTestRenderer.act(async () => button('观察 App 演示虚拟屏').props.onPress());
+  const calls = (native.submitTool as jest.Mock).mock.calls;
+  const [tool, json] = calls[calls.length - 1];
+  expect(tool).toBe('android.virtual_display_observe_or_demo_input');
+  expect(JSON.parse(json)).toEqual({ action: 'observe', expectedDisplayId: 12, expectedDisplayEpoch: 8 });
+});
+
 it('keeps typed Binder unavailable and never falls back to default display or host ADB', () => {
   expect(button('观察 App 演示虚拟屏').props.disabled).toBe(true);
   expect(button('申请输入固定演示文本').props.disabled).toBe(true);
@@ -139,6 +167,37 @@ it('renders source and cleanup separately and retries an unproven owner before n
   expect(text()).toContain('资源清理');
   await ReactTestRenderer.act(async () => button('重试资源清理').props.onPress());
   expect(native.retryCleanup).toHaveBeenCalledWith();
+});
+
+it('renders actual Linux stdout stderr identity cwd and exit metadata separately', async () => {
+  (native.submitTool as jest.Mock).mockResolvedValue(state({
+    phase: 'succeeded', cleanupState: 'proven', resultJson: JSON.stringify({
+      sourceStatus: 'completed', cleanupStatus: 'done', lineCount: '3', guestUid: '10469',
+      cwd: '/workspace', stageExitCodes: '0,0,0,0,0', exitCodes: '0',
+      stdout: '3.22.8\n/workspace\n10469\n3', stderr: '',
+    }),
+  }));
+  await ReactTestRenderer.act(async () => button('运行 android.device_info').props.onPress());
+  expect(text()).toContain('guest UID');
+  expect(text()).toContain('/workspace');
+  expect(text()).toContain('阶段退出码');
+  expect(text()).toContain('PRoot tracer / host 退出码');
+  expect(text()).toContain('stdout');
+  expect(text()).toContain('stderr');
+});
+
+it('renders real display screenshot and bounded UI tree text without treating accepted as filled', async () => {
+  (native.submitTool as jest.Mock).mockResolvedValue(state({
+    phase: 'succeeded', cleanupState: 'proven', resultJson: JSON.stringify({
+      screenshotUri: 'file:///app/cache/taskhost-frame.jpg', uiTreeStatus: 'available',
+      uiTreeText: '演示输入框 | PocketRun_TaskHost_9', nodeCount: '12', treeTruncated: 'false',
+      accepted: 'true',
+    }),
+  }));
+  await ReactTestRenderer.act(async () => button('运行 android.device_info').props.onPress());
+  expect(screen.root.find(node => node.props.source?.uri === 'file:///app/cache/taskhost-frame.jpg')).toBeTruthy();
+  expect(text()).toContain('UI 树实际文字');
+  expect(text()).toContain('不能据此声称已经填对');
 });
 
 it('documents the single deterministic host boundary', () => {

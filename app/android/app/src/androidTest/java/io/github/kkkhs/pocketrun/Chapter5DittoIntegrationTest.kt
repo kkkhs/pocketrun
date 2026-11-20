@@ -11,9 +11,11 @@ import android.os.SharedMemory
 import android.os.SystemClock
 import android.provider.Settings
 import android.system.Os
+import android.util.Log
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import androidx.test.uiautomator.By
+import androidx.test.uiautomator.Configurator
 import androidx.test.uiautomator.UiDevice
 import java.io.ByteArrayOutputStream
 import java.io.File
@@ -209,6 +211,112 @@ class Chapter5DittoIntegrationTest {
         }
     }
 
+    /** Both service owners are this run's genuine App-started UID 2000 backends, not platform/peer services. */
+    @Test fun failedRegistrationReleasesCallbackThreadsAndRetries() {
+        val host = arguments.getString("adbHost") ?: "127.0.0.1"
+        assertEquals("ADB must address this authorized device", "127.0.0.1", host)
+        val port = requiredPort("adbConnectPort")
+        assertAuthorizedDevice()
+        val key = AdbKey(PreferenceAdbKeyStore(context.getSharedPreferences("pocketrun_adb_test_identity", 0)),
+            "pocketrun-test@android")
+        pairIfRequested(host, key)
+        inspection = { command ->
+            AdbTransport().use { transport ->
+                AdbClient(host, port, key, transport).use { client ->
+                    client.connect(requireTls = true)
+                    boundedShellOutput(client, command, 512 * 1024)
+                }
+            }
+        }
+        assertFalse("No old Demo may be present", inspect("dumpsys activity activities").contains("DisplayDemoActivity"))
+        val owner = PrivilegedBackendController(context)
+        val contender = PrivilegedBackendController(context)
+        try {
+            val first = startBackend(owner, host, port, key)
+            assertEquals(2000, first.uid)
+            val ownerRpc = realBinderProxy(owner)
+            val ownerId = owner.createDemoDisplay().displayId.also { ownedDisplayIds += it }
+            assertOwnedDisplay(ownerId)
+            // A pre-existing unrelated registration must fail here, never be displaced or stopped.
+            awaitAvailableTree(ownerRpc, ownerId)
+            val ownerThreads = assertResourceThreadsLive(first.pid)
+            recordThreadPhase("controlled-owner-connected", first)
+
+            val second = startBackend(contender, host, port, key)
+            assertEquals(2000, second.uid)
+            assertTrue(second.pid != first.pid)
+            val rpc = realBinderProxy(contender)
+            val failedId = contender.createDemoDisplay().displayId.also { ownedDisplayIds += it }
+            assertTrue(waitUntil { systemHasDisplay(failedId) })
+            recordThreadPhase("before-failed-registration", second)
+            repeat(2) { attempt ->
+                assertEquals("A genuine second registration must be rejected, not time out or fabricate a tree",
+                    UiTreeCodec.Status.QueryFailed, checkedTree(rpc, failedId).status)
+                assertTrue("Every failed query must terminate framework callback and PocketRun event threads", waitUntil {
+                    processThreads(second.pid).values.none {
+                        it == "UiAutomation" || it.startsWith("PocketRun-UiEvents-".take(15))
+                    }
+                })
+                assertFailedConnectEvidence(second.pid, failedId, attempt + 1)
+                recordThreadPhase("failed-registration-${attempt + 1}-cleaned", second)
+                val stillOwned = processThreads(first.pid)
+                assertTrue("Failed cleanup must preserve the original controlled owner's exact TIDs",
+                    ownerThreads.all { it in stillOwned })
+                assertTrue("The original service must still answer queries after rejection/cleanup",
+                    checkedTree(ownerRpc, ownerId).status in setOf(UiTreeCodec.Status.Available,
+                        UiTreeCodec.Status.NoWindow, UiTreeCodec.Status.RootUnavailable))
+            }
+            contender.releaseDisplay()
+            assertTrue(waitUntil { !systemHasDisplay(failedId) && processThreads(second.pid).values.none(::isResourceThread) })
+            recordThreadPhase("failed-display-released", second)
+            assertTrue(ownerThreads.all { it in processThreads(first.pid) })
+
+            // Release ONLY our first owner; never stop another/platform automation service.
+            owner.releaseDisplay()
+            assertTrue(waitUntil { !systemHasDisplay(ownerId) && processThreads(first.pid).values.none(::isResourceThread) })
+            recordThreadPhase("controlled-owner-released", first)
+            val retryId = contender.createDemoDisplay().displayId.also { ownedDisplayIds += it }
+            assertTrue(retryId != failedId && retryId != ownerId)
+            assertOwnedDisplay(retryId)
+            awaitAvailableTree(rpc, retryId)
+            val retryThreads = assertResourceThreadsLive(second.pid)
+            recordThreadPhase("retry-connected", second)
+            contender.releaseDisplay()
+            assertTrue("Successful retry must also close the actual framework UiAutomation thread", waitUntil {
+                val threads = processThreads(second.pid)
+                retryThreads.none { it in threads } && threads.values.none(::isResourceThread)
+            })
+            recordThreadPhase("retry-released", second)
+            assertReleased(retryId)
+        } finally {
+            try { contender.close() } finally { owner.close() }
+            assertTrue("All test-owned backend PIDs must actually exit", waitUntil { ownedPids.none(::processExists) })
+            assertTrue("All test-owned displays must disappear", waitUntil { ownedDisplayIds.none(::systemHasDisplay) })
+        }
+    }
+
+    private fun recordThreadPhase(phase: String, info: PrivilegedBackendController.Info) {
+        Log.i("PocketRun-Chapter5", "phase=$phase sourceAPK=${context.applicationInfo.sourceDir} " +
+            "sourceSHA=${arguments.getString("sourceSha") ?: "unprovided"} API=${Build.VERSION.SDK_INT} " +
+            "backendUID=${info.uid} backendPID=${info.pid} TID_NAMES=${processThreads(info.pid).toSortedMap()}")
+    }
+
+    private fun assertFailedConnectEvidence(pid: Int, displayId: Int, attempts: Int) {
+        val logs = inspect("logcat -d -v brief -s PocketRun-UiAutomation:I '*:S'").lineSequence()
+            .filter { it.contains("backendPID=$pid displayId=$displayId ") }.toList()
+        assertTrue("Native source diagnostic must prove actual already-registered rejection, not any QueryFailed",
+            logs.count { it.contains("connect-failed") && it.contains("already registered!") } >= attempts)
+        val identity = Regex("thread=UiAutomation/(\\d+) identity=(\\d+)")
+        val captured = logs.filter { it.contains("connect-return sourceApk=") && it.contains("groupIdentity=") }
+            .mapNotNull { identity.find(it)?.value }.toSet()
+        val quit = logs.filter { it.contains("callback-quit") }.mapNotNull { identity.find(it)?.value }.toSet()
+        assertTrue("Native source diagnostic must capture each new framework thread by object/Looper/group identity",
+            captured.size >= attempts)
+        assertTrue("EVERY captured callback identity must be quit, with confirmed exit rather than just a count",
+            captured.all { it in quit } &&
+                logs.count { it.contains("cleanup") && it.contains("callbackThreadsExited=true") } >= attempts)
+    }
+
     private fun assertAuthorizedDevice() {
         val avd = arguments.getString("ownedAvdName")
         val serial = arguments.getString("authorizedSerial")
@@ -223,7 +331,10 @@ class Chapter5DittoIntegrationTest {
                 readOwnerProperty("ro.serialno"))
         }
         assertTrue("Wireless debugging requires Android 11+", Build.VERSION.SDK_INT >= 30)
-        assertEquals("This acceptance fixture targets API 36; other APIs need their own real-device evidence", 36, Build.VERSION.SDK_INT)
+        val expectedApi = arguments.getString("authorizedApi")?.toIntOrNull() ?: 36
+        assertTrue("This source fixture covers only the explicitly selected Android 15/16 API", expectedApi in setOf(35, 36))
+        assertEquals("The installed device must match authorizedApi; neither source review nor another API is Native evidence",
+            expectedApi, Build.VERSION.SDK_INT)
         assertTrue("Use an ARM64 device/AVD", Build.SUPPORTED_ABIS.contains("arm64-v8a"))
         assertEquals("Enable Developer options explicitly before running", 1,
             Settings.Global.getInt(context.contentResolver, Settings.Global.DEVELOPMENT_SETTINGS_ENABLED, 0))
@@ -270,9 +381,12 @@ class Chapter5DittoIntegrationTest {
         val pairPort = requiredPort("adbPairPort")
         val code = arguments.getString("adbPairCode")
         assertTrue("Supply the current system pairing code; it is not a fixture credential", code != null && Regex("[0-9]{6}").matches(code))
-        AdbTransport().use { transport ->
-            AdbPairingClient(host, pairPort, checkNotNull(code), key, transport).use { pairing ->
-                assertTrue("Real system TLS pairing was rejected", pairing.start())
+        val storeIdentity = context.getSharedPreferences("pocketrun_adb_test_identity", 0)
+        PAIRING_STATE.once(instrumentation, storeIdentity) {
+            AdbTransport().use { transport ->
+                AdbPairingClient(host, pairPort, checkNotNull(code), key, transport).use { pairing ->
+                    assertTrue("Real system TLS pairing was rejected", pairing.start())
+                }
             }
         }
     }
@@ -307,7 +421,7 @@ class Chapter5DittoIntegrationTest {
     /** Fixed test-only observations; never a product or runner-supplied arbitrary-shell API. */
     private fun inspect(command: String): String {
         val fixed = command in setOf("getprop ro.boot.qemu.avd_name", "getprop ro.serialno",
-            "dumpsys activity activities", "dumpsys window windows")
+            "dumpsys activity activities", "dumpsys window windows", "logcat -d -v brief -s PocketRun-UiAutomation:I '*:S'")
         val ownProcess = ownedPids.any {
             command == "ps -p $it -o PID" || command == "ps -T -p $it -o TID,CMD" || command == "kill $it"
         }
@@ -541,11 +655,21 @@ class Chapter5DittoIntegrationTest {
         assertFalse("Demo Activity must never belong to display 0", demoDisplayIds().contains(0))
         // This is deliberately the first UiDevice use, after all backend instances have died.
         // Never reconnect shell automation afterward, or inspect Panel JSON with textContains.
-        val device = UiDevice.getInstance(instrumentation)
-        assertFalse("Demo title must not appear on the main display", device.hasObject(By.displayId(0).text("PocketRun Virtual Display Demo")))
-        assertFalse("Demo input must not appear on the main display", device.hasObject(By.displayId(0).desc(INPUT_DESCRIPTION)))
-        assertFalse("Virtual-display text must not be injected into a main-display EditText",
-            device.hasObject(By.displayId(0).clazz("android.widget.EditText").text(INPUT_TEXT)))
+        // UiDevice uses Instrumentation.getUiAutomation with exactly these Configurator flags.
+        // Retain the actual object acquired by THIS test, not a name/global service reference.
+        val flags = Configurator.getInstance().uiAutomationFlags
+        val ownedAutomation = checkNotNull(instrumentation.getUiAutomation(flags))
+        try {
+            val device = UiDevice.getInstance(instrumentation)
+            assertFalse("Demo title must not appear on the main display", device.hasObject(By.displayId(0).text("PocketRun Virtual Display Demo")))
+            assertFalse("Demo input must not appear on the main display", device.hasObject(By.displayId(0).desc(INPUT_DESCRIPTION)))
+            assertFalse("Virtual-display text must not be injected into a main-display EditText",
+                device.hasObject(By.displayId(0).clazz("android.widget.EditText").text(INPUT_TEXT)))
+        } finally {
+            // This fixture alone acquired it after all its backend PIDs died. A later test must
+            // not inherit its registration. Do not obtain/disconnect any other automation here.
+            ownedAutomation.javaClass.getMethod("disconnect").invoke(ownedAutomation)
+        }
     }
 
     private fun assertImagesRemoved() {
@@ -574,7 +698,7 @@ class Chapter5DittoIntegrationTest {
         var observed = emptyMap<Int, String>()
         val complete = waitUntil {
             observed = processThreads(pid)
-            RESOURCE_THREAD_NAMES.take(3).all { expected -> observed.values.any { it.startsWith(expected.take(15)) } }
+            RESOURCE_THREAD_NAMES.take(4).all { expected -> observed.values.any { it.startsWith(expected.take(15)) } }
         }
         assertTrue("The real frame and UiAutomation query/event threads must be observable; observed=${observed.values.sorted()}", complete)
         return observed.filterValues(::isResourceThread).keys
@@ -601,10 +725,11 @@ class Chapter5DittoIntegrationTest {
     }
 
     companion object {
+        private val PAIRING_STATE = Chapter5PairingState()
         private const val INPUT_DESCRIPTION = "演示输入框"
         private const val INPUT_TEXT = "PocketRun_Ditto_5"
         // Kernel comm/ps CMD can truncate to 15 bytes; TIDs tie these prefixes to this PID.
         private val RESOURCE_THREAD_NAMES = listOf("PocketRun-DisplayFrames", "PocketRun-UiQuery-",
-            "PocketRun-UiEvents-", "PocketRun-UiClose-")
+            "PocketRun-UiEvents-", "UiAutomation", "PocketRun-UiClose-")
     }
 }

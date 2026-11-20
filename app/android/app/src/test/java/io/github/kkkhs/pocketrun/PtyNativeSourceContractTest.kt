@@ -15,6 +15,15 @@ class PtyNativeSourceContractTest {
         assertFalse(source.contains("kMaximumPostExitReads"))
     }
 
+    @Test fun interactiveHistoryPersistenceIsDisabledInsteadOfFallingBackToInstalledRootfs() {
+        val source = source()
+        assertTrue(source.contains("HOME=/root"))
+        assertTrue(source.contains("\"HISTFILE=\""))
+        assertFalse(source.contains("HISTFILE=/root/"))
+        assertFalse(source.contains("HISTFILE=/tmp/"))
+        assertFalse(source.contains("HISTFILE=/dev/null")) // BusyBox trimming could derive a /dev/null.<pid>.new path.
+    }
+
     @Test fun launchIdentityDoesNotUseDumpabilitySensitiveProcDirectoryOwner() {
         val source = source()
         assertTrue(source.contains("/proc/%d/status"))

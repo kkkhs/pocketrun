@@ -502,10 +502,13 @@ Java_io_github_kkkhs_pocketrun_PtyNative_nativeOpen(
         "-b", workspace + ":/workspace", "-b", temporary + ":/tmp",
         "-b", "/proc:/proc", "-b", "/dev/null:/dev/null", "/bin/busybox", "sh", "-l"
     };
+    // BusyBox ash falls back to $HOME/.ash_history only when HISTFILE is unset. A fixed empty
+    // value keeps in-memory editing but makes its bounded load/append fopen fail before any path write.
     std::vector<std::string> environment = {
         "PROOT_LOADER=" + loader, "POCKETRUN_EXPECTED_PARENT_PID=" + std::to_string(expected_parent_pid_value),
         "POCKETRUN_TRACER_RECORD=" + tracer_record, "PROOT_TMP_DIR=" + temporary,
-        "HOME=/root", "PATH=/bin:/usr/bin", "LANG=C.UTF-8", "TERM=xterm-256color", "TMPDIR=/tmp"
+        "HOME=/root", "HISTFILE=",
+        "PATH=/bin:/usr/bin", "LANG=C.UTF-8", "TERM=xterm-256color", "TMPDIR=/tmp"
     };
 
     int master = MoveAboveStdio(open("/dev/ptmx", O_RDWR | O_NOCTTY | O_CLOEXEC | O_NONBLOCK));
