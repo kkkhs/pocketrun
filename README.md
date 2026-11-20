@@ -2,7 +2,9 @@
 
 面向 React / TypeScript 开发者，学习让 Agent 在 Android 手机上操作 App、处理文件和执行命令。
 
-教程站已上线至第 5 章：第 1 章跑通 React → Kotlin，第 2 章取得 App 自有 ADB 启动入口，第 3 章完成 UID 2000 的 `app_process` 后端与 Binder 通信，第 4 章创建演示 VirtualDisplay 并验证 `displayId` 路由，第 5 章从同一显示读取截图和 UI 树、定向输入并重新观察结果。后续能力按章节推进。本地第 6 章已有云真机命令、生命周期和正常产品界面记录，未发布。第 7 章已有最小 Alpine 正常演示与独立生命周期记录，但安装重用／死亡恢复及最终版本完整验收仍待完成。第 8、9 章的 PTY、工具校验、手机审批和确定性宿主代码与教程草稿已加入；新版本真机验收、PR、Pages 与源码快照仍待完成，不把本地构建通过当作交付。
+教程站已发布至[第 6 章](https://kkkhs.github.io/pocketrun/chapter-6/)：从 React 调用 Kotlin，逐步接通 App 自有 ADB、UID 2000 后端、虚拟屏观察与输入、私有工作目录和命令管道。
+
+第 7—11 章已有代码与教程 Draft PR：最小 Alpine、PTY、手机审批宿主、单任务上下文和模型工具循环。新版真机验收、真实模型调用、合并与网站发布仍待完成；源码可见或本地检查通过不等于完整交付。
 
 ## 阅读教程
 
@@ -12,10 +14,11 @@
 - [第 3 章：启动 shell 后端](website/docs/chapter-3.md)
 - [第 4 章：把 Demo App 放进虚拟屏](website/docs/chapter-4.md)
 - [第 5 章：看见界面，再操作它](website/docs/chapter-5.md)
-- [第 6 章：工作目录与命令管道（本地开发草稿，未全面验收）](website/docs/chapter-6.md)
+- [第 6 章：工作目录与命令管道](https://kkkhs.github.io/pocketrun/chapter-6/)
 - [第 7 章：PRoot 与最小 Alpine 环境（本地开发草稿，正常演示已实测，未全面验收/未发布）](website/docs/chapter-7.md)
 - [第 8 章：真正的交互式 PTY（本地草稿，待真机验收）](website/docs/chapter-8.md)
-- [第 9 章：工具校验、手机审批与宿主（本地草稿，待真机验收）](website/docs/chapter-9.md)
+- [第 9 章：工具校验、手机审批与宿主（待真机验收）](website/docs/chapter-9.md)
+- [第 10 章：把两次调用放进同一个任务（Draft PR #17）](website/docs/chapter-10.md)
 - [已发布章节源码快照](https://github.com/kkkhs/pocketrun/releases)
 - [参考：系统概览](https://kkkhs.github.io/pocketrun/architecture/)
 - [参考：运行与发布教程站](https://kkkhs.github.io/pocketrun/chapter-0/)
