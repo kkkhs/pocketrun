@@ -108,7 +108,7 @@ class ProductAdbBootstrapIntegrationTest {
                 context.getSystemService(DisplayManager::class.java).getDisplay(displayId) != null)
             success("production-display-created-no-tree-query", uid = 2000, pid = backendPid, displayId = displayId)
         } catch (error: Throwable) {
-            // Never forward a framework/node/RN exception message or cause containing UI credentials.
+            observer.diagnoseFailure("product-test-$stage-catch", error) // Classes + fixed category only, no raw cause/message.
             failure = AssertionError("Product bootstrap blocked at $stage (${error.javaClass.simpleName}); credentials withheld.")
         } finally {
             var fieldsCleared = true
@@ -123,6 +123,8 @@ class ProductAdbBootstrapIntegrationTest {
             pairingPort = 0
             connectionPort = 0
             val observerExited = observer.closeAndConfirm()
+            Log.i("PocketRun-ObserverDiag", "stage=product-test-cleanup sourceUID=${Process.myUid()} sourcePID=${Process.myPid()} " +
+                "fieldsCleared=$fieldsCleared callbackAndWorkerExited=$observerExited privateInstrumentationState=untouched")
             if (!fieldsCleared || !observerExited) {
                 failure = AssertionError("Bootstrap cleanup blocked: fieldsCleared=$fieldsCleared observerExited=$observerExited.")
             }
