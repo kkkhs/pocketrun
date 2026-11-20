@@ -88,6 +88,7 @@ class AndroidTaskCapabilitiesPolicyTest {
         var invalidations = 0
 
         override fun snapshot() = target
+        override fun lastKnownTarget() = target
         override fun observe(expected: DisplayTarget): ToolResult {
             check(expected == target)
             entered.countDown()

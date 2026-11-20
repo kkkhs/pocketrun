@@ -25,6 +25,19 @@ class TaskHostDisplayPortTest {
     }
 
     @Test
+    fun queuedBackendDeathBeforeUnregisterReplaysLastKnownTarget() {
+        val port = RecordingPort(snapshotFails = true)
+        val deaths = mutableListOf<DisplayTarget>()
+        TaskHostDisplayPortRegistry.addDeathListener(deaths::add).use {
+            TaskHostDisplayPortRegistry.install(port).close()
+        }
+        assertEquals(listOf(port.target), deaths)
+        // The queued controller callback may now be dropped by port.close without losing invalidation.
+        port.emitDeath()
+        assertEquals(listOf(port.target), deaths)
+    }
+
+    @Test
     fun unregisterStillPublishesOldTargetWhenPortCloseFails() {
         val port = RecordingPort(failClose = true)
         val deaths = mutableListOf<DisplayTarget>()
@@ -48,12 +61,16 @@ class TaskHostDisplayPortTest {
         assertEquals(0, callbacks)
     }
 
-    private class RecordingPort(private val failClose: Boolean = false) : TaskHostDisplayPort, Closeable {
+    private class RecordingPort(
+        private val failClose: Boolean = false,
+        private val snapshotFails: Boolean = false,
+    ) : TaskHostDisplayPort, Closeable {
         val target = DisplayTarget(7L, 11, 10469, true)
         private var listener: ((DisplayTarget) -> Unit)? = null
         var closes = 0
 
-        override fun snapshot() = target
+        override fun snapshot() = if (snapshotFails) throw IllegalStateException("backend already dead") else target
+        override fun lastKnownTarget() = target
         override fun observe(expected: DisplayTarget) = ToolResult(emptyMap())
         override fun demoTap(expected: DisplayTarget, x: Int, y: Int) = ToolResult(emptyMap())
         override fun demoText(expected: DisplayTarget, text: String) = ToolResult(emptyMap())

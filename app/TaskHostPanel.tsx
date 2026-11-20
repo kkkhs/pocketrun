@@ -7,6 +7,8 @@ import NativeTaskHost, {
 
 type Colors = { text: string; muted: string };
 type ToolChoice = 'device' | 'linux' | 'observe' | 'demoText';
+type PanelActionResult = TaskHostState | TaskHostReadiness |
+  { state: TaskHostState; readiness: TaskHostReadiness };
 const FIXED_DEMO_TEXT = 'PocketRun_TaskHost_9';
 
 function taskHostModule() {
@@ -54,15 +56,20 @@ export default function TaskHostPanel({ colors }: { colors: Colors }) {
       inFlight.current = true;
       const request = generation.current;
       try {
-        const next = await NativeTaskHost.getTaskState();
-        if (live.current && request === generation.current) setState(next);
+        const [nextState, nextReadiness] = await Promise.all([
+          NativeTaskHost.getTaskState(), NativeTaskHost.getHostReadiness(),
+        ]);
+        if (live.current && request === generation.current) {
+          setState(nextState);
+          setReadiness(nextReadiness);
+        }
       } catch { /* Explicit actions surface errors; polling never manufactures state. */ }
       finally { inFlight.current = false; }
     }, 250);
     return () => { live.current = false; clearInterval(timer); };
   }, []);
 
-  async function perform(action: () => Promise<TaskHostState | TaskHostReadiness>) {
+  async function perform(action: () => Promise<PanelActionResult>) {
     if (actionBusy.current) return;
     actionBusy.current = true;
     const request = ++generation.current;
@@ -72,7 +79,9 @@ export default function TaskHostPanel({ colors }: { colors: Colors }) {
       if (!NativeTaskHost) throw new Error('TaskHost 原生模块未注册，请重新构建 Android 应用。');
       const value = await action();
       if (!live.current || request !== generation.current) return;
-      if ('phase' in value) setState(value); else setReadiness(value);
+      if ('phase' in value) setState(value);
+      else if ('state' in value) { setState(value.state); setReadiness(value.readiness); }
+      else setReadiness(value);
     } catch (failure) {
       if (live.current && request === generation.current) {
         setError(failure instanceof Error ? failure.message : 'TaskHost 操作失败。');
@@ -85,22 +94,24 @@ export default function TaskHostPanel({ colors }: { colors: Colors }) {
 
   function submit(choice: ToolChoice) {
     const native = NativeTaskHost;
-    if (!native || !readiness) return;
-    try {
+    if (!native) return;
+    perform(async () => {
+      const fresh = await native.getHostReadiness();
       const call = (() => {
         switch (choice) {
           case 'device': return ['android.device_info', '{}'] as const;
-          case 'linux': return ['linux.count_demo_csv', '{}'] as const;
+          case 'linux':
+            if (!fresh.linuxReady) throw new Error('固定 Linux 工具尚未准备。');
+            return ['linux.count_demo_csv', '{}'] as const;
           case 'observe': return ['android.virtual_display_observe_or_demo_input',
-            displayArguments(readiness, 'observe')] as const;
+            displayArguments(fresh, 'observe')] as const;
           case 'demoText': return ['android.virtual_display_observe_or_demo_input',
-            displayArguments(readiness, 'demo_text')] as const;
+            displayArguments(fresh, 'demo_text')] as const;
         }
       })();
-      perform(() => native.submitTool(call[0], call[1]));
-    } catch (failure) {
-      setError(failure instanceof Error ? failure.message : '工具目标无效。');
-    }
+      const next = await native.submitTool(call[0], call[1]);
+      return { state: next, readiness: fresh };
+    });
   }
 
   function button(label: string, disabled: boolean, action: () => void) {
@@ -124,6 +135,8 @@ export default function TaskHostPanel({ colors }: { colors: Colors }) {
     <Text style={{ color: colors.muted }}>宿主只有三个固定工具；不运行模型循环，不接受任意命令、argv、环境、绑定路径或可执行文件。</Text>
     {button('准备固定 Linux 工具', busy || active || readiness?.linuxReady === true,
       () => perform(() => taskHostModule().prepareHost()))}
+    {button('刷新工具目标', busy || active,
+      () => perform(() => taskHostModule().getHostReadiness()))}
     <Text style={{ color: colors.text }}>App UID：{readiness?.packageUid ?? '(未读取)'}</Text>
     <Text style={{ color: colors.text }}>Linux：{readiness?.linuxReady
       ? `已校验 · generation ${readiness.rootfsGeneration}` : '未准备'}</Text>

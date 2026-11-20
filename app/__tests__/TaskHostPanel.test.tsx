@@ -118,6 +118,34 @@ it('supports explicit reject and cancel without an actor argument', async () => 
   expect((native.cancelFromAppUi as jest.Mock).mock.calls[0]).toHaveLength(1);
 });
 
+it('refreshes display readiness and re-reads recreated epoch immediately before submit', async () => {
+  (native.getHostReadiness as jest.Mock).mockResolvedValueOnce(readiness({
+    linuxReady: true, rootfsGeneration: 'gen-1', displayReady: false,
+  }));
+  await ReactTestRenderer.act(async () => {
+    screen.unmount();
+    screen = ReactTestRenderer.create(<TaskHostPanel colors={{ text: '#000', muted: '#777' }} />);
+    await Promise.resolve();
+  });
+  (native.getHostReadiness as jest.Mock).mockResolvedValueOnce(readiness({
+    linuxReady: true, rootfsGeneration: 'gen-1', displayReady: true,
+    displayId: 11, displayEpoch: '7',
+  }));
+  await ReactTestRenderer.act(async () => button('刷新工具目标').props.onPress());
+  expect(button('观察 App 演示虚拟屏').props.disabled).toBe(false);
+
+  (native.getHostReadiness as jest.Mock).mockResolvedValueOnce(readiness({
+    linuxReady: true, rootfsGeneration: 'gen-1', displayReady: true,
+    displayId: 12, displayEpoch: '8',
+  }));
+  (native.submitTool as jest.Mock).mockResolvedValue(state({ phase: 'executing' }));
+  await ReactTestRenderer.act(async () => button('观察 App 演示虚拟屏').props.onPress());
+  const calls = (native.submitTool as jest.Mock).mock.calls;
+  const [tool, json] = calls[calls.length - 1];
+  expect(tool).toBe('android.virtual_display_observe_or_demo_input');
+  expect(JSON.parse(json)).toEqual({ action: 'observe', expectedDisplayId: 12, expectedDisplayEpoch: 8 });
+});
+
 it('keeps typed Binder unavailable and never falls back to default display or host ADB', () => {
   expect(button('观察 App 演示虚拟屏').props.disabled).toBe(true);
   expect(button('申请输入固定演示文本').props.disabled).toBe(true);

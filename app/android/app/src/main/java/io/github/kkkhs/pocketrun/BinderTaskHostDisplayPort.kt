@@ -13,20 +13,30 @@ internal class BinderTaskHostDisplayPort(
 ) : TaskHostDisplayPort, Closeable {
     private val lock = Any()
     private var deathListener: ((DisplayTarget) -> Unit)? = null
+    private var lastTarget: DisplayTarget? = null
     private var closed = false
     private val backendDeathRegistration = backend.addCapabilityDeathListener { event ->
-        val listener = synchronized(lock) { if (closed) null else deathListener }
-        listener?.invoke(DisplayTarget(event.queryGeneration, event.displayId, Process.myUid(), true))
+        val target = DisplayTarget(event.queryGeneration, event.displayId, Process.myUid(), true)
+        val listener = synchronized(lock) {
+            if (closed) null else { lastTarget = target; deathListener }
+        }
+        listener?.invoke(target)
     }
     override fun snapshot(): DisplayTarget {
         check(synchronized(lock) { !closed }) { "TaskHost display port is closed." }
         val current = backend.capabilitySnapshot()
-        return DisplayTarget(current.queryGeneration, current.displayId, Process.myUid(), current.ready)
+        val target = DisplayTarget(current.queryGeneration, current.displayId, Process.myUid(), current.ready)
+        if (target.backendReady && target.displayId > 0 && target.displayEpoch > 0) {
+            synchronized(lock) { if (!closed) lastTarget = target }
+        }
+        return target
     }
+
+    override fun lastKnownTarget(): DisplayTarget? = synchronized(lock) { lastTarget }
 
     override fun observe(expected: DisplayTarget): ToolResult {
         requireTarget(expected)
-        val frame = backend.captureScreenshot(expected.displayId, expected.displayEpoch)
+        val frame = backend.captureTaskHostScreenshot(expected.displayId, expected.displayEpoch)
         val tree = backend.dumpUiTree(expected.displayId, expected.displayEpoch)
         return ToolResult(mapOf(
             "source" to "app-owned-typed-binder",

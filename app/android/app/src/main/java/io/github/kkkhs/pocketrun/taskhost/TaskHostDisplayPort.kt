@@ -4,6 +4,7 @@ import java.io.Closeable
 
 internal interface TaskHostDisplayPort {
     fun snapshot(): DisplayTarget
+    fun lastKnownTarget(): DisplayTarget?
     fun observe(expected: DisplayTarget): ToolResult
     fun demoTap(expected: DisplayTarget, x: Int, y: Int): ToolResult
     fun demoText(expected: DisplayTarget, text: String): ToolResult
@@ -28,7 +29,9 @@ internal object TaskHostDisplayPortRegistry {
             throw error
         }
         return Closeable {
-            val oldTarget = runCatching { value.snapshot() }.getOrNull()
+            val oldTarget = (runCatching { value.snapshot() }.getOrNull()
+                ?.takeIf { it.backendReady && it.displayId > 0 && it.displayEpoch > 0 }
+                ?: value.lastKnownTarget())
                 ?.takeIf { it.backendReady && it.displayId > 0 && it.displayEpoch > 0 }
             val removed = synchronized(lock) {
                 if (port === value) { port = null; true } else false

@@ -14,6 +14,7 @@ import org.json.JSONArray
 import org.json.JSONObject
 import java.io.Closeable
 import java.io.File
+import java.io.IOException
 import java.security.SecureRandom
 import java.util.concurrent.CancellationException
 import java.util.concurrent.CompletableFuture
@@ -55,7 +56,7 @@ class PrivilegedBackendController(private val context: Context) : Closeable {
     private var pendingToken: String? = null
     private var generation = 0L
     private var lastDisplayId = -1
-    private var cacheFile: File? = null
+    private val frameCaches = FrameCacheSlots()
     private val capabilityDeathListeners = LinkedHashSet<(CapabilityDeath) -> Unit>()
     private val capabilityDeathExecutor = Executors.newSingleThreadExecutor { runnable ->
         Thread(runnable, "PocketRun-BackendDeath").apply { isDaemon = true }
@@ -168,7 +169,14 @@ class PrivilegedBackendController(private val context: Context) : Closeable {
         return outcome.first.getOrThrow()
     }
 
-    fun captureScreenshot(expectedDisplayId: Int, expectedGeneration: Long = queryGeneration()): ScreenshotInfo {
+    fun captureScreenshot(expectedDisplayId: Int, expectedGeneration: Long = queryGeneration()): ScreenshotInfo =
+        captureScreenshotOwned(expectedDisplayId, expectedGeneration, taskHostOwned = false)
+
+    fun captureTaskHostScreenshot(expectedDisplayId: Int, expectedGeneration: Long): ScreenshotInfo =
+        captureScreenshotOwned(expectedDisplayId, expectedGeneration, taskHostOwned = true)
+
+    private fun captureScreenshotOwned(expectedDisplayId: Int, expectedGeneration: Long,
+        taskHostOwned: Boolean): ScreenshotInfo {
         val snapshot = querySession(expectedDisplayId, expectedGeneration)
         val memory = snapshot.service.captureScreenshot(expectedDisplayId)
             ?: error("后端没有返回截图。")
@@ -180,14 +188,15 @@ class PrivilegedBackendController(private val context: Context) : Closeable {
         require(packet.jpeg.size in 1..ScreenshotCodec.MAX_JPEG_BYTES) { "截图超过 2 MiB。" }
         return synchronized(lock) {
             checkSessionLocked(snapshot)
-            val file = File.createTempFile("pocketrun-frame-", ".jpg", context.cacheDir)
+            val prefix = if (taskHostOwned) "pocketrun-taskhost-frame-" else "pocketrun-frame-"
+            val file = File.createTempFile(prefix, ".jpg", context.cacheDir)
             try {
                 Os.chmod(file.absolutePath, OsConstants.S_IRUSR or OsConstants.S_IWUSR)
                 file.outputStream().use { it.write(packet.jpeg) }
                 val info = ScreenshotInfo(packet.displayId, packet.width, packet.height,
                     packet.frameTimestampNanos.toString(), Uri.fromFile(file).toString())
-                deleteCacheLocked()
-                cacheFile = file
+                if (taskHostOwned) frameCaches.replaceTaskHost(file)
+                else frameCaches.replaceDisplay(file)
                 info
             } catch (error: Throwable) {
                 file.delete()
@@ -307,14 +316,14 @@ class PrivilegedBackendController(private val context: Context) : Closeable {
         }
     }
 
-    private fun deleteCacheLocked() {
-        cacheFile?.delete()
-        cacheFile = null
+    private fun deleteAllCachesLocked() {
+        try { frameCaches.clear() }
+        catch (error: IOException) { Log.e(TAG, "Owned screenshot cache cleanup failed", error) }
     }
 
     private fun invalidateQueriesLocked() {
         generation++
-        deleteCacheLocked()
+        deleteAllCachesLocked()
     }
 
     fun cancelStart() {
