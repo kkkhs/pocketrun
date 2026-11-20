@@ -186,7 +186,7 @@ export default function PtyPanel({ colors }: { colors: Colors }) {
       <Text selectable style={{ color: colors.text }}>PTY 合流输出：{result.output || '(empty)'}</Text>
     </View>}
     {error && <Text accessibilityRole="alert" style={{ color: colors.text }}>{error}</Text>}
-    <Text style={{ color: colors.muted }}>输入 UTF-8 上限 4 KiB，实时合流输出总上限 64 KiB，固定 120 秒终端截止时间；超时明确显示 timed_out。PTY 天然合并 stdout / stderr。直接 native tracer 回收不等于整棵 tracee 树已在设备上证明消失；清理不明确时不会删除 RUN 目录。</Text>
+    <Text style={{ color: colors.muted }}>输入 UTF-8 上限 4 KiB，实时合流输出总上限 64 KiB，固定 120 秒终端截止时间；超时明确显示 timed_out。shell 持久历史已固定关闭，不修改已校验 rootfs。PTY 天然合并 stdout / stderr。直接 native tracer 回收不等于整棵 tracee 树已在设备上证明消失；清理不明确时不会删除 RUN 目录。</Text>
   </View>;
 }
 
