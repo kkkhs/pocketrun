@@ -21,6 +21,7 @@ import LinuxPanel from './LinuxPanel';
 import PtyPanel from './PtyPanel';
 import TaskHostPanel from './TaskHostPanel';
 import SingleTaskPanel from './SingleTaskPanel';
+import AgentLoopPanel from './AgentLoopPanel';
 import NativePocketRunDevice, {
   type DeviceInfo,
 } from './specs/NativePocketRunDevice';
@@ -139,6 +140,7 @@ function DeviceScreen() {
         <PtyPanel colors={colors} />
         <TaskHostPanel colors={colors} />
         <SingleTaskPanel colors={colors} />
+        <AgentLoopPanel colors={colors} />
       </ScrollView>
     </View>
   );
