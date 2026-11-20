@@ -5,7 +5,9 @@ import android.app.UiAutomation
 import android.graphics.Rect
 import android.os.HandlerThread
 import android.os.Looper
+import android.os.Process
 import android.os.SystemClock
+import android.util.Log
 import android.util.SparseArray
 import android.view.accessibility.AccessibilityNodeInfo
 import android.view.accessibility.AccessibilityWindowInfo
@@ -25,8 +27,9 @@ internal class DisplayAutomation(private val displayId: Int) : Closeable {
     private val automation = AtomicReference<Any?>()
     private val eventThread = AtomicReference<HandlerThread?>()
     private val cleanupLock = Any()
+    private val callbacks = OwnedConnectThreads("PocketRun-UiOwner-$displayId")
     private val worker = Executors.newSingleThreadExecutor { task ->
-        Thread(task, "PocketRun-UiQuery-$displayId").apply { isDaemon = true }
+        Thread(callbacks.group, task, "PocketRun-UiQuery-$displayId").apply { isDaemon = true }
     }
 
     // Called with the session lifecycle lock held; never connects or waits here.
@@ -109,6 +112,7 @@ internal class DisplayAutomation(private val displayId: Int) : Closeable {
     private fun getAutomation(query: Query): Any {
         automation.get()?.let { return it }
         query.checkDeadline()
+        callbacks.requireDrained()
         val events = HandlerThread("PocketRun-UiEvents-$displayId")
         var localPeer: Any? = null
         var localInstance: Any? = null
@@ -129,16 +133,30 @@ internal class DisplayAutomation(private val displayId: Int) : Closeable {
             automation.set(instance)
             query.checkDeadline()
             val timedConnect = api.methods.firstOrNull {
-                it.name == "connect" && it.parameterTypes.contentEquals(
+                it.name == "connectWithTimeout" && it.parameterTypes.contentEquals(
                     arrayOf(Int::class.javaPrimitiveType, Long::class.javaPrimitiveType))
             }
             val connectFlags = UiAutomation.FLAG_DONT_SUPPRESS_ACCESSIBILITY_SERVICES
-            if (timedConnect != null) {
-                timedConnect.invoke(instance, connectFlags, QUERY_TIMEOUT_MS)
-            } else {
-                // Older releases have an internal connect timeout. The caller's deadline still
-                // expires independently; no Binder caller waits for this worker indefinitely.
-                api.getMethod("connect", Int::class.javaPrimitiveType).invoke(instance, connectFlags)
+            val before = callbacks.snapshot()
+            check(before.complete) { "Owned connect thread enumeration is incomplete." }
+            try {
+                if (timedConnect != null) {
+                    timedConnect.invoke(instance, connectFlags, QUERY_TIMEOUT_MS)
+                } else {
+                    // Older releases have an internal connect timeout; caller deadline is independent.
+                    api.getMethod("connect", Int::class.javaPrimitiveType).invoke(instance, connectFlags)
+                }
+            } finally {
+                val after = callbacks.snapshot()
+                callbacks.capture(before, after) { thread ->
+                    thread is HandlerThread && thread.name == "UiAutomation" && thread.looper?.thread === thread
+                }
+                after.threads.filter { thread -> before.threads.none { it === thread } }.forEach { thread ->
+                    Log.i("PocketRun-UiAutomation", "connect-return sourceApk=${System.getProperty("java.class.path")} " +
+                        "backendUID=${Process.myUid()} backendPID=${Process.myPid()} displayId=$displayId " +
+                        "thread=${thread.name}/${thread.id} identity=${System.identityHashCode(thread)} " +
+                        "groupIdentity=${System.identityHashCode(thread.threadGroup)}")
+                }
             }
             query.checkDeadline()
             val info = api.getMethod("getServiceInfo").invoke(instance) as? AccessibilityServiceInfo
@@ -150,6 +168,9 @@ internal class DisplayAutomation(private val displayId: Int) : Closeable {
             query.checkDeadline()
             return instance
         } catch (error: Throwable) {
+            val cause = (error as? java.lang.reflect.InvocationTargetException)?.targetException ?: error
+            Log.w("PocketRun-UiAutomation", "connect-failed backendUID=${Process.myUid()} backendPID=${Process.myPid()} " +
+                "displayId=$displayId cause=${cause.javaClass.name} message=${cause.message}")
             // close() may have taken the shared refs and attempted disconnect BEFORE
             // connect started. Still disconnect this local pair after a late connect:
             // taking a ref is not proof that its eventual connection was closed.
@@ -302,11 +323,21 @@ internal class DisplayAutomation(private val displayId: Int) : Closeable {
 
     private fun disconnectResources(peer: Any?, instance: Any?, events: HandlerThread?) {
         try {
-            // UiAutomation.disconnect also shuts down its internal callback thread.
+            // Android 15/16 disconnect throws BEFORE its callback-thread finally when a rejected
+            // registration leaves CONNECTING. destroy() has the same dependency, so is not a fix.
             if (instance != null) runCatching { instance.javaClass.getMethod("disconnect").invoke(instance) }
             if (peer != null) runCatching { peer.javaClass.getMethod("disconnect").invoke(peer) }
         } finally {
             events?.quitSafely()
+            val drained = callbacks.stopAndJoin(CALLBACK_JOIN_MS) { thread ->
+                // Captured only inside this connect's private group, by object + Looper identity.
+                // No hidden fields/state edits, process-wide name matching, or service takeover.
+                Log.i("PocketRun-UiAutomation", "callback-quit backendUID=${Process.myUid()} backendPID=${Process.myPid()} " +
+                    "displayId=$displayId thread=${thread.name}/${thread.id} identity=${System.identityHashCode(thread)}")
+                (thread as HandlerThread).looper?.quit()
+            }
+            Log.i("PocketRun-UiAutomation", "cleanup backendUID=${Process.myUid()} backendPID=${Process.myPid()} " +
+                "displayId=$displayId callbackThreadsExited=$drained")
         }
     }
 
@@ -315,5 +346,6 @@ internal class DisplayAutomation(private val displayId: Int) : Closeable {
 
     companion object {
         private const val QUERY_TIMEOUT_MS = 1800L
+        private const val CALLBACK_JOIN_MS = 500L
     }
 }
