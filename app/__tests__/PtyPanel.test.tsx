@@ -151,6 +151,7 @@ it('deduplicates start and closes only its own active token on unmount', async (
 
 it('documents the PTY merge and keeps arbitrary executable, env and bind parameters out of JS', () => {
   expect(text()).toContain('PTY 天然合并 stdout / stderr');
+  expect(text()).toContain('shell 持久历史已固定关闭');
   expect(text()).toContain('不能指定可执行文件、环境、绑定目录或 PID');
   expect((native.writePty as jest.Mock).mock.calls).toHaveLength(0);
 });
