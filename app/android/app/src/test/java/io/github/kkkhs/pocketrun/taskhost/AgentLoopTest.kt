@@ -1,0 +1,223 @@
+package io.github.kkkhs.pocketrun.taskhost
+
+import com.anthropic.core.JsonValue
+import com.anthropic.models.messages.DirectCaller
+import com.anthropic.models.messages.ContentBlock
+import com.anthropic.models.messages.Message
+import com.anthropic.models.messages.MessageParam
+import com.anthropic.models.messages.StopReason
+import com.anthropic.models.messages.TextBlock
+import com.anthropic.models.messages.ThinkingBlock
+import com.anthropic.models.messages.ToolUseBlock
+import com.anthropic.models.messages.Usage
+import org.junit.After
+import org.junit.Assert.*
+import org.junit.Test
+import java.io.Closeable
+import java.nio.file.Files
+import java.util.concurrent.LinkedBlockingQueue
+import java.util.concurrent.TimeUnit
+
+/** Scripted model messages exercise the real controller/host; these are NOT real-model evidence. */
+class AgentLoopTest {
+    private val workspace = Files.createTempDirectory("pocketrun-agent-").toRealPath().also {
+        Files.writeString(it.resolve("items.csv"), "demo\n")
+    }
+    @Volatile private var now = 0L
+    private val source = Capabilities()
+    private val clock = MonotonicClock { now }
+    private val host = TaskHost(source, clock, NonceSource { "abcdefghijklmnop" })
+    private val task = SingleTaskContext(host, clock)
+    private val agent = AgentLoop(task, clock)
+    private val model = ScriptedTransport()
+
+    @After fun clean() {
+        source.failClose = false
+        agent.close(); task.close()
+        Files.delete(workspace.resolve("items.csv")); Files.delete(workspace)
+    }
+
+    @Test fun toolResultWaitsForPhoneAndReturnsActualIdWithFullAssistantContent() {
+        agent.start("read demo", model, "linuxReady=true")
+        val first = model.next()
+        first.reply(message(StopReason.TOOL_USE, listOf(
+            ContentBlock.ofThinking(ThinkingBlock.builder().thinking("summary").signature("signed-demo").build()),
+            call("csv-1", "linux_count_demo_csv"))))
+        await { host.state().phase == HostPhase.PENDING_APPROVAL }
+        assertEquals(0, source.starts)
+        assertTrue(model.requests.isEmpty())
+        assertTrue(host.onAppUiDecision(host.state().requestNonce!!, AppUiDecision.APPROVE))
+        source.complete("lineCount" to "3", "stdout" to "PRIVATE_DATA_NEVER_SEND", "fileUri" to "file://private")
+        val second = model.next()
+        val serialized = second.history.joinToString()
+        assertTrue(serialized.contains("signed-demo"))
+        assertTrue(serialized.contains("csv-1"))
+        assertTrue(serialized.contains("lineCount=3"))
+        assertFalse(serialized.contains("PRIVATE_DATA_NEVER_SEND"))
+        assertFalse(serialized.contains("file://private"))
+        second.reply(final())
+        await { agent.state().phase == AgentPhase.COMPLETED }
+        assertEquals(ContextPhase.COMPLETED, task.state().phase)
+        assertEquals(2, agent.state().rounds)
+    }
+
+    @Test fun rejectionStopsBeforeToolExecutionOrNextModelRound() {
+        agent.start("read demo", model, "demo")
+        model.next().reply(message(StopReason.TOOL_USE, listOf(call("csv-1", "linux_count_demo_csv"))))
+        await { host.state().phase == HostPhase.PENDING_APPROVAL }
+        host.onAppUiDecision(host.state().requestNonce!!, AppUiDecision.REJECT)
+        await { agent.state().phase == AgentPhase.FAILED }
+        assertEquals(0, source.starts)
+        assertTrue(model.requests.isEmpty())
+    }
+
+    @Test fun cancellingModelRequestFencesLateReplyAndNewTask() {
+        agent.start("one", model, "demo")
+        val first = model.next()
+        agent.cancel()
+        assertTrue(first.cancelled)
+        val nextModel = ScriptedTransport()
+        agent.start("two", nextModel, "demo")
+        first.reply(message(StopReason.TOOL_USE, listOf(call("late", "android_device_info"))))
+        nextModel.next()
+        assertEquals(AgentPhase.MODEL, agent.state().phase)
+        assertEquals(0, source.starts)
+        assertTrue(task.state().steps.isEmpty())
+    }
+
+    @Test fun multipleToolBlocksExecuteSeriallyAndReturnTogether() {
+        agent.start("demo", model, "demo")
+        model.next().reply(message(StopReason.TOOL_USE, listOf(
+            call("device-1", "android_device_info"), call("device-2", "android_device_info"))))
+        await { source.starts == 1 }
+        source.complete("apiLevel" to "34")
+        await { source.starts == 2 }
+        source.complete("apiLevel" to "34")
+        val next = model.next()
+        assertTrue(next.history.last().toString().contains("device-1"))
+        assertTrue(next.history.last().toString().contains("device-2"))
+        assertEquals(3, next.history.size)
+        next.reply(final())
+        await { agent.state().phase == AgentPhase.COMPLETED }
+    }
+
+    @Test fun invalidWholeTurnDoesNotExecuteItsFirstValidCall() {
+        agent.start("demo", model, "demo")
+        model.next().reply(message(StopReason.TOOL_USE, listOf(
+            call("device-1", "android_device_info"), call("approve-1", "approve"))))
+        await { agent.state().phase == AgentPhase.FAILED }
+        assertEquals(0, source.starts)
+    }
+
+    @Test fun duplicateIdsAndIncompleteMessagesFailWithoutStartingTools() {
+        agent.start("demo", model, "demo")
+        model.next().reply(message(StopReason.TOOL_USE, listOf(
+            call("duplicate", "android_device_info"), call("duplicate", "android_device_info"))))
+        await { agent.state().phase == AgentPhase.FAILED }
+        assertEquals(0, source.starts)
+        val another = ScriptedTransport()
+        agent.start("demo", another, "demo")
+        another.next().reply(message(StopReason.MAX_TOKENS, listOf(call("partial", "android_device_info"))))
+        await { agent.state().phase == AgentPhase.FAILED }
+        assertEquals("INCOMPLETE_MODEL_RESPONSE", agent.state().code)
+    }
+
+    @Test fun requestTimeoutAndOversizedContextStopAndCancel() {
+        agent.start("demo", model, "demo")
+        val pending = model.next()
+        now += TimeUnit.SECONDS.toNanos(25)
+        await { agent.state().phase == AgentPhase.BUDGET_EXHAUSTED }
+        assertTrue(pending.cancelled)
+        val another = ScriptedTransport()
+        agent.start("demo", another, "demo")
+        another.next().reply(message(StopReason.TOOL_USE, listOf(
+            ContentBlock.ofText(TextBlock.builder().citations(emptyList()).text("x".repeat(65_536)).build()),
+            call("device", "android_device_info"))))
+        await { agent.state().phase == AgentPhase.BUDGET_EXHAUSTED }
+        assertEquals(0, source.starts)
+    }
+
+    @Test fun oldModelRoundCannotSettleOrReplaceTheNextRequest() {
+        agent.start("demo", model, "demo")
+        val first = model.next()
+        first.reply(message(StopReason.TOOL_USE, listOf(call("device", "android_device_info"))))
+        await { source.starts == 1 }
+        source.complete("apiLevel" to "34")
+        val next = model.next()
+        first.reply(message(StopReason.TOOL_USE, listOf(call("obsolete", "approve"))))
+        next.reply(final())
+        await { agent.state().phase == AgentPhase.COMPLETED }
+        assertEquals(1, source.starts)
+    }
+
+    @Test fun eightRoundsEndWithoutNinthRequestOrReplayedTools() {
+        agent.start("demo", model, "demo")
+        repeat(8) { index ->
+            model.next().reply(message(StopReason.TOOL_USE, listOf(call("device-$index", "android_device_info"))))
+            await { source.starts == index + 1 }
+            source.complete("apiLevel" to "34")
+        }
+        await { agent.state().phase == AgentPhase.BUDGET_EXHAUSTED }
+        assertEquals(8, agent.state().rounds)
+        assertTrue(model.requests.isEmpty())
+    }
+
+    @Test fun cleanupFailureNeverFeedsUnprovenResultBackToModel() {
+        agent.start("demo", model, "demo")
+        model.next().reply(message(StopReason.TOOL_USE, listOf(call("device", "android_device_info"))))
+        await { source.starts == 1 }
+        source.failClose = true
+        source.complete("apiLevel" to "34")
+        await { agent.state().phase == AgentPhase.FAILED }
+        assertTrue(model.requests.isEmpty())
+        assertEquals(CleanupState.UNPROVEN, host.state().cleanupState)
+        source.failClose = false
+        host.retryCleanup()
+        assertEquals(AgentPhase.FAILED, agent.state().phase)
+    }
+
+    private fun call(id: String, name: String) = ContentBlock.ofToolUse(ToolUseBlock.builder()
+        .id(id).name(name).caller(DirectCaller.builder().build()).input(JsonValue.from(emptyMap<String, Any>())).build())
+    private fun final() = message(StopReason.END_TURN, listOf(ContentBlock.ofText(TextBlock.builder().citations(emptyList()).text("Demo done.").build())))
+    private fun message(reason: StopReason, blocks: List<ContentBlock>): Message = JsonValue.from(mapOf(
+        "id" to "msg-demo", "type" to "message", "role" to "assistant", "model" to "claude-opus-5-5",
+        "content" to blocks, "stop_reason" to reason.asString(), "stop_sequence" to null,
+        "usage" to mapOf("input_tokens" to 1, "output_tokens" to 4),
+    )).convert(Message::class.java)!!
+
+    private fun await(condition: () -> Boolean) {
+        val deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(3)
+        while (!condition() && System.nanoTime() < deadline) Thread.sleep(10)
+        assertTrue("condition did not settle", condition())
+    }
+
+    private class ScriptedTransport : ModelTransport {
+        val requests = LinkedBlockingQueue<Pending>()
+        override fun request(history: List<MessageParam>, completion: (Result<Message>) -> Unit): Closeable =
+            Pending(history, completion).also { requests.put(it) }
+        fun next() = checkNotNull(requests.poll(3, TimeUnit.SECONDS)) { "Missing model round" }
+        override fun close() {}
+        class Pending(val history: List<MessageParam>, private val completion: (Result<Message>) -> Unit) : Closeable {
+            @Volatile var cancelled = false
+            fun reply(message: Message) = completion(Result.success(message))
+            override fun close() { cancelled = true }
+        }
+    }
+
+    private inner class Capabilities : TaskCapabilities {
+        @Volatile var starts = 0
+        @Volatile var failClose = false
+        @Volatile var callback: ((ExecutionOutcome) -> Unit)? = null
+        override fun currentDeviceInfoTarget() = DeviceInfoTarget(10001)
+        override fun currentLinuxTarget() = LinuxTarget("demo-1", 10001, workspace, true, true)
+        override fun currentDisplayTarget() = DisplayTarget(1, 1, 10001, false)
+        override fun prepareDeviceInfo(expected: DeviceInfoTarget) = execution()
+        override fun prepareCountDemoCsv(expected: LinuxTarget, canonicalCsv: java.nio.file.Path) = execution()
+        override fun prepareDisplay(expected: DisplayTarget, action: DisplayAction) = execution()
+        private fun execution() = object : OwnedExecution {
+            override fun start(completion: (ExecutionOutcome) -> Unit) { callback = completion; starts++ }
+            override fun close() { check(!failClose) }
+        }
+        fun complete(vararg fields: Pair<String, String>) = callback!!(ExecutionOutcome.Success(ToolResult(mapOf(*fields))))
+    }
+}

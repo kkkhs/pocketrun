@@ -39,7 +39,29 @@ export type SingleTaskState = {
   maxDurationMillis: number;
 };
 
+export type ModelConfiguration = {
+  endpoint: string;
+  model: string;
+  hasCredential: boolean;
+};
+
+export type AgentLoopState = {
+  phase: string;
+  taskId: string | null;
+  rounds: number;
+  outputTokens: number;
+  contextBytes: number;
+  finalText: string | null;
+  code: string | null;
+};
+
 export interface Spec extends TurboModule {
+  getModelConfiguration(): Promise<ModelConfiguration>;
+  saveModelConfiguration(endpoint: string, model: string, apiKey: string): Promise<ModelConfiguration>;
+  clearModelConfiguration(): Promise<ModelConfiguration>;
+  startAgent(goal: string): Promise<AgentLoopState>;
+  getAgentState(): Promise<AgentLoopState>;
+  cancelAgent(): Promise<AgentLoopState>;
   beginTask(goal: string): Promise<SingleTaskState>;
   submitTaskStep(taskId: string, tool: string, argumentsJson: string): Promise<SingleTaskState>;
   getSingleTaskState(): Promise<SingleTaskState>;
