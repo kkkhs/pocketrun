@@ -9,7 +9,7 @@ description: 原生 Kotlin 使用官方 Anthropic Java SDK，把真实模型回�
 
 读者应看到模型回合数、同一个任务编号，以及第 10 章面板里的两条实际工具结果。CSV 仍停在手机审批前；模型回复里的“同意”没有任何授权效果。
 
-> **本地实现，真实模型与手机验收待完成。** 当前没有合法 endpoint/API 凭据配置，没有执行真实模型请求；合成协议和控制器测试不能替代它。没有预置密钥，也没有公开本章 PR、tag 或 Release。
+> **源码已提交 [Draft PR #18](https://github.com/kkkhs/pocketrun/pull/18)，真实模型与手机验收待完成。** 目前尚未配置运行所需凭据，未执行真实模型请求；合成协议和控制器测试不能替代它。网站与源码 Release 在验收后发布。
 
 ## 先配置，再看它请求工具
 
@@ -132,8 +132,8 @@ API 凭据只从遮罩输入框提交一次到原生配置入口。AndroidKeySto
 | 检查 | 证明范围 |
 | --- | --- |
 | `AgentLoopTest` | 合成模型消息驱动真实控制器/TaskHost 核心：审批、关联、完整块回放、串行步骤、拒绝、旧回合、取消、预算与清理失败 |
-| `AnthropicSdkProtocolTest` | 官方 SDK 在 JVM 的本地合成 SSE：thinking/tool_use 累积、响应头前取消、禁重定向；**不是模型调用** |
-| `AgentLoopPanel.test.tsx` | 仅一次凭据提交、遮罩和输入清空、固定目标、取消、错误不回显；**不是手机 GUI 验收** |
+| `AnthropicSdkProtocolTest` | 本地合成 SSE：官方 SDK 全块累积、响应头前取消、禁重定向，以及实际生产包装层的流中取消与旧结果隔离；**不是模型调用或 Android 运行** |
+| `AgentLoopPanel.test.tsx` | 凭据遮罩与清空、固定目标、取消、错误不回显，以及初始配置晚返回不会覆盖编辑；**不是手机 GUI 验收** |
 | `Chapter11CredentialStoreTest` / `Chapter11SdkRuntimeTest` | 可运行 Android 检查，隔离测试别名和演示凭据；**当前仅构建，未执行** |
 | 真实模型与工具闭环 | **未执行；缺合法配置和授权设备窗口** |
 
@@ -144,7 +144,7 @@ App：typecheck、lint、Jest、audit；Android：相关 JVM、ARM64 Debug/Relea
 
 实际验收需要冻结源码/APK SHA、真实手机配置、真实模型回合、手机逐次同意/拒绝/取消、动作后的来源结果、晚返回和失败收尾。只用演示数据；HTTP 401、fixture、mock、JVM 通过或 SDK 编译不能写成真实 Agentloop 通过。
 
-教程桌面/手机、深浅主题实际渲染与 App GUI 截图仍需单独记录。公开 PR、Pages、注释 tag 与源码 Release 由最终交付流程补齐，不公开 Debug 签名 APK，不造成功或发布链接。
+2026-11-20 已实际检查本地第 10、11 章网页在桌面、390px 手机与深浅主题下的渲染，无整页横向溢出。App GUI 与真实模型/设备仍未验收；源码 Draft PR 已公开，Pages、注释 tag 与源码 Release 在最终验收后补齐，不公开 Debug 签名 APK。
 
 </details>
 
@@ -153,3 +153,11 @@ App：typecheck、lint、Jest、audit；Android：相关 JVM、ARM64 Debug/Relea
 本章增加的是“模型提出下一步 → 获准工具产生结果 → 下一回合”的真实 transport 与受控循环。工具权限、目标重检和资源所有权仍属于原宿主；完成文字仍需要来源结果支持。
 
 下一章才讨论跨任务记忆。本章只保留当前有界任务，不加入长期记忆、产品框架、MCP、subagent 或多任务并发。
+
+## 本章源码
+
+- [Draft PR #18：原生模型循环与加密配置](https://github.com/kkkhs/pocketrun/pull/18)
+- [固定实现与修复提交 `698f395`](https://github.com/kkkhs/pocketrun/commit/698f39509e174d877c8b9fbffb4c0ecf82adb5da)
+- [官方模型标识与能力](https://platform.claude.com/docs/en/about-claude/models/overview)
+
+本章源码 Release 在实际模型/设备验收与合并后建立。
