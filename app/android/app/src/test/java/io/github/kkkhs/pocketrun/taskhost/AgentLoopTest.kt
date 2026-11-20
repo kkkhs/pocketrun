@@ -85,6 +85,70 @@ class AgentLoopTest {
         assertTrue(task.state().steps.isEmpty())
     }
 
+    @Test fun configChangeWhileWaitingForApprovalInvalidatesNonceAndKeepsOriginalCleanupOwner() {
+        // TaskHostModule invokes this same controller cancellation before saving configuration.
+        agent.start("old config", model, "demo")
+        val oldRound = model.next()
+        oldRound.reply(message(StopReason.TOOL_USE, listOf(call("old-csv", "linux_count_demo_csv"))))
+        await { host.state().phase == HostPhase.PENDING_APPROVAL }
+        val oldNonce = host.state().requestNonce!!
+        agent.cancel("MODEL_CONFIG_CHANGED")
+        assertEquals(AgentPhase.CANCELLED, agent.state().phase)
+        assertEquals("MODEL_CONFIG_CHANGED", agent.state().code)
+        assertEquals(ApprovalState.CANCELLED_BY_APP_UI, host.state().approvalState)
+        assertFalse(host.onAppUiDecision(oldNonce, AppUiDecision.APPROVE))
+        assertEquals(0, source.starts)
+        assertEquals(0, source.prepares) // No owner exists before phone approval.
+        assertEquals(CleanupState.NONE, host.state().cleanupState)
+        assertTrue(source.closedOwners.isEmpty())
+        assertTrue(model.requests.isEmpty())
+
+        val newModel = ScriptedTransport()
+        agent.start("new config", newModel, "demo")
+        val newRound = newModel.next()
+        oldRound.reply(message(StopReason.TOOL_USE, listOf(call("late-device", "android_device_info"))))
+        newRound.reply(message(StopReason.TOOL_USE, listOf(call("new-csv", "linux_count_demo_csv"))))
+        await { host.state().phase == HostPhase.PENDING_APPROVAL }
+        val newNonce = host.state().requestNonce!!
+        assertNotEquals(oldNonce, newNonce)
+        assertFalse(host.onAppUiDecision(oldNonce, AppUiDecision.APPROVE))
+        assertEquals(0, source.starts)
+        assertEquals(1, task.state().steps.size)
+
+        // Once approval creates an owner, config cancellation must retain it on failed cleanup.
+        assertTrue(host.onAppUiDecision(newNonce, AppUiDecision.APPROVE))
+        assertEquals(1, source.starts)
+        source.failClose = true
+        agent.cancel("MODEL_CONFIG_CHANGED")
+        assertEquals(CleanupState.UNPROVEN, host.state().cleanupState)
+        assertEquals(listOf(1), source.closedOwners.toList())
+        assertEquals(newNonce, host.state().requestNonce)
+        assertFalse(host.onAppUiDecision(newNonce, AppUiDecision.APPROVE))
+        try { agent.start("blocked config", ScriptedTransport(), "demo"); fail("cleanup must retain the slot") }
+        catch (_: HostBusyException) { /* original owner still holds the slot */ }
+        source.complete("lineCount" to "3")
+        assertEquals(AgentPhase.CANCELLED, agent.state().phase)
+        assertTrue(newModel.requests.isEmpty())
+        source.failClose = false
+        assertTrue(host.retryCleanup())
+        assertEquals(listOf(1, 1), source.closedOwners.toList())
+        assertEquals(1, source.prepares)
+        assertEquals(CleanupState.PROVEN, host.state().cleanupState)
+
+        val finalModel = ScriptedTransport()
+        agent.start("after cleanup", finalModel, "demo")
+        val finalRound = finalModel.next()
+        newRound.reply(message(StopReason.TOOL_USE, listOf(call("late-new", "android_device_info"))))
+        source.complete("lineCount" to "99")
+        finalRound.reply(message(StopReason.TOOL_USE, listOf(call("final-csv", "linux_count_demo_csv"))))
+        await { host.state().phase == HostPhase.PENDING_APPROVAL }
+        assertEquals(AgentPhase.TOOL, agent.state().phase)
+        assertEquals("linux.count_demo_csv", task.state().steps.single().call.tool)
+        assertFalse(host.onAppUiDecision(newNonce, AppUiDecision.APPROVE))
+        assertEquals(1, source.starts)
+        assertEquals(1, source.prepares)
+    }
+
     @Test fun multipleToolBlocksExecuteSeriallyAndReturnTogether() {
         agent.start("demo", model, "demo")
         model.next().reply(message(StopReason.TOOL_USE, listOf(
@@ -206,6 +270,8 @@ class AgentLoopTest {
 
     private inner class Capabilities : TaskCapabilities {
         @Volatile var starts = 0
+        @Volatile var prepares = 0
+        val closedOwners = java.util.concurrent.CopyOnWriteArrayList<Int>()
         @Volatile var failClose = false
         @Volatile var callback: ((ExecutionOutcome) -> Unit)? = null
         override fun currentDeviceInfoTarget() = DeviceInfoTarget(10001)
@@ -214,9 +280,12 @@ class AgentLoopTest {
         override fun prepareDeviceInfo(expected: DeviceInfoTarget) = execution()
         override fun prepareCountDemoCsv(expected: LinuxTarget, canonicalCsv: java.nio.file.Path) = execution()
         override fun prepareDisplay(expected: DisplayTarget, action: DisplayAction) = execution()
-        private fun execution() = object : OwnedExecution {
-            override fun start(completion: (ExecutionOutcome) -> Unit) { callback = completion; starts++ }
-            override fun close() { check(!failClose) }
+        private fun execution(): OwnedExecution {
+            val owner = ++prepares
+            return object : OwnedExecution {
+                override fun start(completion: (ExecutionOutcome) -> Unit) { callback = completion; starts++ }
+                override fun close() { closedOwners += owner; check(!failClose) }
+            }
         }
         fun complete(vararg fields: Pair<String, String>) = callback!!(ExecutionOutcome.Success(ToolResult(mapOf(*fields))))
     }
