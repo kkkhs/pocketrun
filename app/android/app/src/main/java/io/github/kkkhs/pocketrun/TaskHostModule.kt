@@ -9,6 +9,9 @@ import io.github.kkkhs.pocketrun.taskhost.AndroidHostReadiness
 import io.github.kkkhs.pocketrun.taskhost.AndroidTaskCapabilities
 import io.github.kkkhs.pocketrun.taskhost.AppUiDecision
 import io.github.kkkhs.pocketrun.taskhost.CleanupState
+import io.github.kkkhs.pocketrun.taskhost.ContextStatus
+import io.github.kkkhs.pocketrun.taskhost.SingleTaskContext
+import org.json.JSONArray
 import io.github.kkkhs.pocketrun.taskhost.HostBusyException
 import io.github.kkkhs.pocketrun.taskhost.HostStatus
 import io.github.kkkhs.pocketrun.taskhost.RawToolCall
@@ -23,6 +26,7 @@ import java.util.concurrent.RejectedExecutionException
 class TaskHostModule(context: ReactApplicationContext) : NativePocketRunTaskHostSpec(context) {
     private val adapter = AndroidTaskCapabilities(context)
     private val host = TaskHost(adapter)
+    private val task = SingleTaskContext(host)
     private val worker = Executors.newSingleThreadExecutor { runnable ->
         Thread(runnable, "PocketRun-TaskHostModule")
     }
@@ -30,8 +34,10 @@ class TaskHostModule(context: ReactApplicationContext) : NativePocketRunTaskHost
     override fun getName() = NAME
 
     override fun prepareHost(promise: Promise) = execute(promise) {
-        adapter.prepareLinuxEnvironment()
-        readinessMap(adapter.readiness())
+        task.withoutActiveTask {
+            adapter.prepareLinuxEnvironment()
+            readinessMap(adapter.readiness())
+        }
     }
 
     override fun getHostReadiness(promise: Promise) {
@@ -39,11 +45,70 @@ class TaskHostModule(context: ReactApplicationContext) : NativePocketRunTaskHost
     }
 
     override fun submitTool(tool: String, argumentsJson: String, promise: Promise) = execute(promise) {
+        task.withoutActiveTask { stateMap(host.submit(parseCall(tool, argumentsJson))) }
+    }
+
+    override fun beginTask(goal: String, promise: Promise) = execute(promise) {
+        contextMap(task.begin(goal))
+    }
+
+    override fun submitTaskStep(taskId: String, tool: String, argumentsJson: String, promise: Promise) = execute(promise) {
+        val call = try {
+            parseCall(tool, argumentsJson)
+        } catch (_: IllegalArgumentException) {
+            return@execute contextMap(task.fail(taskId, "INVALID_TOOL_JSON"))
+        }
+        contextMap(task.submit(taskId, call))
+    }
+
+    override fun getSingleTaskState(promise: Promise) {
+        resolve(promise) { contextMap(task.state()) }
+    }
+
+    override fun finishTask(taskId: String, promise: Promise) = execute(promise) {
+        contextMap(task.finish(taskId))
+    }
+
+    override fun cancelTask(taskId: String, promise: Promise) = execute(promise) {
+        contextMap(task.cancel(taskId))
+    }
+
+    private fun parseCall(tool: String, argumentsJson: String): RawToolCall {
         val parsed = TaskHostJson.parseObject(argumentsJson).toMutableMap()
         // JSON has one integer syntax; the core contract intentionally distinguishes Binder epoch Long.
         val epoch = parsed["expectedDisplayEpoch"]
         if (epoch is Int) parsed["expectedDisplayEpoch"] = epoch.toLong()
-        stateMap(host.submit(RawToolCall(tool, parsed)))
+        return RawToolCall(tool, parsed)
+    }
+
+    private fun contextMap(value: ContextStatus): WritableMap = Arguments.createMap().apply {
+        putNullableString("taskId", value.taskId)
+        putNullableString("goal", value.goal)
+        putString("phase", value.phase.name.lowercase())
+        putNullableString("code", value.code)
+        putInt("contextBytes", value.contextBytes)
+        putInt("maxContextBytes", value.budget.maxContextBytes)
+        putInt("maxResultBytes", value.budget.maxResultBytes)
+        putInt("maxSteps", value.budget.maxSteps)
+        putDouble("maxDurationMillis", value.budget.maxDurationMillis.toDouble())
+        putString("stepsJson", JSONArray().apply {
+            value.steps.forEach { step ->
+                put(JSONObject().apply {
+                    put("number", step.number)
+                    put("tool", step.call.tool)
+                    put("arguments", JSONObject(step.call.arguments))
+                    put("phase", step.status.phase.name.lowercase())
+                    put("requestNonce", step.status.requestNonce)
+                    put("requestHash", step.status.requestHash)
+                    put("target", step.status.target)
+                    put("backendEpoch", step.status.backendEpoch)
+                    put("approvalState", step.status.approvalState?.name?.lowercase())
+                    put("cleanupState", step.status.cleanupState.name.lowercase())
+                    put("code", step.status.code)
+                    put("result", JSONObject(step.status.result?.fields ?: emptyMap<String, String>()))
+                })
+            }
+        }.toString())
     }
 
     override fun getTaskState(promise: Promise) {
@@ -127,7 +192,7 @@ class TaskHostModule(context: ReactApplicationContext) : NativePocketRunTaskHost
     }
 
     override fun invalidate() {
-        host.close()
+        task.close()
         // If cleanup is unproven, the adapter retains its source owner until process teardown.
         if (host.state().cleanupState != CleanupState.UNPROVEN) adapter.close()
         worker.shutdown()
