@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
 import NativeTaskHost, {
   type TaskHostReadiness,
   type TaskHostState,
@@ -7,6 +7,8 @@ import NativeTaskHost, {
 
 type Colors = { text: string; muted: string };
 type ToolChoice = 'device' | 'linux' | 'observe' | 'demoText';
+type PanelActionResult = TaskHostState | TaskHostReadiness |
+  { state: TaskHostState; readiness: TaskHostReadiness };
 const FIXED_DEMO_TEXT = 'PocketRun_TaskHost_9';
 
 function taskHostModule() {
@@ -54,15 +56,20 @@ export default function TaskHostPanel({ colors }: { colors: Colors }) {
       inFlight.current = true;
       const request = generation.current;
       try {
-        const next = await NativeTaskHost.getTaskState();
-        if (live.current && request === generation.current) setState(next);
+        const [nextState, nextReadiness] = await Promise.all([
+          NativeTaskHost.getTaskState(), NativeTaskHost.getHostReadiness(),
+        ]);
+        if (live.current && request === generation.current) {
+          setState(nextState);
+          setReadiness(nextReadiness);
+        }
       } catch { /* Explicit actions surface errors; polling never manufactures state. */ }
       finally { inFlight.current = false; }
     }, 250);
     return () => { live.current = false; clearInterval(timer); };
   }, []);
 
-  async function perform(action: () => Promise<TaskHostState | TaskHostReadiness>) {
+  async function perform(action: () => Promise<PanelActionResult>) {
     if (actionBusy.current) return;
     actionBusy.current = true;
     const request = ++generation.current;
@@ -72,7 +79,9 @@ export default function TaskHostPanel({ colors }: { colors: Colors }) {
       if (!NativeTaskHost) throw new Error('TaskHost 原生模块未注册，请重新构建 Android 应用。');
       const value = await action();
       if (!live.current || request !== generation.current) return;
-      if ('phase' in value) setState(value); else setReadiness(value);
+      if ('phase' in value) setState(value);
+      else if ('state' in value) { setState(value.state); setReadiness(value.readiness); }
+      else setReadiness(value);
     } catch (failure) {
       if (live.current && request === generation.current) {
         setError(failure instanceof Error ? failure.message : 'TaskHost 操作失败。');
@@ -85,22 +94,24 @@ export default function TaskHostPanel({ colors }: { colors: Colors }) {
 
   function submit(choice: ToolChoice) {
     const native = NativeTaskHost;
-    if (!native || !readiness) return;
-    try {
+    if (!native) return;
+    perform(async () => {
+      const fresh = await native.getHostReadiness();
       const call = (() => {
         switch (choice) {
           case 'device': return ['android.device_info', '{}'] as const;
-          case 'linux': return ['linux.count_demo_csv', '{}'] as const;
+          case 'linux':
+            if (!fresh.linuxReady) throw new Error('固定 Linux 工具尚未准备。');
+            return ['linux.count_demo_csv', '{}'] as const;
           case 'observe': return ['android.virtual_display_observe_or_demo_input',
-            displayArguments(readiness, 'observe')] as const;
+            displayArguments(fresh, 'observe')] as const;
           case 'demoText': return ['android.virtual_display_observe_or_demo_input',
-            displayArguments(readiness, 'demo_text')] as const;
+            displayArguments(fresh, 'demo_text')] as const;
         }
       })();
-      perform(() => native.submitTool(call[0], call[1]));
-    } catch (failure) {
-      setError(failure instanceof Error ? failure.message : '工具目标无效。');
-    }
+      const next = await native.submitTool(call[0], call[1]);
+      return { state: next, readiness: fresh };
+    });
   }
 
   function button(label: string, disabled: boolean, action: () => void) {
@@ -116,12 +127,16 @@ export default function TaskHostPanel({ colors }: { colors: Colors }) {
   const cleanupUnproven = state?.cleanupState === 'unproven';
   let result: Record<string, unknown> = {};
   try { result = state?.resultJson ? JSON.parse(state.resultJson) : {}; } catch { result = {}; }
+  const screenshotUri = typeof result.screenshotUri === 'string' && result.screenshotUri.startsWith('file://')
+    ? result.screenshotUri : null;
 
   return <View style={styles.panel}>
     <Text style={[styles.heading, { color: colors.text }]}>第 9 章 · 确定性工具宿主与手机审批</Text>
     <Text style={{ color: colors.muted }}>宿主只有三个固定工具；不运行模型循环，不接受任意命令、argv、环境、绑定路径或可执行文件。</Text>
     {button('准备固定 Linux 工具', busy || active || readiness?.linuxReady === true,
       () => perform(() => taskHostModule().prepareHost()))}
+    {button('刷新工具目标', busy || active,
+      () => perform(() => taskHostModule().getHostReadiness()))}
     <Text style={{ color: colors.text }}>App UID：{readiness?.packageUid ?? '(未读取)'}</Text>
     <Text style={{ color: colors.text }}>Linux：{readiness?.linuxReady
       ? `已校验 · generation ${readiness.rootfsGeneration}` : '未准备'}</Text>
@@ -163,7 +178,16 @@ export default function TaskHostPanel({ colors }: { colors: Colors }) {
       <Text style={{ color: colors.text }}>资源清理：{String(result.cleanupStatus ?? state.cleanupState)}</Text>
       <Text selectable style={{ color: colors.muted }}>绑定：{state.backendEpoch ?? '(none)'}</Text>
       {'lineCount' in result && <Text style={{ color: colors.text }}>固定 /workspace/items.csv 行数：{String(result.lineCount)}</Text>}
+      {'guestUid' in result && <Text style={{ color: colors.text }}>guest UID：{String(result.guestUid || '(未取得)')} · cwd：{String(result.cwd || '(未取得)')}</Text>}
+      {'stageExitCodes' in result && <Text style={{ color: colors.text }}>阶段退出码：{String(result.stageExitCodes || '(none)')}</Text>}
+      {'exitCodes' in result && <Text style={{ color: colors.text }}>PRoot tracer / host 退出码：{String(result.exitCodes || '(none)')}</Text>}
+      {'stdout' in result && <Text selectable style={{ color: colors.text }}>stdout：{String(result.stdout || '(empty)')}</Text>}
+      {'stderr' in result && <Text selectable style={{ color: colors.text }}>stderr：{String(result.stderr || '(empty)')}</Text>}
       {'androidVersion' in result && <Text style={{ color: colors.text }}>Android：{String(result.androidVersion)} · API {String(result.apiLevel)}</Text>}
+      {screenshotUri && <Image accessibilityLabel="TaskHost 虚拟屏实际截图" source={{ uri: screenshotUri }} style={styles.screenshot} resizeMode="contain" />}
+      {'uiTreeStatus' in result && <Text style={{ color: colors.text }}>UI 树：{String(result.uiTreeStatus)} · 节点 {String(result.nodeCount)} · truncated {String(result.treeTruncated)}</Text>}
+      {'uiTreeText' in result && <Text selectable style={{ color: colors.text }}>UI 树实际文字：{String(result.uiTreeText || '(empty)')}</Text>}
+      {result.accepted === 'true' && <Text style={{ color: colors.muted }}>Binder 仅确认输入事件被接收；需再次观察实际截图与 UI 树，不能据此声称已经填对。</Text>}
       {state.message && <Text accessibilityRole="alert" style={{ color: colors.text }}>{state.message}</Text>}
     </View>}
     {error && <Text accessibilityRole="alert" style={{ color: colors.text }}>{error}</Text>}
@@ -181,4 +205,5 @@ const styles = StyleSheet.create({
   disabled: { opacity: 0.45 },
   approval: { gap: 8, borderWidth: 1, borderColor: '#64748b', borderRadius: 8, padding: 10 },
   result: { gap: 6 },
+  screenshot: { width: '100%', height: 360 },
 });

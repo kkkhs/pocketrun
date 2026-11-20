@@ -119,6 +119,7 @@ class Chapter8LifecycleIntegrationTest {
                 tree.openGate()
                 assertEquals(0, tree.exit().code)
                 tree.proveAndClose(identities)
+                tree.installer.validateInstalled() // Interactive history must never mutate installed data-only rootfs.
                 assertFalse(tree.runDirectory.exists())
                 assertTrue(Chapter7TestSupport.payloadNames(File(files, "linux/runs")).isEmpty())
                 Chapter7TestSupport.evidence("pty-repeat-$index", JSONObject().put("fdCount", Chapter7TestSupport.fdCount()))

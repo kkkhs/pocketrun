@@ -28,31 +28,6 @@ internal data class AndroidHostReadiness(
     val displayId: Int?,
 )
 
-/**
- * The display side is intentionally empty until the App's own typed-Binder controller installs
- * a port. A host ADB connection or Dora transport is never a substitute for this App-owned port.
- */
-internal interface TaskHostDisplayPort {
-    fun snapshot(): DisplayTarget
-    fun observe(expected: DisplayTarget): ToolResult
-    fun demoTap(expected: DisplayTarget, x: Int, y: Int): ToolResult
-    fun demoText(expected: DisplayTarget, text: String): ToolResult
-    fun invalidate(expected: DisplayTarget)
-}
-
-internal object TaskHostDisplayPortRegistry {
-    private val lock = Any()
-    private var port: TaskHostDisplayPort? = null
-
-    fun install(value: TaskHostDisplayPort): Closeable = synchronized(lock) {
-        check(port == null) { "TaskHost display port is already installed." }
-        port = value
-        Closeable { synchronized(lock) { if (port === value) port = null } }
-    }
-
-    fun current(): TaskHostDisplayPort? = synchronized(lock) { port }
-}
-
 /** Actual Android/Linux adapters. No result is synthesized when a source capability is absent. */
 internal class AndroidTaskCapabilities(
     private val context: Context,

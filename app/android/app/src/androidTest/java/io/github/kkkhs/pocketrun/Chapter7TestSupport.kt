@@ -69,9 +69,16 @@ internal object Chapter7TestSupport {
     }
     private fun stat(pid: Int): List<String>? {
         val path = File("/proc/$pid/stat").toPath()
-        val text = try { String(Files.readAllBytes(path), Charsets.UTF_8) } catch (_: NoSuchFileException) {
-            // Only an explicit second ENOENT is evidence of absence. Permission/read errors propagate.
-            try { String(Files.readAllBytes(path), Charsets.UTF_8) } catch (_: NoSuchFileException) { return null }
+        val text = try { String(Files.readAllBytes(path), Charsets.UTF_8) } catch (failure: java.io.IOException) {
+            // procfs may return ESRCH after a successful open when its task exits before read.
+            // No read failure means gone: require two exact lstat ENOENT observations instead.
+            repeat(2) {
+                try { Os.lstat(path.toString()); throw failure }
+                catch (error: ErrnoException) {
+                    if (error.errno != OsConstants.ENOENT) { failure.addSuppressed(error); throw failure }
+                }
+            }
+            return null
         }
         require(text.substringBefore(' ') == pid.toString() && text.lastIndexOf(')') > 0)
         return text.substring(text.lastIndexOf(')') + 2).trim().split(Regex("\\s+")).also { require(it.size >= 20) }

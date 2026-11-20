@@ -2,8 +2,6 @@ package io.github.kkkhs.pocketrun.taskhost
 
 import io.github.kkkhs.pocketrun.LinuxSession
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertNull
-import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.util.concurrent.CountDownLatch
@@ -83,23 +81,6 @@ class AndroidTaskCapabilitiesPolicyTest {
         }
     }
 
-    @Test
-    fun displayPortExistsOnlyAfterExplicitAppOwnedInstallation() {
-        assertNull(TaskHostDisplayPortRegistry.current())
-        val port = object : TaskHostDisplayPort {
-            private val target = DisplayTarget(7L, 11, 10469, true)
-            override fun snapshot() = target
-            override fun observe(expected: DisplayTarget) = ToolResult(mapOf("displayId" to "11"))
-            override fun demoTap(expected: DisplayTarget, x: Int, y: Int) = ToolResult(emptyMap())
-            override fun demoText(expected: DisplayTarget, text: String) = ToolResult(emptyMap())
-            override fun invalidate(expected: DisplayTarget) = Unit
-        }
-        TaskHostDisplayPortRegistry.install(port).use {
-            assertSame(port, TaskHostDisplayPortRegistry.current())
-        }
-        assertNull(TaskHostDisplayPortRegistry.current())
-    }
-
     private class RecordingDisplayPort(private val blockObserve: Boolean = false) : TaskHostDisplayPort {
         val target = DisplayTarget(7L, 11, 10469, true)
         val entered = CountDownLatch(1)
@@ -107,6 +88,7 @@ class AndroidTaskCapabilitiesPolicyTest {
         var invalidations = 0
 
         override fun snapshot() = target
+        override fun lastKnownTarget() = target
         override fun observe(expected: DisplayTarget): ToolResult {
             check(expected == target)
             entered.countDown()
@@ -121,6 +103,7 @@ class AndroidTaskCapabilitiesPolicyTest {
             invalidations++
             release.countDown()
         }
+        override fun setDeathListener(listener: ((DisplayTarget) -> Unit)?) = Unit
     }
 
     private fun linuxResult(

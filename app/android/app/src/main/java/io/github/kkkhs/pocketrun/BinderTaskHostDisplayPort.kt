@@ -4,19 +4,39 @@ import android.os.Process
 import io.github.kkkhs.pocketrun.taskhost.DisplayTarget
 import io.github.kkkhs.pocketrun.taskhost.TaskHostDisplayPort
 import io.github.kkkhs.pocketrun.taskhost.ToolResult
+import java.io.Closeable
+import org.json.JSONObject
 
 /** Uses the same App-owned controller as AdbModule, never a host ADB transport. */
 internal class BinderTaskHostDisplayPort(
     private val backend: PrivilegedBackendController,
-) : TaskHostDisplayPort {
-    override fun snapshot(): DisplayTarget {
-        val current = backend.capabilitySnapshot()
-        return DisplayTarget(current.queryGeneration, current.displayId, Process.myUid(), current.ready)
+) : TaskHostDisplayPort, Closeable {
+    private val lock = Any()
+    private var deathListener: ((DisplayTarget) -> Unit)? = null
+    private var lastTarget: DisplayTarget? = null
+    private var closed = false
+    private val backendDeathRegistration = backend.addCapabilityDeathListener { event ->
+        val target = DisplayTarget(event.queryGeneration, event.displayId, Process.myUid(), true)
+        val listener = synchronized(lock) {
+            if (closed) null else { lastTarget = target; deathListener }
+        }
+        listener?.invoke(target)
     }
+    override fun snapshot(): DisplayTarget {
+        check(synchronized(lock) { !closed }) { "TaskHost display port is closed." }
+        val current = backend.capabilitySnapshot()
+        val target = DisplayTarget(current.queryGeneration, current.displayId, Process.myUid(), current.ready)
+        if (target.backendReady && target.displayId > 0 && target.displayEpoch > 0) {
+            synchronized(lock) { if (!closed) lastTarget = target }
+        }
+        return target
+    }
+
+    override fun lastKnownTarget(): DisplayTarget? = synchronized(lock) { lastTarget }
 
     override fun observe(expected: DisplayTarget): ToolResult {
         requireTarget(expected)
-        val frame = backend.captureScreenshot(expected.displayId, expected.displayEpoch)
+        val frame = backend.captureTaskHostScreenshot(expected.displayId, expected.displayEpoch)
         val tree = backend.dumpUiTree(expected.displayId, expected.displayEpoch)
         return ToolResult(mapOf(
             "source" to "app-owned-typed-binder",
@@ -25,6 +45,7 @@ internal class BinderTaskHostDisplayPort(
             "screenshotUri" to frame.uri,
             "frameTimestampNanos" to frame.frameTimestampNanos,
             "uiTreeStatus" to tree.status,
+            "uiTreeText" to observedText(tree.json),
             "nodeCount" to tree.nodeCount.toString(),
             "treeTruncated" to tree.truncated.toString(),
         ))
@@ -52,9 +73,39 @@ internal class BinderTaskHostDisplayPort(
         }
     }
 
+    override fun setDeathListener(listener: ((DisplayTarget) -> Unit)?) {
+        synchronized(lock) {
+            check(!closed || listener == null) { "TaskHost display port is closed." }
+            deathListener = listener
+        }
+    }
+
+    override fun close() {
+        synchronized(lock) {
+            if (closed) return
+            closed = true
+            deathListener = null
+        }
+        backendDeathRegistration.close()
+    }
+
     private fun requireTarget(expected: DisplayTarget) {
         check(expected.backendReady && expected.displayId > 0 && expected.packageUid == Process.myUid() &&
             snapshot() == expected) { "App-owned backend/display target is not ready or has changed." }
+    }
+
+    private fun observedText(json: String): String {
+        val nodes = JSONObject(json).getJSONArray("nodes")
+        val text = LinkedHashSet<String>()
+        for (index in 0 until nodes.length()) {
+            val node = nodes.optJSONObject(index) ?: continue
+            for (key in arrayOf("text", "contentDescription")) {
+                val value = node.optString(key).trim()
+                if (value.isNotEmpty()) text.add(value)
+            }
+            if (text.sumOf { it.length + 3 } >= MAX_TREE_TEXT_CHARS) break
+        }
+        return text.joinToString(" | ").take(MAX_TREE_TEXT_CHARS)
     }
 
     private fun inputResult(expected: DisplayTarget, action: String) = ToolResult(mapOf(
@@ -64,4 +115,6 @@ internal class BinderTaskHostDisplayPort(
         "displayEpoch" to expected.displayEpoch.toString(),
         "accepted" to "true",
     ))
+
+    companion object { private const val MAX_TREE_TEXT_CHARS = 8192 }
 }
