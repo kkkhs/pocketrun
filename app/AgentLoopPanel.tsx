@@ -15,6 +15,7 @@ export default function AgentLoopPanel({ colors }: { colors: Colors }) {
   const [error, setError] = useState<string | null>(null);
   const live = useRef(true);
   const generation = useRef(0);
+  const configurationEdited = useRef(false);
   const actionBusy = useRef(false);
   const polling = useRef(false);
 
@@ -22,8 +23,13 @@ export default function AgentLoopPanel({ colors }: { colors: Colors }) {
     live.current = true;
     const initial = ++generation.current;
     NativeTaskHost?.getModelConfiguration().then(value => {
-      if (live.current && initial === generation.current) { setConfiguration(value); setEndpoint(value.endpoint); setModel(value.model); }
-    }).catch(() => { if (live.current) setError('配置不可读取；损坏密文不会自动恢复或继续调用模型。'); });
+      if (live.current && initial === generation.current) {
+        setConfiguration(value);
+        if (!configurationEdited.current) { setEndpoint(value.endpoint); setModel(value.model); }
+      }
+    }).catch(() => {
+      if (live.current && initial === generation.current) setError('配置不可读取；损坏密文不会自动恢复或继续调用模型。');
+    });
     async function poll() {
       if (!NativeTaskHost || !live.current || polling.current) return;
       polling.current = true;
@@ -73,11 +79,11 @@ export default function AgentLoopPanel({ colors }: { colors: Colors }) {
   return <View style={styles.panel}>
     <Text style={[styles.heading, { color: colors.text }]}>第 11 章 · 真实模型与受控工具循环</Text>
     <Text style={{ color: colors.muted }}>只使用自己有权调用的 endpoint 与 API 凭据。配置由原生 Keystore 加密；本教程没有预置密钥，也未取得真实模型通过记录。</Text>
-    <TextInput accessibilityLabel="模型 HTTPS endpoint" value={endpoint} onChangeText={setEndpoint}
+    <TextInput accessibilityLabel="模型 HTTPS endpoint" value={endpoint} onChangeText={value => { configurationEdited.current = true; setEndpoint(value); }}
       autoCapitalize="none" autoCorrect={false} style={[styles.input, { color: colors.text }]} />
-    <TextInput accessibilityLabel="模型名称" value={model} onChangeText={setModel}
+    <TextInput accessibilityLabel="模型名称" value={model} onChangeText={value => { configurationEdited.current = true; setModel(value); }}
       autoCapitalize="none" autoCorrect={false} style={[styles.input, { color: colors.text }]} />
-    <TextInput accessibilityLabel="模型 API 凭据（不回显）" value={apiKey} onChangeText={setApiKey}
+    <TextInput accessibilityLabel="模型 API 凭据（不回显）" value={apiKey} onChangeText={value => { configurationEdited.current = true; setApiKey(value); }}
       secureTextEntry autoCapitalize="none" autoCorrect={false} autoComplete="off"
       importantForAutofill="noExcludeDescendants" textContentType="none"
       style={[styles.input, { color: colors.text }]} />

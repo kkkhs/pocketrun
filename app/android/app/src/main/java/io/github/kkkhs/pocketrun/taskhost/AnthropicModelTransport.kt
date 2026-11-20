@@ -1,5 +1,6 @@
 package io.github.kkkhs.pocketrun.taskhost
 
+import com.anthropic.client.AnthropicClientAsync
 import com.anthropic.client.okhttp.AnthropicOkHttpClientAsync
 import com.anthropic.core.LogLevel
 import com.anthropic.core.RequestOptions
@@ -21,11 +22,14 @@ internal interface ModelTransport : Closeable {
 }
 
 /** Official asynchronous SDK: a cancellable stream handle exists before the network handshake. */
-internal class AnthropicModelTransport(private val credential: ModelCredential) : ModelTransport {
-    private val worker = Executors.newSingleThreadExecutor { Thread(it, "PocketRun-ModelTransport") }
-    private val client = AnthropicOkHttpClientAsync.builder()
+internal class AnthropicModelTransport(
+    private val credential: ModelCredential,
+    private val client: AnthropicClientAsync,
+) : ModelTransport {
+    constructor(credential: ModelCredential) : this(credential, AnthropicOkHttpClientAsync.builder()
         .apiKey(credential.apiKey).baseUrl(credential.settings.endpoint)
-        .timeout(Duration.ofSeconds(20)).maxRetries(0).logLevel(LogLevel.OFF).openTelemetry(false).build()
+        .timeout(Duration.ofSeconds(20)).maxRetries(0).logLevel(LogLevel.OFF).openTelemetry(false).build())
+    private val worker = Executors.newSingleThreadExecutor { Thread(it, "PocketRun-ModelTransport") }
     private val closed = AtomicBoolean(false)
     private var active: PendingRequest? = null
 
