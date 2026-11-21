@@ -18,6 +18,7 @@ import BackendPanel from './BackendPanel';
 import DisplayPanel from './DisplayPanel';
 import WorkspacePanel from './WorkspacePanel';
 import LinuxPanel from './LinuxPanel';
+import PtyPanel from './PtyPanel';
 import NativePocketRunDevice, {
   type DeviceInfo,
 } from './specs/NativePocketRunDevice';
@@ -133,6 +134,7 @@ function DeviceScreen() {
         <DisplayPanel colors={colors} />
         <WorkspacePanel colors={colors} />
         <LinuxPanel colors={colors} />
+        <PtyPanel colors={colors} />
       </ScrollView>
     </View>
   );
