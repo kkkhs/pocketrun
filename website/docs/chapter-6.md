@@ -5,7 +5,7 @@ title: 在私有工作目录里数出 CSV 的行数
 description: 准备一份 CSV，用普通 App UID 的两个命令传递数据，再检查输出、退出码和资源回收。
 ---
 
-> **本地开发草稿，尚未发布。** 已在授权云真机验证命令、文件、生命周期专项，以及实际界面的初始化和运行结果。各批次证据分别记录，不能把编译、原生测试或截图混成一次验收；源码发布与线上检查仍待完成。
+> **第 6 章已发布。** 已在授权云真机验证命令、文件、生命周期专项，以及实际界面的初始化和运行结果。各批次证据分别记录，不能把编译、原生测试或截图混成一次验收；已发布教程与 `chapter-6` 源码快照见文末。
 
 上一章，我们已经能看见虚拟屏里的页面，找到输入框、填入文字，再重新观察结果。
 
@@ -36,7 +36,7 @@ stderr：(empty)
 
 ## 先在界面跑一遍
 
-只在自己拥有或明确获授权的演示设备上练习，使用本地第 6 章源码构建的 App。公开的第 5 章源码快照还没有这个面板。
+只在自己拥有或明确获授权的演示设备上练习，使用[第 6 章源码快照](https://github.com/kkkhs/pocketrun/tree/chapter-6/app)构建的 App。公开的第 5 章源码快照还没有这个面板。
 
 1. 打开“第 6 章 · 工作目录与命令管道”，点“初始化工作目录”。应看到 App UID、工作目录、演示文件，以及“首次写入演示 CSV”。
 2. 点“运行演示管道”。第一次使用未修改的演示文件时，应得到上面的 `completed`、`3`、空 stderr 和两个 `0`。
@@ -47,9 +47,9 @@ stderr：(empty)
 
 初始化失败、模块未注册、结果为 `failed`、`timeout` 或 `output_limit` 时，先停止核对错误，不把残留输出当作完成。已有文件不会被重新写回演示内容，所以修改过的文件不一定再输出 `3`。
 
-云设备上的调试 APK 也需要能真正加载 JavaScript。本例在 `app/android/app/build.gradle` 的 `react` 配置中为调试包打入 bundle，不要求读者或云设备连到开发机 Metro。只有 App 能启动、按钮可操作并显示结果，才算界面验证；仅 APK 安装成功还不够。
+云设备上的调试 APK 也需要能真正加载 JavaScript。本例在 [`app/android/app/build.gradle`](https://github.com/kkkhs/pocketrun/blob/chapter-6/app/android/app/build.gradle) 的 `react` 配置中为调试包打入 bundle，不要求读者或云设备连到开发机 Metro。只有 App 能启动、按钮可操作并显示结果，才算界面验证；仅 APK 安装成功还不够。
 
-对应代码：`app/WorkspacePanel.tsx` 的 `perform()` 分别调用 `prepareWorkspace()` 和 `runDemoPipeline()`，`cancel()` 调用 `cancelPipeline()`；页面展示返回的状态、stdout、stderr 和各阶段退出码。调用约定在 `app/specs/NativePocketRunWorkspace.ts`，没有命令字符串或任意路径参数。
+对应代码：[`app/WorkspacePanel.tsx`](https://github.com/kkkhs/pocketrun/blob/chapter-6/app/WorkspacePanel.tsx) 的 `perform()` 分别调用 `prepareWorkspace()` 和 `runDemoPipeline()`，`cancel()` 调用 `cancelPipeline()`；页面展示返回的状态、stdout、stderr 和各阶段退出码。调用约定在 [`app/specs/NativePocketRunWorkspace.ts`](https://github.com/kkkhs/pocketrun/blob/chapter-6/app/specs/NativePocketRunWorkspace.ts)，没有命令字符串或任意路径参数。
 
 ## 这次由谁执行
 
@@ -65,7 +65,7 @@ stderr：(empty)
 
 **手机操作通道与文件命令通道分开。** 前章的系统操作仍走 App Kotlin → typed Binder → shell 后端；本章直接由普通 App Kotlin 启动命令，不经过那个后端。电脑上的 ADB 可以用于开发安装和测试，但不在本章产品运行的数据路径里。
 
-下面提到的 Kotlin 文件位于 `app/android/app/src/main/java/io/github/kkkhs/pocketrun/`。它们目前是本地开发源码；公开源码链接的收口方式见文末，不预先链接尚不存在的第 6 章 tag。
+下面提到的 Kotlin 文件位于 [`app/android/app/src/main/java/io/github/kkkhs/pocketrun/`](https://github.com/kkkhs/pocketrun/tree/chapter-6/app/android/app/src/main/java/io/github/kkkhs/pocketrun/)。链接固定到 `chapter-6` 源码快照，具体文件与阅读入口见文末。
 
 ## 准备目录，不覆盖已有文件
 
@@ -168,7 +168,7 @@ stderr 是命令的错误输出通道，本章单独展示它；失败状态、�
 | 首次文件同步完成、尚未发布时 App 被 `SIGKILL` | 恢复测试 `OK (1 test)`，检查完整临时文件、无已发布目标，再初始化后清理临时文件并运行成功 |
 | 宿主杀死本次子进程 | 独立批次原生 `OK (1 test)`，宿主驱动退出 0；检查失败结果、子进程消失与重跑，不声称观察到父进程 FD 清零 |
 | 真实产品界面 | 已实际初始化、运行并观察 `completed / 3 / empty / 0,0`，重复初始化保留原文件；上文提供真实结果截图。取消、超时与死亡的专项证据仍分别来自原生测试，不冒称界面每个分支都已命中 |
-| 第 6 章发布 | **未创建本章 PR、CI / Pages 发布、注释 tag 或源码 Release** |
+| 第 6 章发布 | [PR #11](https://github.com/kkkhs/pocketrun/pull/11) 已合并；main 的 [Android CI](https://github.com/kkkhs/pocketrun/actions/runs/44534812395) 与 [Pages](https://github.com/kkkhs/pocketrun/actions/runs/44534812843) 均成功；[线上教程](https://kkkhs.github.io/pocketrun/chapter-6/)、`chapter-6` 注释 tag 与[源码 Release](https://github.com/kkkhs/pocketrun/releases/tag/chapter-6) 已发布，不附调试 APK |
 
 **这些记录只证明各自设备与构建上的被测行为。** 不代表所有 Android / OEM 都已支持；正常界面演示通过也不覆盖所有异常分支，更不自动证明之后重新构建的 APK 已验收。
 
@@ -240,20 +240,20 @@ npm run audit:ci
 
 练习：为什么 `wc` 返回 `0` 不能隐藏 `cat` 的失败？如果 App 在首次写入同步完成后被杀，重新打开时应检查已发布文件、临时文件，还是只检查页面按钮状态？
 
-### 本地源码与待建快照
+### 源码与已发布快照
 
-本章目前只有本地开发源码。下面的路径从仓库根目录起算，不把尚未合并的文件链接到不存在的 `main` 页面或 `chapter-6` tag：
+本章源码随 [PR #11](https://github.com/kkkhs/pocketrun/pull/11) 合并，下面的路径从仓库根目录起算，链接固定到已发布的 `chapter-6` 快照：
 
-| 本地文件 | 阅读入口 |
+| 源码文件 | 阅读入口 |
 | --- | --- |
-| `app/WorkspacePanel.tsx` | `perform()`、`cancel()`、结果展示 |
-| `app/specs/NativePocketRunWorkspace.ts` | 三个固定调用与普通返回数据 |
-| `app/android/app/src/main/java/io/github/kkkhs/pocketrun/WorkspaceModule.kt` | `prepareWorkspace()`、`runDemoPipeline()`、`invalidate()` |
-| `app/android/app/src/main/java/io/github/kkkhs/pocketrun/WorkspaceSession.kt` | `prepare()`、`publishSample()`、`runDemo()` |
-| `app/android/app/src/main/java/io/github/kkkhs/pocketrun/CommandPipeline.kt` | `reserve()`、`execute()`、`cancel()`、`terminate()` |
-| `app/android/app/src/main/java/io/github/kkkhs/pocketrun/AtomicSamplePublisher.kt` 与 `app/android/app/src/main/cpp/pocketrun_fs.cpp` | Android no-replace 发布入口 |
-| `app/android/app/src/androidTest/java/io/github/kkkhs/pocketrun/Chapter6WorkspaceIntegrationTest.kt`、`Chapter6HostDeathTest.kt`（同目录） | 真实生命周期与宿主死亡 / 恢复断言 |
+| [`app/WorkspacePanel.tsx`](https://github.com/kkkhs/pocketrun/blob/chapter-6/app/WorkspacePanel.tsx) | `perform()`、`cancel()`、结果展示 |
+| [`app/specs/NativePocketRunWorkspace.ts`](https://github.com/kkkhs/pocketrun/blob/chapter-6/app/specs/NativePocketRunWorkspace.ts) | 三个固定调用与普通返回数据 |
+| [`app/android/app/src/main/java/io/github/kkkhs/pocketrun/WorkspaceModule.kt`](https://github.com/kkkhs/pocketrun/blob/chapter-6/app/android/app/src/main/java/io/github/kkkhs/pocketrun/WorkspaceModule.kt) | `prepareWorkspace()`、`runDemoPipeline()`、`invalidate()` |
+| [`app/android/app/src/main/java/io/github/kkkhs/pocketrun/WorkspaceSession.kt`](https://github.com/kkkhs/pocketrun/blob/chapter-6/app/android/app/src/main/java/io/github/kkkhs/pocketrun/WorkspaceSession.kt) | `prepare()`、`publishSample()`、`runDemo()` |
+| [`app/android/app/src/main/java/io/github/kkkhs/pocketrun/CommandPipeline.kt`](https://github.com/kkkhs/pocketrun/blob/chapter-6/app/android/app/src/main/java/io/github/kkkhs/pocketrun/CommandPipeline.kt) | `reserve()`、`execute()`、`cancel()`、`terminate()` |
+| [`app/android/app/src/main/java/io/github/kkkhs/pocketrun/AtomicSamplePublisher.kt`](https://github.com/kkkhs/pocketrun/blob/chapter-6/app/android/app/src/main/java/io/github/kkkhs/pocketrun/AtomicSamplePublisher.kt) 与 [`app/android/app/src/main/cpp/pocketrun_fs.cpp`](https://github.com/kkkhs/pocketrun/blob/chapter-6/app/android/app/src/main/cpp/pocketrun_fs.cpp) | Android no-replace 发布入口 |
+| [`app/android/app/src/androidTest/java/io/github/kkkhs/pocketrun/Chapter6WorkspaceIntegrationTest.kt`](https://github.com/kkkhs/pocketrun/blob/chapter-6/app/android/app/src/androidTest/java/io/github/kkkhs/pocketrun/Chapter6WorkspaceIntegrationTest.kt)、[`Chapter6HostDeathTest.kt`](https://github.com/kkkhs/pocketrun/blob/chapter-6/app/android/app/src/androidTest/java/io/github/kkkhs/pocketrun/Chapter6HostDeathTest.kt)（同目录） | 真实生命周期与宿主死亡 / 恢复断言 |
 
-[第 5 章 Release](https://github.com/kkkhs/pocketrun/releases/tag/chapter-5)仍是前章公开源码快照，不包含本章能力。当前尚缺已核验可用的 GitHub 写入鉴权，本章 PR、CI、Pages、tag 与 Release 均未建立。
+[第 6 章源码 Release](https://github.com/kkkhs/pocketrun/releases/tag/chapter-6) 已公开发布，提供源码归档及 SHA256 校验附件，不附公开调试签名 APK。`chapter-6` 注释 tag 固定到提交 [`90d9d4f009066cd5de22f20c87fa963530d681c6`](https://github.com/kkkhs/pocketrun/commit/90d9d4f009066cd5de22f20c87fa963530d681c6)，便于对照本章代码。[第 5 章 Release](https://github.com/kkkhs/pocketrun/releases/tag/chapter-5)仍是前章快照，不包含本章能力。
 
-待最终验收和实际发布完成后，再登记真实 PR、指向已核验提交的 `chapter-6` 注释 tag 与源码 Release，并将上述源码路径补为该 tag 下的可访问文件链接。不存在的快照不预先给出成功链接，也不附公开调试签名 APK。
+[线上第 6 章](https://kkkhs.github.io/pocketrun/chapter-6/)已发布，设备验证范围仍以上述各批次记录为准；源码与网站发布不代表所有设备、界面异常分支或显示模式均已验收。
