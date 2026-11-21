@@ -1,0 +1,192 @@
+--- a/src/GNUmakefile
++++ b/src/GNUmakefile
+@@ -177,7 +177,8 @@
+ ######################################################################
+ # Build rules
+ 
+-COMPILE = $($(quiet)CC) $(CPPFLAGS) $(CFLAGS) -MD -c $(SRC)$< -o $@
++# VPATH already resolves $<; prefixing SRC duplicates absolute paths.
++COMPILE = $($(quiet)CC) $(CPPFLAGS) $(CFLAGS) -MD -c $< -o $@
+ LINK    = $($(quiet)LD) -o $@ $^ $(LDFLAGS)
+ 
+ OBJIFY = $($(quiet)GEN)									\
+--- a/src/arch.h
++++ b/src/arch.h
+@@ -150,7 +150,7 @@
+     #define INTERP_PIC_ADDRESS 0x5900000000
+     #define HAS_POKEDATA_WORKAROUND true
+ 
+-    #define HAS_LOADER_32BIT true
++    /* PocketRun's APK candidate is arm64-only: no 32-bit loader. */
+     #define EXEC_PIC_ADDRESS_32   0x0f000000
+     #define INTERP_PIC_ADDRESS_32 0x1f000000
+ 
+--- a/src/tracee/event.c
++++ b/src/tracee/event.c
+@@ -23,6 +23,7 @@
+ #include <sched.h>      /* CLONE_*,  */
+ #include <sys/types.h>  /* pid_t, */
+ #include <sys/ptrace.h> /* ptrace(1), PTRACE_*, */
++#include <sys/prctl.h>  /* PR_SET_PDEATHSIG, */
+ #include <sys/types.h>  /* waitpid(2), */
+ #include <sys/wait.h>   /* waitpid(2), */
+ #include <sys/utsname.h> /* uname(2), */
+@@ -95,6 +96,7 @@
+ int launch_process(Tracee *tracee, char *const argv[])
+ {
+ 	char *const default_argv[] = { "-sh", NULL };
++	const pid_t expected_tracer = getpid();
+ 	long status;
+ 	pid_t pid;
+ 
+@@ -113,6 +115,11 @@
+ 		return -errno;
+ 
+ 	case 0: /* child */
++		/* Cover the interval before the tracer can arm EXITKILL. */
++		if (prctl(PR_SET_PDEATHSIG, SIGKILL, 0L, 0L, 0L) != 0 ||
++		    getppid() != expected_tracer)
++			_exit(EXIT_FAILURE);
++
+ 		/* SIG_IGN survives fork(2) and execve(2), so an ignored
+ 		 * SIGPIPE anywhere above proot is inherited by every
+ 		 * process of the guest: write(2) then fails with EPIPE
+@@ -469,6 +476,7 @@
+ {
+ 	static bool seccomp_detected = false;
+ 	static bool seccomp_after_ptrace_enter_checked = false;
++	static bool initial_exitkill_armed = false;
+ 	long status;
+ 	int signal;
+ 	bool sysexit_necessary;
+@@ -531,7 +539,8 @@
+ 				PTRACE_O_TRACEVFORKDONE	|
+ 				PTRACE_O_TRACEEXEC	|
+ 				PTRACE_O_TRACECLONE	|
+-				PTRACE_O_TRACEEXIT);
++				PTRACE_O_TRACEEXIT	|
++				PTRACE_O_EXITKILL);
+ 
+ 			/* Distinguish some events from others and
+ 			 * automatically trace each new process with
+@@ -829,6 +838,18 @@
+ 			/* For each tracee, the first SIGSTOP
+ 			 * is only used to notify the tracer.  */
+ 			if (tracee->sigstop == SIGSTOP_IGNORED) {
++				/* Keep the first bare SIGTRAP and upstream seccomp
++				 * negotiation unchanged. Descendants inherit options. */
++				if (!initial_exitkill_armed) {
++					status = ptrace(PTRACE_SETOPTIONS, tracee->pid, NULL,
++						PTRACE_O_EXITKILL);
++					if (status < 0) {
++						note(tracee, ERROR, SYSTEM, "ptrace(EXITKILL required)");
++						kill_all_tracees();
++						exit(EXIT_FAILURE);
++					}
++					initial_exitkill_armed = true;
++				}
+ 				tracee->sigstop = SIGSTOP_ALLOWED;
+ 				signal = 0;
+ 			}
+--- a/src/extension/ashmem_memfd/ashmem_memfd.c
++++ b/src/extension/ashmem_memfd/ashmem_memfd.c
+@@ -1,6 +1,7 @@
+ #if defined(__ANDROID__) || defined(__BIONIC__)
+ 
+ #include <stdlib.h>
++#include <string.h> /* strcmp, memset declarations for NDK Clang. */
+ #include <signal.h>
+ #include <unistd.h>
+ #include <sys/syscall.h>  /* __NR_memfd_create,  */
+--- a/src/loader/loader.c
++++ b/src/loader/loader.c
+@@ -142,6 +142,12 @@
+ 			break;
+ 
+ 		case LOAD_ACTION_MMAP_FILE:
++			/* Never request W+X, nor zero-fill a non-writable mapping. */
++			if (((stmt->mmap.prot & (PROT_WRITE | PROT_EXEC)) ==
++			     (PROT_WRITE | PROT_EXEC)) ||
++			    (stmt->mmap.clear_length != 0 &&
++			     (stmt->mmap.prot & PROT_WRITE) == 0))
++				FATAL();
+ 			status = SYSCALL(MMAP, 6, stmt->mmap.addr, stmt->mmap.length,
+ 					stmt->mmap.prot, MAP_PRIVATE | MAP_FIXED, fd,
+ 					stmt->mmap.offset >> MMAP_OFFSET_SHIFT);
+@@ -161,6 +167,9 @@
+ 			break;
+ 
+ 		case LOAD_ACTION_MMAP_ANON:
++			/* Anonymous executable memory is not an APK code path. */
++			if (stmt->mmap.prot & PROT_EXEC)
++				FATAL();
+ 			status = SYSCALL(MMAP, 6, stmt->mmap.addr, stmt->mmap.length,
+ 					stmt->mmap.prot, MAP_PRIVATE | MAP_FIXED | MAP_ANONYMOUS, -1, 0);
+ 			if (unlikely(status != stmt->mmap.addr))
+@@ -170,12 +179,8 @@
+ 			break;
+ 
+ 		case LOAD_ACTION_MAKE_STACK_EXEC:
+-			SYSCALL(MPROTECT, 3,
+-				stmt->make_stack_exec.start, 1,
+-				PROT_READ | PROT_WRITE | PROT_EXEC | PROT_GROWSDOWN);
+-
+-			cursor += LOAD_STATEMENT_SIZE(*stmt, make_stack_exec);
+-			break;
++			/* Executable stacks are unsupported, not emulated. */
++			FATAL();
+ 
+ 		case LOAD_ACTION_START_TRACED:
+ 			traced = true;
+--- a/src/cli/cli.c
++++ b/src/cli/cli.c
+@@ -35,6 +35,8 @@
+ #include <execinfo.h>      /* backtrace_symbols(3), */
+ #endif
+ #include <limits.h>        /* INT_MAX, */
++#include <sys/prctl.h>     /* PR_SET_PDEATHSIG, */
++#include <signal.h>        /* SIGKILL, */
+ 
+ #include "cli/cli.h"
+ #include "cli/note.h"
+@@ -441,11 +443,40 @@
+ 
+ bool exit_failure = true;
+ 
++/* Pin the expected App parent before allocating or creating any child. */
++static int require_live_app_parent(void)
++{
++	const char *value = getenv("POCKETRUN_EXPECTED_PARENT_PID");
++	const char *p;
++	char *end;
++	long expected;
++
++	if (value == NULL || *value == '\0')
++		return -1;
++	for (p = value; *p != '\0'; p++) {
++		if (*p < '0' || *p > '9')
++			return -1;
++	}
++	errno = 0;
++	expected = strtol(value, &end, 10);
++	if (errno != 0 || *end != '\0' || expected <= 1 || expected > INT_MAX)
++		return -1;
++	if (prctl(PR_SET_PDEATHSIG, SIGKILL, 0L, 0L, 0L) != 0)
++		return -1;
++	/* This check closes death/reparenting before prctl took effect. */
++	return getppid() == (pid_t) expected ? 0 : -1;
++}
++
+ int main(int argc, char *const argv[])
+ {
+ 	Tracee *tracee;
+ 	pid_t pid;
+ 	int status;
++
++	if (require_live_app_parent() != 0) {
++		fprintf(stderr, "fatal error: expected live App parent/PDEATHSIG required.\n");
++		return EXIT_FAILURE;
++	}
+ 
+ 	/* Configure the memory allocator.  */
+ 	talloc_enable_leak_report();

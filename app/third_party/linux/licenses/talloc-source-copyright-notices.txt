@@ -1,0 +1,915 @@
+
+===== talloc-2.5.0/compat/talloc_compat1.c =====
+/*
+   Samba trivial allocation library - compat functions
+
+   Copyright (C) Stefan Metzmacher 2009
+
+     ** NOTE! The following LGPL license applies to the talloc
+     ** library. This does NOT imply that all of Samba is released
+     ** under the LGPL
+
+   This library is free software; you can redistribute it and/or
+   modify it under the terms of the GNU Lesser General Public
+   License as published by the Free Software Foundation; either
+   version 3 of the License, or (at your option) any later version.
+
+   This library is distributed in the hope that it will be useful,
+   but WITHOUT ANY WARRANTY; without even the implied warranty of
+   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+   Lesser General Public License for more details.
+
+   You should have received a copy of the GNU Lesser General Public
+   License along with this library; if not, see <http://www.gnu.org/licenses/>.
+*/
+/*
+ * This file contains only function to build a
+ * compat talloc.so.1 library on top of talloc.so.2
+ */
+
+===== talloc-2.5.0/pytalloc.c =====
+/* 
+   Unix SMB/CIFS implementation.
+   Python Talloc Module
+   Copyright (C) Jelmer Vernooij <jelmer@samba.org> 2010-2011
+
+     ** NOTE! The following LGPL license applies to the talloc
+     ** library. This does NOT imply that all of Samba is released
+     ** under the LGPL
+
+   This library is free software; you can redistribute it and/or
+   modify it under the terms of the GNU Lesser General Public
+   License as published by the Free Software Foundation; either
+   version 3 of the License, or (at your option) any later version.
+
+   This library is distributed in the hope that it will be useful,
+   but WITHOUT ANY WARRANTY; without even the implied warranty of
+   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+   Lesser General Public License for more details.
+
+   You should have received a copy of the GNU Lesser General Public
+   License along with this library; if not, see <http://www.gnu.org/licenses/>.
+*/
+
+===== talloc-2.5.0/pytalloc.h =====
+/* 
+   Unix SMB/CIFS implementation.
+   Samba utility functions
+   Copyright (C) Jelmer Vernooij <jelmer@samba.org> 2008
+   
+     ** NOTE! The following LGPL license applies to the talloc
+     ** library. This does NOT imply that all of Samba is released
+     ** under the LGPL
+
+   This library is free software; you can redistribute it and/or
+   modify it under the terms of the GNU Lesser General Public
+   License as published by the Free Software Foundation; either
+   version 3 of the License, or (at your option) any later version.
+
+   This library is distributed in the hope that it will be useful,
+   but WITHOUT ANY WARRANTY; without even the implied warranty of
+   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+   Lesser General Public License for more details.
+
+   You should have received a copy of the GNU Lesser General Public
+   License along with this library; if not, see <http://www.gnu.org/licenses/>.
+*/
+
+===== talloc-2.5.0/pytalloc_private.h =====
+/*
+   Unix SMB/CIFS implementation.
+   Samba utility functions
+   Copyright (C) Jelmer Vernooij <jelmer@samba.org> 2008
+   Copyright (C) Andrew Bartlett <abartlet@samba.org> 2016
+
+   This program is free software; you can redistribute it and/or modify
+   it under the terms of the GNU General Public License as published by
+   the Free Software Foundation; either version 3 of the License, or
+   (at your option) any later version.
+
+   This program is distributed in the hope that it will be useful,
+   but WITHOUT ANY WARRANTY; without even the implied warranty of
+   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+   GNU General Public License for more details.
+
+   You should have received a copy of the GNU General Public License
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.
+*/
+
+===== talloc-2.5.0/pytalloc_util.c =====
+/* 
+   Unix SMB/CIFS implementation.
+   Python/Talloc glue
+   Copyright (C) Jelmer Vernooij <jelmer@samba.org> 2008
+   
+     ** NOTE! The following LGPL license applies to the talloc
+     ** library. This does NOT imply that all of Samba is released
+     ** under the LGPL
+
+   This library is free software; you can redistribute it and/or
+   modify it under the terms of the GNU Lesser General Public
+   License as published by the Free Software Foundation; either
+   version 3 of the License, or (at your option) any later version.
+
+   This library is distributed in the hope that it will be useful,
+   but WITHOUT ANY WARRANTY; without even the implied warranty of
+   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+   Lesser General Public License for more details.
+
+   You should have received a copy of the GNU Lesser General Public
+   License along with this library; if not, see <http://www.gnu.org/licenses/>.
+*/
+
+===== talloc-2.5.0/talloc.c =====
+/*
+   Samba Unix SMB/CIFS implementation.
+
+   Samba trivial allocation library - new interface
+
+   NOTE: Please read talloc_guide.txt for full documentation
+
+   Copyright (C) Andrew Tridgell 2004
+   Copyright (C) Stefan Metzmacher 2006
+
+     ** NOTE! The following LGPL license applies to the talloc
+     ** library. This does NOT imply that all of Samba is released
+     ** under the LGPL
+
+   This library is free software; you can redistribute it and/or
+   modify it under the terms of the GNU Lesser General Public
+   License as published by the Free Software Foundation; either
+   version 3 of the License, or (at your option) any later version.
+
+   This library is distributed in the hope that it will be useful,
+   but WITHOUT ANY WARRANTY; without even the implied warranty of
+   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+   Lesser General Public License for more details.
+
+   You should have received a copy of the GNU Lesser General Public
+   License along with this library; if not, see <http://www.gnu.org/licenses/>.
+*/
+/*
+  inspired by http://swapped.cc/halloc/
+*/
+
+===== talloc-2.5.0/test_pytalloc.c =====
+/*
+   Samba Unix SMB/CIFS implementation.
+
+   C utilities for the pytalloc test suite.
+   Provides the "_test_pytalloc" Python module.
+
+   NOTE: Please read talloc_guide.txt for full documentation
+
+   Copyright (C) Petr Viktorin 2015
+
+     ** NOTE! The following LGPL license applies to the talloc
+     ** library. This does NOT imply that all of Samba is released
+     ** under the LGPL
+
+   This library is free software; you can redistribute it and/or
+   modify it under the terms of the GNU Lesser General Public
+   License as published by the Free Software Foundation; either
+   version 3 of the License, or (at your option) any later version.
+
+   This library is distributed in the hope that it will be useful,
+   but WITHOUT ANY WARRANTY; without even the implied warranty of
+   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+   Lesser General Public License for more details.
+
+   You should have received a copy of the GNU Lesser General Public
+   License along with this library; if not, see <http://www.gnu.org/licenses/>.
+*/
+
+===== talloc-2.5.0/testsuite.c =====
+/*
+   Unix SMB/CIFS implementation.
+
+   local testing of talloc routines.
+
+   Copyright (C) Andrew Tridgell 2004
+
+     ** NOTE! The following LGPL license applies to the talloc
+     ** library. This does NOT imply that all of Samba is released
+     ** under the LGPL
+
+   This library is free software; you can redistribute it and/or
+   modify it under the terms of the GNU Lesser General Public
+   License as published by the Free Software Foundation; either
+   version 3 of the License, or (at your option) any later version.
+
+   This library is distributed in the hope that it will be useful,
+   but WITHOUT ANY WARRANTY; without even the implied warranty of
+   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+   Lesser General Public License for more details.
+
+   You should have received a copy of the GNU Lesser General Public
+   License along with this library; if not, see <http://www.gnu.org/licenses/>.
+*/
+
+===== talloc-2.5.0/testsuite_main.c =====
+/*
+   Unix SMB/CIFS implementation.
+
+   local testing of talloc routines.
+
+   Copyright (C) Andrew Tridgell 2004
+
+     ** NOTE! The following LGPL license applies to the talloc
+     ** library. This does NOT imply that all of Samba is released
+     ** under the LGPL
+
+   This library is free software; you can redistribute it and/or
+   modify it under the terms of the GNU Lesser General Public
+   License as published by the Free Software Foundation; either
+   version 3 of the License, or (at your option) any later version.
+
+   This library is distributed in the hope that it will be useful,
+   but WITHOUT ANY WARRANTY; without even the implied warranty of
+   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+   Lesser General Public License for more details.
+
+   You should have received a copy of the GNU Lesser General Public
+   License along with this library; if not, see <http://www.gnu.org/licenses/>.
+*/
+
+===== talloc-2.5.0/lib/replace/closefrom.c =====
+/*
+ * Unix SMB/CIFS implementation.
+ * Samba utility functions
+ * Copyright (C) Volker Lendecke 2016
+ *
+ *   ** NOTE! The following LGPL license applies to the replace
+ *   ** library. This does NOT imply that all of Samba is released
+ *   ** under the LGPL
+ *
+ * This library is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU Lesser General Public
+ * License as published by the Free Software Foundation; either
+ * version 3 of the License, or (at your option) any later version.
+ *
+ * This library is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * Library General Public License for more details.
+ *
+ * You should have received a copy of the GNU Lesser General Public
+ * License along with this library; if not, see <http://www.gnu.org/licenses/>.
+ */
+
+===== talloc-2.5.0/lib/replace/dlfcn.c =====
+/* 
+   Unix SMB/CIFS implementation.
+   Samba system utilities
+   Copyright (C) Andrew Tridgell 1992-1998
+   Copyright (C) Jeremy Allison 1998-2002
+   Copyright (C) Jelmer Vernooij 2006
+
+     ** NOTE! The following LGPL license applies to the replace
+     ** library. This does NOT imply that all of Samba is released
+     ** under the LGPL
+   
+   This library is free software; you can redistribute it and/or
+   modify it under the terms of the GNU Lesser General Public
+   License as published by the Free Software Foundation; either
+   version 3 of the License, or (at your option) any later version.
+
+   This library is distributed in the hope that it will be useful,
+   but WITHOUT ANY WARRANTY; without even the implied warranty of
+   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+   Lesser General Public License for more details.
+
+   You should have received a copy of the GNU Lesser General Public
+   License along with this library; if not, see <http://www.gnu.org/licenses/>.
+*/
+
+===== talloc-2.5.0/lib/replace/getaddrinfo.c =====
+/*
+PostgreSQL Database Management System
+(formerly known as Postgres, then as Postgres95)
+
+Portions Copyright (c) 1996-2005, The PostgreSQL Global Development Group
+
+Portions Copyright (c) 1994, The Regents of the University of California
+
+Permission to use, copy, modify, and distribute this software and its
+documentation for any purpose, without fee, and without a written agreement
+is hereby granted, provided that the above copyright notice and this paragraph
+and the following two paragraphs appear in all copies.
+
+IN NO EVENT SHALL THE UNIVERSITY OF CALIFORNIA BE LIABLE TO ANY PARTY FOR
+DIRECT, INDIRECT, SPECIAL, INCIDENTAL, OR CONSEQUENTIAL DAMAGES, INCLUDING
+LOST PROFITS, ARISING OUT OF THE USE OF THIS SOFTWARE AND ITS DOCUMENTATION,
+EVEN IF THE UNIVERSITY OF CALIFORNIA HAS BEEN ADVISED OF THE POSSIBILITY OF
+SUCH DAMAGE.
+
+THE UNIVERSITY OF CALIFORNIA SPECIFICALLY DISCLAIMS ANY WARRANTIES,
+INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY
+AND FITNESS FOR A PARTICULAR PURPOSE. THE SOFTWARE PROVIDED HEREUNDER IS
+ON AN "AS IS" BASIS, AND THE UNIVERSITY OF CALIFORNIA HAS NO OBLIGATIONS
+TO PROVIDE MAINTENANCE, SUPPORT, UPDATES, ENHANCEMENTS, OR MODIFICATIONS.
+
+*/
+/*-------------------------------------------------------------------------
+ *
+ * getaddrinfo.c
+ *	  Support getaddrinfo() on platforms that don't have it.
+ *
+ * We also supply getnameinfo() here, assuming that the platform will have
+ * it if and only if it has getaddrinfo().	If this proves false on some
+ * platform, we'll need to split this file and provide a separate configure
+ * test for getnameinfo().
+ *
+ * Copyright (c) 2003-2007, PostgreSQL Global Development Group
+ *
+ * Copyright (C) 2007 Jeremy Allison.
+ * Modified to return multiple IPv4 addresses for Samba.
+ *
+ *-------------------------------------------------------------------------
+ */
+
+===== talloc-2.5.0/lib/replace/getaddrinfo.h =====
+/*
+PostgreSQL Database Management System
+(formerly known as Postgres, then as Postgres95)
+
+Portions Copyright (c) 1996-2005, The PostgreSQL Global Development Group
+
+Portions Copyright (c) 1994, The Regents of the University of California
+
+Permission to use, copy, modify, and distribute this software and its
+documentation for any purpose, without fee, and without a written agreement
+is hereby granted, provided that the above copyright notice and this paragraph
+and the following two paragraphs appear in all copies.
+
+IN NO EVENT SHALL THE UNIVERSITY OF CALIFORNIA BE LIABLE TO ANY PARTY FOR
+DIRECT, INDIRECT, SPECIAL, INCIDENTAL, OR CONSEQUENTIAL DAMAGES, INCLUDING
+LOST PROFITS, ARISING OUT OF THE USE OF THIS SOFTWARE AND ITS DOCUMENTATION,
+EVEN IF THE UNIVERSITY OF CALIFORNIA HAS BEEN ADVISED OF THE POSSIBILITY OF
+SUCH DAMAGE.
+
+THE UNIVERSITY OF CALIFORNIA SPECIFICALLY DISCLAIMS ANY WARRANTIES,
+INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY
+AND FITNESS FOR A PARTICULAR PURPOSE. THE SOFTWARE PROVIDED HEREUNDER IS
+ON AN "AS IS" BASIS, AND THE UNIVERSITY OF CALIFORNIA HAS NO OBLIGATIONS
+TO PROVIDE MAINTENANCE, SUPPORT, UPDATES, ENHANCEMENTS, OR MODIFICATIONS.
+
+*/
+/*-------------------------------------------------------------------------
+ *
+ * getaddrinfo.h
+ *	  Support getaddrinfo() on platforms that don't have it.
+ *
+ * Note: we use our own routines on platforms that don't HAVE_STRUCT_ADDRINFO,
+ * whether or not the library routine getaddrinfo() can be found.  This
+ * policy is needed because on some platforms a manually installed libbind.a
+ * may provide getaddrinfo(), yet the system headers may not provide the
+ * struct definitions needed to call it.  To avoid conflict with the libbind
+ * definition in such cases, we rename our routines to pg_xxx() via macros.
+ *
+
+in lib/replace we use rep_xxx()
+
+ * This code will also work on platforms where struct addrinfo is defined
+ * in the system headers but no getaddrinfo() can be located.
+ *
+ * Copyright (c) 2003-2007, PostgreSQL Global Development Group
+ *
+ *-------------------------------------------------------------------------
+ */
+
+===== talloc-2.5.0/lib/replace/getifaddrs.c =====
+/*
+   Unix SMB/CIFS implementation.
+   Samba utility functions
+   Copyright (C) Andrew Tridgell 1998
+   Copyright (C) Jeremy Allison 2007
+   Copyright (C) Jelmer Vernooij <jelmer@samba.org> 2007
+
+     ** NOTE! The following LGPL license applies to the replace
+     ** library. This does NOT imply that all of Samba is released
+     ** under the LGPL
+
+   This library is free software; you can redistribute it and/or
+   modify it under the terms of the GNU Lesser General Public
+   License as published by the Free Software Foundation; either
+   version 3 of the License, or (at your option) any later version.
+
+   This library is distributed in the hope that it will be useful,
+   but WITHOUT ANY WARRANTY; without even the implied warranty of
+   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+   Library General Public License for more details.
+
+   You should have received a copy of the GNU Lesser General Public
+   License along with this library; if not, see <http://www.gnu.org/licenses/>.
+*/
+
+===== talloc-2.5.0/lib/replace/inet_aton.c =====
+/*
+ * Unix SMB/CIFS implementation.
+ * replacement functions
+ * Copyright (C) Michael Adam <obnox@samba.org> 2008
+ *
+ *  ** NOTE! The following LGPL license applies to the replace
+ *  ** library. This does NOT imply that all of Samba is released
+ *  ** under the LGPL
+ *
+ * This library is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU Lesser General Public
+ * License as published by the Free Software Foundation; either
+ * version 3 of the License, or (at your option) any later version.
+ *
+ * This library is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * Lesser General Public License for more details.
+ *
+ * You should have received a copy of the GNU Lesser General Public
+ * License along with this library; if not, see <http://www.gnu.org/licenses/>.
+ */
+
+===== talloc-2.5.0/lib/replace/inet_ntoa.c =====
+/*
+ * Unix SMB/CIFS implementation.
+ * replacement routines for broken systems
+ * Copyright (C) Andrew Tridgell 2003
+ * Copyright (C) Michael Adam 2008
+ *
+ *  ** NOTE! The following LGPL license applies to the replace
+ *  ** library. This does NOT imply that all of Samba is released
+ *  ** under the LGPL
+ *
+ * This library is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU Lesser General Public
+ * License as published by the Free Software Foundation; either
+ * version 3 of the License, or (at your option) any later version.
+ *
+ * This library is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * Lesser General Public License for more details.
+ *
+ * You should have received a copy of the GNU Lesser General Public
+ * License along with this library; if not, see <http://www.gnu.org/licenses/>.
+ */
+
+===== talloc-2.5.0/lib/replace/inet_ntop.c =====
+/*
+ * Copyright (C) 1996-2001  Internet Software Consortium.
+ *
+ * Permission to use, copy, modify, and distribute this software for any
+ * purpose with or without fee is hereby granted, provided that the above
+ * copyright notice and this permission notice appear in all copies.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS" AND INTERNET SOFTWARE CONSORTIUM
+ * DISCLAIMS ALL WARRANTIES WITH REGARD TO THIS SOFTWARE INCLUDING ALL
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL
+ * INTERNET SOFTWARE CONSORTIUM BE LIABLE FOR ANY SPECIAL, DIRECT,
+ * INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES WHATSOEVER RESULTING
+ * FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN ACTION OF CONTRACT,
+ * NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION
+ * WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+ */
+
+===== talloc-2.5.0/lib/replace/inet_pton.c =====
+/*
+ * Copyright (C) 1996-2001  Internet Software Consortium.
+ *
+ * Permission to use, copy, modify, and distribute this software for any
+ * purpose with or without fee is hereby granted, provided that the above
+ * copyright notice and this permission notice appear in all copies.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS" AND INTERNET SOFTWARE CONSORTIUM
+ * DISCLAIMS ALL WARRANTIES WITH REGARD TO THIS SOFTWARE INCLUDING ALL
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL
+ * INTERNET SOFTWARE CONSORTIUM BE LIABLE FOR ANY SPECIAL, DIRECT,
+ * INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES WHATSOEVER RESULTING
+ * FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN ACTION OF CONTRACT,
+ * NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION
+ * WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+ */
+
+===== talloc-2.5.0/lib/replace/poll.c =====
+/*
+   Unix SMB/CIFS implementation.
+   poll.c - poll wrapper
+
+   This file is based on code from libssh (LGPLv2.1+ at the time it
+   was downloaded), thus the following copyrights:
+
+   Copyright (c) 2009-2010 by Andreas Schneider <mail@cynapses.org>
+   Copyright (c) 2003-2009 by Aris Adamantiadis
+   Copyright (c) 2009 Aleksandar Kanchev
+   Copyright (C) Volker Lendecke 2011
+
+     ** NOTE! The following LGPL license applies to the replace
+     ** library. This does NOT imply that all of Samba is released
+     ** under the LGPL
+
+   This library is free software; you can redistribute it and/or
+   modify it under the terms of the GNU Lesser General Public
+   License as published by the Free Software Foundation; either
+   version 3 of the License, or (at your option) any later version.
+
+   This library is distributed in the hope that it will be useful,
+   but WITHOUT ANY WARRANTY; without even the implied warranty of
+   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+   Lesser General Public License for more details.
+
+   You should have received a copy of the GNU Lesser General Public
+   License along with this library; if not, see <http://www.gnu.org/licenses/>.
+ */
+
+===== talloc-2.5.0/lib/replace/replace.c =====
+/*
+   Unix SMB/CIFS implementation.
+   replacement routines for broken systems
+   Copyright (C) Andrew Tridgell 1992-1998
+   Copyright (C) Jelmer Vernooij 2005-2008
+   Copyright (C) Matthieu Patou  2010
+
+     ** NOTE! The following LGPL license applies to the replace
+     ** library. This does NOT imply that all of Samba is released
+     ** under the LGPL
+
+   This library is free software; you can redistribute it and/or
+   modify it under the terms of the GNU Lesser General Public
+   License as published by the Free Software Foundation; either
+   version 3 of the License, or (at your option) any later version.
+
+   This library is distributed in the hope that it will be useful,
+   but WITHOUT ANY WARRANTY; without even the implied warranty of
+   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+   Lesser General Public License for more details.
+
+   You should have received a copy of the GNU Lesser General Public
+   License along with this library; if not, see <http://www.gnu.org/licenses/>.
+*/
+
+===== talloc-2.5.0/lib/replace/replace.h =====
+/*
+   Unix SMB/CIFS implementation.
+
+   macros to go along with the lib/replace/ portability layer code
+
+   Copyright (C) Andrew Tridgell 2005
+   Copyright (C) Jelmer Vernooij 2006-2008
+   Copyright (C) Jeremy Allison 2007.
+
+     ** NOTE! The following LGPL license applies to the replace
+     ** library. This does NOT imply that all of Samba is released
+     ** under the LGPL
+
+   This library is free software; you can redistribute it and/or
+   modify it under the terms of the GNU Lesser General Public
+   License as published by the Free Software Foundation; either
+   version 3 of the License, or (at your option) any later version.
+
+   This library is distributed in the hope that it will be useful,
+   but WITHOUT ANY WARRANTY; without even the implied warranty of
+   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+   Lesser General Public License for more details.
+
+   You should have received a copy of the GNU Lesser General Public
+   License along with this library; if not, see <http://www.gnu.org/licenses/>.
+*/
+
+===== talloc-2.5.0/lib/replace/snprintf.c =====
+/*
+ * NOTE: If you change this file, please merge it into rsync, samba, etc.
+ */
+/*
+ * Copyright Patrick Powell 1995
+ * This code is based on code written by Patrick Powell (papowell@astart.com)
+ * It may be used for any purpose as long as this notice remains intact
+ * on all source code distributions
+ */
+/**************************************************************
+ * Original:
+ * Patrick Powell Tue Apr 11 09:48:21 PDT 1995
+ * A bombproof version of doprnt (dopr) included.
+ * Sigh.  This sort of thing is always nasty do deal with.  Note that
+ * the version here does not include floating point...
+ *
+ * snprintf() is used instead of sprintf() as it does limit checks
+ * for string length.  This covers a nasty loophole.
+ *
+ * The other functions are there to prevent NULL pointers from
+ * causing nasty effects.
+ *
+ * More Recently:
+ *  Brandon Long <blong@fiction.net> 9/15/96 for mutt 0.43
+ *  This was ugly.  It is still ugly.  I opted out of floating point
+ *  numbers, but the formatter understands just about everything
+ *  from the normal C string format, at least as far as I can tell from
+ *  the Solaris 2.5 printf(3S) man page.
+ *
+ *  Brandon Long <blong@fiction.net> 10/22/97 for mutt 0.87.1
+ *    Ok, added some minimal floating point support, which means this
+ *    probably requires libm on most operating systems.  Don't yet
+ *    support the exponent (e,E) and sigfig (g,G).  Also, fmtint()
+ *    was pretty badly broken, it just wasn't being exercised in ways
+ *    which showed it, so that's been fixed.  Also, formatted the code
+ *    to mutt conventions, and removed dead code left over from the
+ *    original.  Also, there is now a builtin-test, just compile with:
+ *           gcc -DTEST_SNPRINTF -o snprintf snprintf.c -lm
+ *    and run snprintf for results.
+ *
+ *  Thomas Roessler <roessler@guug.de> 01/27/98 for mutt 0.89i
+ *    The PGP code was using unsigned hexadecimal formats.
+ *    Unfortunately, unsigned formats simply didn't work.
+ *
+ *  Michael Elkins <me@cs.hmc.edu> 03/05/98 for mutt 0.90.8
+ *    The original code assumed that both snprintf() and vsnprintf() were
+ *    missing.  Some systems only have snprintf() but not vsnprintf(), so
+ *    the code is now broken down under HAVE_SNPRINTF and HAVE_VSNPRINTF.
+ *
+ *  Andrew Tridgell (tridge@samba.org) Oct 1998
+ *    fixed handling of %.0f
+ *    added test for HAVE_LONG_DOUBLE
+ *
+ * tridge@samba.org, idra@samba.org, April 2001
+ *    got rid of fcvt code (twas buggy and made testing harder)
+ *    added C99 semantics
+ *
+ * date: 2002/12/19 19:56:31;  author: herb;  state: Exp;  lines: +2 -0
+ * actually print args for %g and %e
+ *
+ * date: 2002/06/03 13:37:52;  author: jmcd;  state: Exp;  lines: +8 -0
+ * Since includes.h isn't included here, VA_COPY has to be defined here.  I don't
+ * see any include file that is guaranteed to be here, so I'm defining it
+ * locally.  Fixes AIX and Solaris builds.
+ *
+ * date: 2002/06/03 03:07:24;  author: tridge;  state: Exp;  lines: +5 -13
+ * put the ifdef for HAVE_VA_COPY in one place rather than in lots of
+ * functions
+ *
+ * date: 2002/05/17 14:51:22;  author: jmcd;  state: Exp;  lines: +21 -4
+ * Fix usage of va_list passed as an arg.  Use __va_copy before using it
+ * when it exists.
+ *
+ * date: 2002/04/16 22:38:04;  author: idra;  state: Exp;  lines: +20 -14
+ * Fix incorrect zpadlen handling in fmtfp.
+ * Thanks to Ollie Oldham <ollie.oldham@metro-optix.com> for spotting it.
+ * few mods to make it easier to compile the tests.
+ * added the "Ollie" test to the floating point ones.
+ *
+ * Martin Pool (mbp@samba.org) April 2003
+ *    Remove NO_CONFIG_H so that the test case can be built within a source
+ *    tree with less trouble.
+ *    Remove unnecessary SAFE_FREE() definition.
+ *
+ * Martin Pool (mbp@samba.org) May 2003
+ *    Put in a prototype for dummy_snprintf() to quiet compiler warnings.
+ *
+ *    Move #endif to make sure VA_COPY, LDOUBLE, etc are defined even
+ *    if the C library has some snprintf functions already.
+ *
+ * Darren Tucker (dtucker@zip.com.au) 2005
+ *    Fix bug allowing read overruns of the source string with "%.*s"
+ *    Usually harmless unless the read runs outside the process' allocation
+ *    (eg if your malloc does guard pages) in which case it will segfault.
+ *    From OpenSSH.  Also added test for same.
+ *
+ * Simo Sorce (idra@samba.org) Jan 2006
+ *
+ *    Add support for position independent parameters
+ *    fix fmtstr now it conforms to sprintf wrt min.max
+ *
+ **************************************************************/
+
+===== talloc-2.5.0/lib/replace/socket.c =====
+/*
+ * Unix SMB/CIFS implementation.
+ *
+ * Dummy replacements for socket functions.
+ *
+ * Copyright (C) Michael Adam <obnox@samba.org> 2008
+ *
+ *   ** NOTE! The following LGPL license applies to the replace
+ *   ** library. This does NOT imply that all of Samba is released
+ *   ** under the LGPL
+ *
+ * This library is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU Lesser General Public
+ * License as published by the Free Software Foundation; either
+ * version 3 of the License, or (at your option) any later version.
+ *
+ * This library is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * Library General Public License for more details.
+ *
+ * You should have received a copy of the GNU Lesser General Public
+ * License along with this library; if not, see <http://www.gnu.org/licenses/>.
+ */
+
+===== talloc-2.5.0/lib/replace/socketpair.c =====
+/*
+ * Unix SMB/CIFS implementation.
+ * replacement routines for broken systems
+ * Copyright (C) Jelmer Vernooij <jelmer@samba.org> 2006
+ * Copyright (C) Michael Adam <obnox@samba.org> 2008
+ *
+ *  ** NOTE! The following LGPL license applies to the replace
+ *  ** library. This does NOT imply that all of Samba is released
+ *  ** under the LGPL
+ *
+ * This library is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU Lesser General Public
+ * License as published by the Free Software Foundation; either
+ * version 3 of the License, or (at your option) any later version.
+ *
+ * This library is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * Lesser General Public License for more details.
+ *
+ * You should have received a copy of the GNU Lesser General Public
+ * License along with this library; if not, see <http://www.gnu.org/licenses/>.
+ */
+
+===== talloc-2.5.0/lib/replace/strptime.c =====
+/* Convert a string representation of time to a time value.
+   Copyright (C) 1996, 1997, 1998, 1999, 2000 Free Software Foundation, Inc.
+   This file is part of the GNU C Library.
+   Contributed by Ulrich Drepper <drepper@cygnus.com>, 1996.
+
+   The GNU C Library is free software; you can redistribute it and/or
+   modify it under the terms of the GNU Lesser General Public License as
+   published by the Free Software Foundation; either version 3 of the
+   License, or (at your option) any later version.
+
+   The GNU C Library is distributed in the hope that it will be useful,
+   but WITHOUT ANY WARRANTY; without even the implied warranty of
+   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+   Library General Public License for more details.
+
+   You should have received a copy of the GNU Lesser General Public
+   License along with the GNU C Library; see the file COPYING.LIB.  If not, 
+   see <http://www.gnu.org/licenses/>.  */
+/* XXX This version of the implementation is not really complete.
+   Some of the fields cannot add information alone.  But if seeing
+   some of them in the same format (such as year, week and weekday)
+   this is enough information for determining the date.  */
+
+===== talloc-2.5.0/lib/replace/system/python.h =====
+/*
+ * Copyright (c) 2023      Andreas Schneider <asn@samba.org>
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <http://www.gnu.org/licenses/>.
+ */
+
+===== talloc-2.5.0/lib/replace/tests/getifaddrs.c =====
+/*
+ * Unix SMB/CIFS implementation.
+ *
+ * libreplace getifaddrs test
+ *
+ * Copyright (C) Michael Adam <obnox@samba.org> 2008
+ *
+ *   ** NOTE! The following LGPL license applies to the replace
+ *   ** library. This does NOT imply that all of Samba is released
+ *   ** under the LGPL
+ *
+ * This library is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU Lesser General Public
+ * License as published by the Free Software Foundation; either
+ * version 3 of the License, or (at your option) any later version.
+ *
+ * This library is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * Library General Public License for more details.
+ *
+ * You should have received a copy of the GNU Lesser General Public
+ * License along with this library; if not, see <http://www.gnu.org/licenses/>.
+ */
+
+===== talloc-2.5.0/lib/replace/tests/main.c =====
+/*
+   Unix SMB/CIFS implementation.
+
+   libreplace tests
+
+   Copyright (C) Jelmer Vernooij 2006
+
+     ** NOTE! The following LGPL license applies to the talloc
+     ** library. This does NOT imply that all of Samba is released
+     ** under the LGPL
+
+   This library is free software; you can redistribute it and/or
+   modify it under the terms of the GNU Lesser General Public
+   License as published by the Free Software Foundation; either
+   version 3 of the License, or (at your option) any later version.
+
+   This library is distributed in the hope that it will be useful,
+   but WITHOUT ANY WARRANTY; without even the implied warranty of
+   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+   Lesser General Public License for more details.
+
+   You should have received a copy of the GNU Lesser General Public
+   License along with this library; if not, see <http://www.gnu.org/licenses/>.
+*/
+
+===== talloc-2.5.0/lib/replace/tests/testsuite.c =====
+/*
+   Unix SMB/CIFS implementation.
+
+   libreplace tests
+
+   Copyright (C) Jelmer Vernooij 2006
+
+     ** NOTE! The following LGPL license applies to the talloc
+     ** library. This does NOT imply that all of Samba is released
+     ** under the LGPL
+
+   This library is free software; you can redistribute it and/or
+   modify it under the terms of the GNU Lesser General Public
+   License as published by the Free Software Foundation; either
+   version 3 of the License, or (at your option) any later version.
+
+   This library is distributed in the hope that it will be useful,
+   but WITHOUT ANY WARRANTY; without even the implied warranty of
+   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+   Lesser General Public License for more details.
+
+   You should have received a copy of the GNU Lesser General Public
+   License along with this library; if not, see <http://www.gnu.org/licenses/>.
+*/
+
+===== talloc-2.5.0/lib/replace/timegm.c =====
+/*
+ * Copyright (c) 1997 Kungliga Tekniska Högskolan
+ * (Royal Institute of Technology, Stockholm, Sweden). 
+ * All rights reserved. 
+ *
+ * Redistribution and use in source and binary forms, with or without 
+ * modification, are permitted provided that the following conditions 
+ * are met: 
+ *
+ * 1. Redistributions of source code must retain the above copyright 
+ *    notice, this list of conditions and the following disclaimer. 
+ *
+ * 2. Redistributions in binary form must reproduce the above copyright 
+ *    notice, this list of conditions and the following disclaimer in the 
+ *    documentation and/or other materials provided with the distribution. 
+ *
+ * 3. Neither the name of the Institute nor the names of its contributors 
+ *    may be used to endorse or promote products derived from this software 
+ *    without specific prior written permission. 
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE INSTITUTE AND CONTRIBUTORS ``AS IS'' AND 
+ * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE 
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE 
+ * ARE DISCLAIMED.  IN NO EVENT SHALL THE INSTITUTE OR CONTRIBUTORS BE LIABLE 
+ * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL 
+ * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS 
+ * OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) 
+ * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT 
+ * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY 
+ * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF 
+ * SUCH DAMAGE. 
+ */
+/*
+  adapted for Samba4 by Andrew Tridgell
+*/
+
+===== talloc-2.5.0/lib/replace/xattr.c =====
+/*
+   Unix SMB/CIFS implementation.
+   replacement routines for xattr implementations
+   Copyright (C) Jeremy Allison  1998-2005
+   Copyright (C) Timur Bakeyev        2005
+   Copyright (C) Bjoern Jacke    2006-2007
+   Copyright (C) Herb Lewis           2003
+   Copyright (C) Andrew Bartlett      2012
+
+     ** NOTE! The following LGPL license applies to the replace
+     ** library. This does NOT imply that all of Samba is released
+     ** under the LGPL
+
+   This library is free software; you can redistribute it and/or
+   modify it under the terms of the GNU Lesser General Public
+   License as published by the Free Software Foundation; either
+   version 3 of the License, or (at your option) any later version.
+
+   This library is distributed in the hope that it will be useful,
+   but WITHOUT ANY WARRANTY; without even the implied warranty of
+   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+   Lesser General Public License for more details.
+
+   You should have received a copy of the GNU Lesser General Public
+   License along with this library; if not, see <http://www.gnu.org/licenses/>.
+*/

@@ -1,0 +1,71 @@
+{
+  "scope": "minimal-busybox-musl",
+  "notices": [
+    {
+      "name": "GPL-2.0.txt",
+      "sha256": "8177f97513213526df2cf6184d8ff986c675afb514d4e68a404010521b880643"
+    },
+    {
+      "name": "GPL-3.0.txt",
+      "sha256": "3972dc9744f6499f0f9b2dbf76696f2ae7ad8af9b23dde66d6af86c9dfb36986"
+    },
+    {
+      "name": "LGPL-3.0.txt",
+      "sha256": "e3a994d82e644b03a792a930f574002658412f62407f5fee083f2555c5f23118"
+    },
+    {
+      "name": "proot-COPYING.txt",
+      "sha256": "0ffa6454acbe7e410ac6f0007df83b9b3161fe55484c1f4b87487c0f2d228a6d"
+    },
+    {
+      "name": "proot-source-copyright-notices.txt",
+      "sha256": "8b1142cd273f56ca27219635ed81bad79556c56bc42507eb950d5d1c68ad7926"
+    },
+    {
+      "name": "talloc-LICENSE.txt",
+      "sha256": "da7eabb7bafdf7d3ae5e9f223aa5bdc1eece45ac569dc21b3b037520b4464768"
+    },
+    {
+      "name": "talloc-source-copyright-notices.txt",
+      "sha256": "6b431d0b076c012f3e60ec63f9207af6b6f06ffbb62c11c1b583b701f2893f02"
+    },
+    {
+      "name": "busybox-LICENSE.txt",
+      "sha256": "bbfc9843646d483c334664f651c208b9839626891d8f17604db2146962f43548"
+    },
+    {
+      "name": "busybox-source-copyright-notices.txt",
+      "sha256": "018e493d3c9164728ac2be85931ebd9a5f009eae077c980448a79ac64429ef73"
+    },
+    {
+      "name": "busybox-bbsuid.c-notice.txt",
+      "sha256": "ddf3a3dd7b729b185128b0445d0b2749bbb77813cf55911427ee0d18e452d867"
+    },
+    {
+      "name": "musl-COPYRIGHT.txt",
+      "sha256": "f9bc4423732350eb0b3f7ed7e91d530298476f8fec0c6c427a1c04ade22655af"
+    },
+    {
+      "name": "musl-source-copyright-notices.txt",
+      "sha256": "fa498c82974282c5d4e312374e2dc35e8c3816e17b40b3df7f882fcccfca5042"
+    },
+    {
+      "name": "utmps-utmps-0.1.3.1-COPYING.txt",
+      "sha256": "0f415da77eb45ab52dad82f23c1f46e827bacb0b68d6f42c919ae8f3d254fb97"
+    },
+    {
+      "name": "utmps-dependency-source-copyright-notices.txt",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "name": "skalibs-skalibs-2.14.4.0-COPYING.txt",
+      "sha256": "cadf2c7d05a2c425250211c01db2ff33fa2bc31e293c8c040227b046ce1cb77f"
+    },
+    {
+      "name": "skalibs-dependency-source-copyright-notices.txt",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    }
+  ],
+  "correspondingSource": "app/third_party/linux/matching_sources",
+  "publicSourceDeliveryCompleted": false
+}

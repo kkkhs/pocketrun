@@ -1,0 +1,24 @@
+PRoot candidate modifications for PocketRun
+Date of local modifications: 2026-11-19
+Upstream: termux/proot v5.1.107.102; source ZIP SHA256 30d12a6e2cc4147123756ff58edea262d3083bbc238c12d0ab9b39e3d1c40852.
+
+This is a modified PRoot, not an unmodified upstream binary. The six modified files are:
+src/GNUmakefile — absolute VPATH input fix.
+src/arch.h — arm64-only build, no 32-bit loader.
+src/tracee/event.c — parent-death and required PTRACE_O_EXITKILL handling.
+src/extension/ashmem_memfd/ashmem_memfd.c — missing string declarations for NDK Clang.
+src/loader/loader.c — reject executable-stack and writable/executable or anonymous-executable mappings.
+src/cli/cli.c — require live expected App parent, arm PR_SET_PDEATHSIG and fail on parent mismatch.
+
+Complete change text: proot-full.diff and patches/proot-full.diff, SHA256 c5caed68d2619164e48cbbfad004fe5e5f2728cf8a76f4a0be66d394b9245d1f.
+The original immutable source archive is accompanied by this change notice; its hash and the reproduced binary hashes have not been rewritten.
+Local adapter/configuration/reproduction scripts supplied for PocketRun are conveyed under GPLv3 as source/build material for this modified executable. Original source copyright and licenses are retained. PRoot's upstream GPLv2-or-later permission is exercised at GPLv3 for the executable statically combined with LGPLv3-or-later talloc. The talloc library's original LGPLv3-or-later notices remain in force.
+
+To modify or relink, use the immutable source archive, full diff and config/replace.h; reproduce.py verifies both upstream source hashes before applying the diff and invoking the NDK build. After safe unpacking into a NEW EMPTY directory, run from a separate trusted working directory:
+python -I /absolute/unpacked/scripts/reproduce.py /absolute/unpacked /absolute/new-empty-build-workspace /absolute/android-ndk/27.1.12297006
+The reproduction compiler is aarch64-linux-android35-clang in NDK 27.1.12297006; this is compile API 35, not a request to lower the App targetSdk 36. Build talloc after editing its sources and rebuild all PRoot objects to relink, using the same scripts or an appropriately modified script.
+
+Expected final executable hashes for the unchanged candidate:
+libproot.so 0e5b9a21954ec529ae75d68c45c9e50277e9b7bb1e7138f3651b5336849f855e
+libproot_loader.so 1396d5c21670602730b02c25b0d723c606a6d6f4d23c7e77cac4b6bdd70cd555
+Source compilation byte-reproduction evidence is from the candidate builder and checked independently as existing evidence. This notice does not assert a new source build, APK install, device test or public source delivery.
