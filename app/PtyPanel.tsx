@@ -180,7 +180,7 @@ export default function PtyPanel({ colors }: { colors: Colors }) {
     {hasOwnedSession && <Text selectable accessibilityLiveRegion="polite" style={{ color: colors.text }}>PTY 实时合流输出：{liveOutput || '(waiting)'}</Text>}
     {result && <View accessibilityLiveRegion="polite" style={styles.result}>
       <Text style={{ color: colors.text }}>状态：{result.status} · 退出：{result.exitKind ?? '(none)'} / {result.exitCode ?? '(none)'}</Text>
-      <Text style={{ color: colors.text }}>资源清理：{result.cleanupStatus} · root reaped：{String(result.rootReaped)}</Text>
+      <Text style={{ color: colors.text }}>资源清理：{result.cleanupStatus} · root reaped：{result.exitKind === null ? '未观测' : String(result.rootReaped)}</Text>
       {result.cleanupStatus !== 'done' && <Text accessibilityRole="alert" style={{ color: colors.text }}>清理未确认；保留当前 token 和 RUN 目录，只允许重试关闭，不能启动新终端。</Text>}
       <Text style={{ color: colors.muted }}>App UID {result.appUid} · native child {result.childPid ?? '(none)'} · {result.durationMillis} ms</Text>
       <Text selectable style={{ color: colors.text }}>PTY 合流输出：{result.output || '(empty)'}</Text>

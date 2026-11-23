@@ -5,7 +5,7 @@ title: 在运行中的终端里输入，再观察结果
 description: 用真正的 PTY 连接固定 Linux shell，读取实时合流输出，调整尺寸，发送控制字符并检查退出与清理。
 ---
 
-> **待真机验收的本地草稿，尚未发布。** 本文按当前主树接口说明操作目标，不提供已通过的设备截图。实时输出、运行中 resize 与超时接口已有实现；最终源码与 APK 冻结后仍需重新核对和实际运行，不能把 JVM 或编译结果写成云真机通过。
+> **本机 PTY、产品终端与 120 秒资源验收已通过。** 任务专用 API 36 / ARM64 模拟器已执行实际 PTY 集成、6 项生命周期、App/tracer 死亡恢复、实际界面输入/resize/Ctrl-C/正常退出，以及固定 120 秒超时后的进程、PTY/wake/RUN FD 和 IO 线程清理。最终集成 CI 与发布继续收口；[Draft PR #13](https://github.com/kkkhs/pocketrun/pull/13) 提供源码基线。
 
 [上一章](chapter-7.md)，我们让固定 Linux 脚本读取 CSV，等命令结束后收集输出。这适合一次性任务，但不能让用户在程序运行时继续输入。
 
@@ -21,11 +21,11 @@ stty size：24 80（80 列、24 行）
 正常 exit 0 后：退出码 0，资源清理 done
 ```
 
-这是预期检查目标，不是本章已经运行成功的记录。设备上的终端名称和子进程 PID 动态分配，不要求等于某个示例值。
+这些项目已在本机实际 App 和原生集成中检查；下方截图保留真实输出与退出结果。终端名称和子进程 PID 动态分配，不要求等于某个示例值。
 
 ## 先在界面跑一遍
 
-只在自己拥有或明确获授权的演示设备上操作。当前固定运行环境需要 **Android 14 / API 34 及以上、ARM64 App 的 64 位进程**；前章 Linux 安装和生命周期尚未完整验收，不能借它的一轮正常演示替本章通过。
+只在自己拥有或明确获授权的演示设备上操作。当前固定运行环境需要 **Android 14 / API 34 及以上、ARM64 App 的 64 位进程**；本章独立检查 PTY 的输入、尺寸、控制与清理，不用前章的命令管道结果替代。
 
 打开“第 8 章 · 交互式 PTY”：
 
@@ -41,6 +41,10 @@ stty size
 ```
 
 这里的 `stty size` 输出顺序是**行、列**，而界面尺寸显示是**列 × 行**。运行中 resize 返回成功后仍应再次查询，不能只信前端更新的数字。
+
+2026-11-23 的独立第 8 章 App 操作先得到 `24 80`，再用 Ctrl-C 中断正在执行的 `sleep 30`，运行中改到 100×32，重新查询得到 `32 100`，最后 `exit 0`。原生结果是 `exited / 0`、`root reaped=true`、`cleanupStatus=done`，14974ms 后结束；不是终端尺寸按钮更新就算通过。
+
+![实际 PTY 的尺寸查询、Ctrl-C、正常退出和资源清理](assets/chapter-8-pty-result.png)
 
 对应代码：`app/PtyPanel.tsx` 的 `start()`、`send()`、`resize()` 和 `beginPolling()`；`app/specs/NativePocketRunPty.ts` 声明五个入口：`startPty`、`writePty`、`getPtyOutput`、`resizePty`、`closePty`。
 
@@ -145,11 +149,20 @@ native 必须避免关闭与读写、退出观察与 PID 回收之间的竞态�
 | --- | --- |
 | Native spec、Panel、Module 与 PTY core | 当前主树可读，包含 live read、运行中 resize、控制、超时与清理保槽逻辑；最终版本待统一核对 |
 | TypeScript / Jest / JVM / native 编译 | 用于检查接口和代码；本章不把已有开发机结果写成设备成功 |
-| 真正 PTY 的输入、实时输出、resize 与控制效果 | **尚未取得本章云真机通过记录** |
-| 正常退出、超时、关闭、App / tracer / guest 死亡后的 FD 与树回收 | **待逐场景真机验收，清理未知时保留资源槽** |
-| 产品界面、网站渲染与公开发布 | **待完成；草稿能渲染不等于产品完整通过** |
+| 真正 PTY 的输入、实时输出、resize 与控制效果 | API 36 / ARM64 实际 `Chapter8PtyIntegrationTest` 通过；不是模拟 PTY 或 JVM 假结果 |
+| 退出、关闭、短期内部超时的 FD 与树回收 | 实际 `Chapter8LifecycleIntegrationTest`：`OK (6 tests)`；内部短期超时不代替产品 120 秒超时 |
+| App / tracer 硬死亡恢复 | 两个 host-armed 场景实际通过；绑定 UID/PID/startTicks、精确发信号、观察旧树消失后再恢复，保留 CSV |
+| 产品界面 | 实际打印、`24 80` → Ctrl-C → `32 100` → 正常退出 0；资源清理确认 |
+| 产品 120 秒超时 | 2026-11-23：实际 `timed_out` / 120017ms，两个原 PRoot/guest 身份消失；FD 139 → 145 → 139，原 PTY master、wake pipe 和 RUN lease 全部消失，RUN 和 IO 线程库存回到基线 |
+| 网站与公开发布 | 最终集成 CI、Pages、章节 tag 与源码 Release 继续推进 |
 
-第 7 章 candidate1 的正常结果和原生命周期失败继续保留；candidate2 没有新的云通过，不能拿任一旧包证明本章运行环境与 PTY 都已验收。
+这批本机死亡恢复与第 7 章使用同一固定制品：Debug APK SHA256 `58b62dda2ffb74f413164c152cfb01cd3b5da07e92d17ab71bd8fe9fcfe98b76`，Test APK SHA256 `6b96dbb4742acc58a6a36fec139e8f51815d905a6488b8cb2f2144fbfd52754f`。早期 rootfs 库存/历史文件失败仍保留。另一次产品超时检查曾因 FD 150 → 151 失败，原运行没有改成通过；2026-11-23 的新运行记录完整 FD 目标，严格计数与资源归属检查同时通过。取消/超时路径可能没有退出快照，界面将该项显示为“未观测”；`cleanupStatus=done` 来自实际 native close 和 RUN 清理，不是把缺失快照改成成功。
+
+2026-11-23，合入第 7 章发布源后，独立第 8 章 Debug APK `bf34565809a4524c0adc41888750908fca9743d81fd86dd6cfc9bd8bb814a39b`、Test APK `ae018b6f9e5a7bbe78734dd224009a7279c04bdd347cd82b4c082db651ea50d3` 再次通过实际 PTY 集成、6 项生命周期及两项死亡恢复，实际产品界面也完成上方流程。
+
+该独立包还实跑了原始 120000ms 产品期限。总 FD 曾从 143 变为 147，原总数断言保留为失败；完整 FD 目标表显示差额全部是 Android 图形 `anon_inode:sync_file`（19 → 23）。单独的精确资源检查保留每个非图形 FD 目标及计数，要求 PTY master、wake pipe、RUN lease 全部消失、原进程身份消失、RUN/IO 库存还原。新运行总 FD 为 147 → 148，仅图形 fence 为 23 → 24；所有非图形 FD 库存严格一致，自有资源检查通过。
+
+![实际 120 秒产品超时、资源清理和未观测的退出快照](assets/chapter-8-pty-timeout.png)
 
 <details>
 <summary>源码门禁、设备测试与公开源码入口</summary>

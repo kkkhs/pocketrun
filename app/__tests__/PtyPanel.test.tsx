@@ -96,6 +96,7 @@ it('renders an explicit timed_out result and releases a proven-clean slot', asyn
     exitKind: null, exitCode: null, childPid: null, rootReaped: false }));
   await ReactTestRenderer.act(async () => button('启动交互终端').props.onPress());
   expect(text()).toContain('timed_out');
+  expect(text()).toContain('root reaped：","未观测');
   expect(text()).not.toContain('状态：","cancelled');
   expect(button('启动交互终端').props.disabled).toBe(false);
 });

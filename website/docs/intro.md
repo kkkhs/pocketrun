@@ -47,10 +47,9 @@ PocketRun 要把 Android 手机变成 Agent 的执行环境：操作 App、处�
 3. [第 3 章](chapter-3.md)：用 ADB 启动后端，再改用 Binder 通信。
 4. [第 4 章](chapter-4.md)：让 shell 后端创建虚拟屏，把 Demo 路由到目标 `displayId`。
 5. [第 5 章](chapter-5.md)：看见虚拟屏里的页面，找到输入框、填入文字，再确认结果。
-6. [第 6 章（本地草稿，未发布）](chapter-6.md)：在 App 私有目录运行固定命令管道；命令、生命周期专项和正常产品界面已有分批真实记录。
-7. [第 7 章（本地草稿，未发布）](chapter-7.md)：在普通 App UID 下用最小 Alpine 环境读取同一份 CSV；正常演示与生命周期已有实测，重用／死亡恢复和最终版本完整验收仍待完成。
-8. [第 8 章（本地草稿，待真机验收）](chapter-8.md)：让真正的 PTY 接收输入、持续发布合流输出、在运行中改变尺寸。
-9. [第 9 章（本地草稿，待真机验收）](chapter-9.md)：校验工具参数与目标，在手机上审批，再交给确定性宿主调用实际能力。
+6. [第 6 章（已发布）](chapter-6.md)：在 App 私有目录准备 CSV、运行固定命令管道，再检查输出和两个退出码；云真机专项与真实界面的正常演示分别记录，[源码快照](https://github.com/kkkhs/pocketrun/releases/tag/chapter-6)已发布。
+7. [第 7 章（已发布）](chapter-7.md)：在普通 App UID 下用最小 Alpine 环境读取同一份 CSV；实际界面、正常演示、12 项生命周期与 7 个死亡恢复场景通过，[源码快照](https://github.com/kkkhs/pocketrun/releases/tag/chapter-7)可下载。
+8. [第 8 章（验收通过，发布中）](chapter-8.md)：用真正的 PTY 实时输入、改变尺寸、正常退出，并验证 120 秒期限后的自有资源清理。
 
 读图时分开两个问题：**层是“谁执行”，阶段是“先做什么、再做什么”。** React 与 App Kotlin 是同一个 App 中的两层，shell 后端是独立进程；一次任务可以多次经过这些层，并不是每层只对应一个步骤。
 
@@ -58,16 +57,16 @@ PocketRun 要把 Android 手机变成 Agent 的执行环境：操作 App、处�
 
 <details>
 <summary>查看第 6—13 章开发状态与计划</summary>
-- 第 6 章：工作目录与命令管道，本地开发中，尚未发布。
-- 第 7 章：已实现固定的 PRoot / 最小 Alpine 环境，正常演示已有云真机记录；完整验收与发布待完成。
-- 第 8 章：交互式 PTY 终端，代码与教程草稿已加入，待新版本真机验收。
-- 第 9 章：工具校验、手机审批与确定性宿主，代码与教程草稿已加入，待新版本真机验收。
+- 第 6 章：工作目录与命令管道，[教程已发布](chapter-6.md)，[PR #11](https://github.com/kkkhs/pocketrun/pull/11) 已合并，[源码 Release](https://github.com/kkkhs/pocketrun/releases/tag/chapter-6)已发布。
+- 第 7 章：[PR #12](https://github.com/kkkhs/pocketrun/pull/12)、main CI、Pages 与 [源码快照](https://github.com/kkkhs/pocketrun/releases/tag/chapter-7)已完成。
+- 第 8 章：独立章节包的 PTY、实际界面、生命周期与死亡恢复已通过；[Draft PR #13](https://github.com/kkkhs/pocketrun/pull/13) 的正式发布继续推进。
+- 第 9 章：工具校验、审批与 Agent 宿主验证，代码与教程见 [Draft PR #14](https://github.com/kkkhs/pocketrun/pull/14)；待新真机验收，未正式发布。
 - 第 10 章：单任务上下文。
 - 第 11 章：真实 Agent 循环与配置入口。
 - 第 12 章：可查看、纠正和删除的记忆。
 - 第 13 章：完整任务与故障恢复。
 
-第 5 章已在任务专用 API 36 ARM64 AVD 验证截图、UI 树、定向输入与资源清理。第 6 章已有命令、取消、超时、输出上限、重跑与进程死亡恢复，以及正常产品界面的分批真实记录，尚未发布。第 7 章的最小 Linux 环境已有正常演示与生命周期结果，但重用／死亡恢复和最终版本验收仍待完成。第 8、9 章已加入实际代码和教程草稿，新的 PTY、手机审批与宿主端到端尚未取得真机通过结论；第 10—13 章仍是计划。每次只增加一项能力，并在引入资源的同一章验证取消、死亡和清理。
+第 0—7 章教程与源码快照已发布，各章的实际设备和发布记录可独立核对。第 8 章的独立章节包、产品 PTY 与资源验收已通过，正式发布推进中；第 9 章仍按 [Draft PR #14](https://github.com/kkkhs/pocketrun/pull/14) 收口。第 10、11 章已有 [单任务上下文 PR #17](https://github.com/kkkhs/pocketrun/pull/17) 与 [模型循环 PR #18](https://github.com/kkkhs/pocketrun/pull/18)，在后续章节整合发布。第 12—13 章是计划。每次只增加一项能力，并在引入资源的同一章验证取消、死亡和清理。
 
 </details>
 
