@@ -42,4 +42,10 @@ The chapter 2 ADB client includes source adapted from RikkaApps/Shizuku commit `
 
 Native and crypto dependencies keep their own licenses; the APK packages the relevant Shizuku, BoringSSL, Conscrypt, LLVM libc++ and Bouncy Castle notices under `android/adb/src/main/assets/third-party/`. They are not collectively relicensed as Apache-2.0.
 
+## Official Anthropic Java SDK
+
+Chapter 11 links the unmodified official [`anthropics/anthropic-sdk-java`](https://github.com/anthropics/anthropic-sdk-java) Maven release `com.anthropic:anthropic-java:3.11.0` (Apache License 2.0, Copyright 2023 Anthropic, PBC). Core and OkHttp client modules retain their upstream license resources under `META-INF/licenses/` in the dependency jars; Android dependency versions are frozen in `android/app/gradle.lockfile`.
+
+Jackson, OkHttp/Okio, Kotlin and the SDK's schema/runtime dependencies keep their own upstream licenses; adding the SDK does not relicense PocketRun or those dependencies. No SDK source is copied into the App; the local synthetic protocol tests use demo data and are not official model results.
+
 Other dependencies retain their own licenses in the installed packages. `android/app/debug.keystore` is the template's public development signing key, not a production signing credential.
