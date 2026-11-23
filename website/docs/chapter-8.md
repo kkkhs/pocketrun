@@ -5,7 +5,7 @@ title: 在运行中的终端里输入，再观察结果
 description: 用真正的 PTY 连接固定 Linux shell，读取实时合流输出，调整尺寸，发送控制字符并检查退出与清理。
 ---
 
-> **待真机验收的本地草稿，尚未发布。** 本文按当前主树接口说明操作目标，不提供已通过的设备截图。实时输出、运行中 resize 与超时接口已有实现；最终源码与 APK 冻结后仍需重新核对和实际运行，不能把 JVM 或编译结果写成云真机通过。
+> **本机 PTY、产品终端与 120 秒资源验收已通过。** 任务专用 API 36 / ARM64 模拟器已执行实际 PTY 集成、6 项生命周期、App/tracer 死亡恢复、实际界面输入/resize/Ctrl-C/正常退出，以及固定 120 秒超时后的进程、PTY/wake/RUN FD 和 IO 线程清理。最终集成 CI 与发布继续收口；[Draft PR #13](https://github.com/kkkhs/pocketrun/pull/13) 提供源码基线。
 
 [上一章](chapter-7.md)，我们让固定 Linux 脚本读取 CSV，等命令结束后收集输出。这适合一次性任务，但不能让用户在程序运行时继续输入。
 
@@ -41,6 +41,10 @@ stty size
 ```
 
 这里的 `stty size` 输出顺序是**行、列**，而界面尺寸显示是**列 × 行**。运行中 resize 返回成功后仍应再次查询，不能只信前端更新的数字。
+
+2026-11-20 的实际 App 操作先得到 `24 80`，再用 Ctrl-C 中断正在执行的 `sleep 30`，运行中改到 100×32，重新查询得到 `32 100`，最后 `exit 0`。原生结果是 `exited / 0`、`root reaped=true`、`cleanupStatus=done`；不是终端尺寸按钮更新就算通过。
+
+![实际 PTY 的尺寸查询、Ctrl-C、正常退出和资源清理](assets/chapter-8-pty-result.png)
 
 对应代码：`app/PtyPanel.tsx` 的 `start()`、`send()`、`resize()` 和 `beginPolling()`；`app/specs/NativePocketRunPty.ts` 声明五个入口：`startPty`、`writePty`、`getPtyOutput`、`resizePty`、`closePty`。
 
@@ -145,11 +149,14 @@ native 必须避免关闭与读写、退出观察与 PID 回收之间的竞态�
 | --- | --- |
 | Native spec、Panel、Module 与 PTY core | 当前主树可读，包含 live read、运行中 resize、控制、超时与清理保槽逻辑；最终版本待统一核对 |
 | TypeScript / Jest / JVM / native 编译 | 用于检查接口和代码；本章不把已有开发机结果写成设备成功 |
-| 真正 PTY 的输入、实时输出、resize 与控制效果 | **尚未取得本章云真机通过记录** |
-| 正常退出、超时、关闭、App / tracer / guest 死亡后的 FD 与树回收 | **待逐场景真机验收，清理未知时保留资源槽** |
-| 产品界面、网站渲染与公开发布 | **待完成；草稿能渲染不等于产品完整通过** |
+| 真正 PTY 的输入、实时输出、resize 与控制效果 | API 36 / ARM64 实际 `Chapter8PtyIntegrationTest` 通过；不是模拟 PTY 或 JVM 假结果 |
+| 退出、关闭、短期内部超时的 FD 与树回收 | 实际 `Chapter8LifecycleIntegrationTest`：`OK (6 tests)`；内部短期超时不代替产品 120 秒超时 |
+| App / tracer 硬死亡恢复 | 两个 host-armed 场景实际通过；绑定 UID/PID/startTicks、精确发信号、观察旧树消失后再恢复，保留 CSV |
+| 产品界面 | 实际打印、`24 80` → Ctrl-C → `32 100` → 正常退出 0；资源清理确认 |
+| 产品 120 秒超时 | 2026-11-23：实际 `timed_out` / 120017ms，两个原 PRoot/guest 身份消失；FD 139 → 145 → 139，原 PTY master、wake pipe 和 RUN lease 全部消失，RUN 和 IO 线程库存回到基线 |
+| 网站与公开发布 | 最终集成 CI、Pages、章节 tag 与源码 Release 继续推进 |
 
-第 7 章 candidate1 的正常结果和原生命周期失败继续保留；candidate2 没有新的云通过，不能拿任一旧包证明本章运行环境与 PTY 都已验收。
+这批本机死亡恢复与第 7 章使用同一固定制品：Debug APK SHA256 `58b62dda2ffb74f413164c152cfb01cd3b5da07e92d17ab71bd8fe9fcfe98b76`，Test APK SHA256 `6b96dbb4742acc58a6a36fec139e8f51815d905a6488b8cb2f2144fbfd52754f`。早期 rootfs 库存/历史文件失败仍保留。另一次产品超时检查曾因 FD 150 → 151 失败，原运行没有改成通过；2026-11-23 的新运行记录完整 FD 目标，严格计数与资源归属检查同时通过。取消/超时路径可能没有退出快照，界面将该项显示为“未观测”；`cleanupStatus=done` 来自实际 native close 和 RUN 清理，不是把缺失快照改成成功。
 
 <details>
 <summary>源码门禁、设备测试与公开源码入口</summary>
