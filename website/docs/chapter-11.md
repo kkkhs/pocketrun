@@ -9,7 +9,7 @@ description: 原生 Kotlin 使用官方 Anthropic Java SDK，把真实模型回�
 
 读者应看到模型回合数、同一个任务编号，以及第 10 章面板里的两条实际工具结果。CSV 仍停在手机审批前；模型回复里的“同意”没有任何授权效果。
 
-> **最终集成包已完成真实模型与工具闭环。** 2026-11-23，在任务专用 API 36 / ARM64 模拟器上，官方 Java SDK 经本机 Ferry 网关调用 Seed 2.1 Turbo：模型三轮调用，设备信息与 CSV 两条真实步骤成功，手机批准 CSV，资源清理后模型给出一致总结。[PR #18](https://github.com/kkkhs/pocketrun/pull/18) 已合并；本次补齐固定 Debug 网关策略、最终包验收截图与源码快照。
+> **最终集成包已完成真实模型与工具闭环。** 2026-11-23，在任务专用 API 36 / ARM64 模拟器上，官方 Java SDK 经本机 Ferry 网关调用 Seed 2.1 Turbo：模型三轮调用，设备信息与 CSV 两条真实步骤成功，手机批准 CSV，资源清理后模型给出一致总结。[PR #18](https://github.com/kkkhs/pocketrun/pull/18) 与[验收 PR #20](https://github.com/kkkhs/pocketrun/pull/20) 已合并，main CI、Pages 与[源码快照](https://github.com/kkkhs/pocketrun/releases/tag/chapter-11)已完成。
 
 ## 先看一次真实结果
 
@@ -171,7 +171,7 @@ App：typecheck、lint、Jest、audit；Android：相关 JVM、ARM64 Debug/Relea
 
 Debug 构造检查通过；项目没有 Release 单元测试 task，改用实际 Release 编译类执行 HTTPS 成功、Loopback HTTP 拒绝检查，未把不存在的 task 记为通过。
 
-本地第 10、11 章网页已检查桌面、390px 手机与深浅主题，无整页横向溢出；新增实际截图仍随最后网站构建与页面核验。Pages、注释 tag 与源码 Release 在最终集成 CI 与章节合并后补齐，不公开 Debug 签名 APK。
+第 10、11 章网页已检查桌面、390px 手机与深浅主题，无整页横向溢出。PR #20 的完整 Linux Android CI 和 main CI/Pages 均通过；线上页面的全部实际截图已解码，并与对应源码图片逐字节 SHA256 核对。注释 tag 与源码 Release 已发布，仅提供完整源码归档和校验值。
 
 </details>
 
@@ -188,4 +188,4 @@ Debug 构造检查通过；项目没有 Release 单元测试 task，改用实际
 - [固定实现与修复提交 `15cabc4`](https://github.com/kkkhs/pocketrun/commit/15cabc461d407591140877c0bb20f202325eb6bb)
 - [官方模型标识与能力](https://platform.claude.com/docs/en/about-claude/models/overview)
 
-本章源码 Release 在实际模型/设备验收与合并后建立。
+[本章源码 Release](https://github.com/kkkhs/pocketrun/releases/tag/chapter-11)已发布，包含完整源码归档与 SHA256 校验值。注释 tag `chapter-11` 固定于验收 PR #20 的合并提交 `8f95aa7`；匿名下载与完整文件核对已通过。

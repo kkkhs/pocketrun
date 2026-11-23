@@ -9,7 +9,7 @@ description: 在原有工具宿主上维护一个目标、有界步骤账本、�
 
 读者应看到同一个任务编号、一个目标，以及两条各自带有审批和结果的步骤。第一条的 Android API 信息不会被第二条 CSV 行数覆盖；第二条失败也不会把整个任务显示为完成。
 
-> **本机 App 已完成实际两步任务。** 任务专用 API 36 / ARM64 模拟器上的实际界面保留设备与 CSV 两条来源，CSV 经手机按钮批准后返回 3 行，两条均清理确认，任务显示 `completed`。2026-11-23 的独立章节包再次完成这条流程；[PR #17](https://github.com/kkkhs/pocketrun/pull/17) 已合并，main CI 与 Pages 通过，实际结果截图和源码快照随本次发布补齐。
+> **本机 App 已完成实际两步任务。** 任务专用 API 36 / ARM64 模拟器上的实际界面保留设备与 CSV 两条来源，CSV 经手机按钮批准后返回 3 行，两条均清理确认，任务显示 `completed`。2026-11-23 的独立章节包再次完成这条流程；[PR #17](https://github.com/kkkhs/pocketrun/pull/17) 与[验收 PR #20](https://github.com/kkkhs/pocketrun/pull/20) 已合并，main CI、Pages 与[源码快照](https://github.com/kkkhs/pocketrun/releases/tag/chapter-10)已完成。
 
 下面是账本的结构示例，不是设备截图；实际 API 和行数由工具返回：
 
@@ -41,7 +41,7 @@ description: 在原有工具宿主上维护一个目标、有界步骤账本、�
 <details>
 <summary>源码位置与发布状态</summary>
 
-本章新增源码在 [SingleTaskPanel.tsx](https://github.com/kkkhs/pocketrun/blob/56c26ee290136420812cde1add43ba2dbd3f80ff/app/SingleTaskPanel.tsx) 和 [SingleTaskContext.kt](https://github.com/kkkhs/pocketrun/blob/56c26ee290136420812cde1add43ba2dbd3f80ff/app/android/app/src/main/java/io/github/kkkhs/pocketrun/taskhost/SingleTaskContext.kt)；原生桥接在该包上一级的 `TaskHostModule.kt`。这是已公开的固定源码提交，源码 Release 在真实验收与合并后建立。
+本章新增源码在 [SingleTaskPanel.tsx](https://github.com/kkkhs/pocketrun/blob/chapter-10/app/SingleTaskPanel.tsx) 和 [SingleTaskContext.kt](https://github.com/kkkhs/pocketrun/blob/chapter-10/app/android/app/src/main/java/io/github/kkkhs/pocketrun/taskhost/SingleTaskContext.kt)；原生桥接在该包上一级的 `TaskHostModule.kt`。[chapter-10 源码快照](https://github.com/kkkhs/pocketrun/releases/tag/chapter-10)固定于 PR #17 的合并提交 `a2e3679`，实际验收与截图见 PR #20。
 
 </details>
 
@@ -154,4 +154,4 @@ if (current.phase == HostPhase.SUCCEEDED &&
 - [PR #20：独立任务与最终模型包的实际验收记录](https://github.com/kkkhs/pocketrun/pull/20)
 - [固定实现提交 `56c26ee`](https://github.com/kkkhs/pocketrun/commit/56c26ee290136420812cde1add43ba2dbd3f80ff)
 
-本章源码 Release 在实际验收与合并后建立。
+[本章源码 Release](https://github.com/kkkhs/pocketrun/releases/tag/chapter-10)已发布，包含完整源码归档与 SHA256 校验值。注释 tag `chapter-10` 固定于 `a2e3679`；匿名下载与完整文件核对已通过。
