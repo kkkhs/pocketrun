@@ -5,27 +5,41 @@ title: 把两次工具调用放进同一个任务
 description: 在原有工具宿主上维护一个目标、有界步骤账本、手机审批与失败停止边界。
 ---
 
-> **本地实现，未发布，未完成本章真机验收。** 下文描述可运行流程和应看到的结果，不把编译或测试替代手机上的真实执行；当前没有公开 PR、chapter-10 tag 或源码 Release。
-
 [上一章](chapter-9.md)可以申请一个固定工具、在手机批准它、查看来源结果和清理。现在我们把两个动作连起来：**读取设备信息，再读取固定演示 CSV，最后一起核对。**
 
 读者应看到同一个任务编号、一个目标，以及两条各自带有审批和结果的步骤。第一条的 Android API 信息不会被第二条 CSV 行数覆盖；第二条失败也不会把整个任务显示为完成。
+
+> **实现已通过本地门禁；手机验收与公开发布待完成。** 下文是操作步骤和成功条件，不是已取得的设备记录。
+
+下面是账本的结构示例，不是设备截图；实际 API 和行数由工具返回：
+
+```text
+一个任务目标：读取设备信息与演示 CSV
+  步骤 1：设备信息 → 保留 Android / API / ABI 结果
+  步骤 2：固定 CSV → 等手机批准 → 保留行数和清理结果
+两步一起核对 → 结束这个任务
+```
 
 ## 先跑两步演示
 
 只用本 App 私有演示数据。在第 9 章面板先点“准备固定 Linux 工具”，看到已校验的安装 generation，再打开“第 10 章 · 一个目标，多个工具步骤”。
 
-1. 点“开始两步演示任务”。应看到目标“读取设备信息和固定演示 CSV 行数，核对两步结果”、新的 `taskId` 和 `ready`。
-2. 点“步骤 1：读取设备信息”。等它变成 `succeeded`，清理为 `proven`；Android 版本、API 和 App UID 应来自当前设备。
-3. 点“步骤 2：申请读取演示 CSV”。第一步仍在页面中，第二步停在 `pending_approval`，显示固定路径、安装代际与本次 request hash。
-4. 在手机点“同意任务当前步骤”。结果应由真实 Linux 来源返回；未修改的初始 CSV 行数应为 `3`，来源与清理也必须满足成功条件。
-5. 核对两步数据后点“核对两步结果并结束任务”。只有这时任务变成 `completed`。
+1. 点“开始两步演示任务”。应看到目标“读取设备信息和固定演示 CSV 行数，核对两步结果”、新的 `taskId` 和 `ready`（可开始下一步）。对应 `SingleTaskPanel.tsx` 开始按钮 → `TaskHostModule.beginTask()`。
+2. 点“步骤 1：读取设备信息”。等它变成 `succeeded`（工具成功），清理为 `proven`（清理确认）；Android 版本、API 和 App UID 应来自当前设备。对应 `SingleTaskContext.submit()` → `TaskHost.submit()` → `AndroidTaskCapabilities.prepareDeviceInfo()`。
+3. 点“步骤 2：申请读取演示 CSV”。第一步仍在页面中，第二步停在 `pending_approval`（待批准），显示固定路径、安装代际与本次 request hash。对应 `SingleTaskPanel.tsx` CSV 按钮 → `submitTaskStep()`。
+4. 在手机点“同意任务当前步骤”。结果应由真实 Linux 来源返回；未修改的初始 CSV 行数应为 `3`，来源与清理也必须满足成功条件。对应 `TaskHostModule.decideFromAppUi()` → `TaskHost.onAppUiDecision()` → `AndroidTaskCapabilities.prepareCountDemoCsv()`。
+5. 核对两步数据后点“核对两步结果并结束任务”。只有这时任务变成 `completed`（任务完成）。对应 `TaskHostModule.finishTask()` → `SingleTaskContext.finish()`。
 
 拒绝第二步会停止这整个任务，而不是悄悄跳过它。点“取消整个任务”也会停止当前工作；如果清理显示 `unproven`，只重试当前资源清理，不用一个新任务覆盖它。
 
 对应代码：`app/SingleTaskPanel.tsx` 的 `perform()` 和两个步骤按钮调用同一个 `NativePocketRunTaskHost` 模块；`TaskHostModule.beginTask()`、`submitTaskStep()` 和 `finishTask()` 把动作交给 `taskhost/SingleTaskContext.kt`。
 
-当前路径是隔离实现的本地源码，尚无公开固定快照链接。发布后应补实际 commit/tag 链接，不以未来 tag 或不含新增文件的旧 main 链接代替。
+<details>
+<summary>源码位置与发布状态</summary>
+
+本章新增源码在 `app/SingleTaskPanel.tsx` 和 `app/android/app/src/main/java/io/github/kkkhs/pocketrun/taskhost/SingleTaskContext.kt`；原生桥接在该包上一级的 `TaskHostModule.kt`。当前尚无公开固定源码快照；公开发布后补实际 PR、commit/tag 与源码 Release，不造未来链接。
+
+</details>
 
 ## 目标不是批准
 
