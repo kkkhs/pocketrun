@@ -5,7 +5,7 @@ title: 用 Linux 命令读取同一份工作文件
 description: 在普通 App UID 下启动固定的 Alpine 派生命令环境，核对版本、目录、CSV 行数与命令及清理结果。
 ---
 
-> **本地开发草稿，尚未发布。** 已在授权云真机跑通实际安装、目录映射和重复两次的正常演示。完整生命周期专项及真实产品界面的验收仍待收口；下面的界面文字是应检查的结果，不是已完成的截图。
+> **本机原生验收已通过，正式发布继续收口。** 2026-11-20，任务专用 API 36 / ARM64 模拟器上已执行正常演示、12 项生命周期和 7 个 App/tracer/guest/安装死亡恢复场景。产品界面与最终组合回归仍需逐项核对；[Draft PR #12](https://github.com/kkkhs/pocketrun/pull/12) 提供源码基线。
 
 [上一章](chapter-6.md)，我们在 App 私有目录里准备了 `items.csv`，用 Android 自带的 toybox 读取它，得到包含表头的三行。
 
@@ -161,6 +161,21 @@ stage 和 run 的恢复条件不同。run 目录还需检查 App UID 相关进�
 
 ## 已经验证什么
 
+2026-11-20，任务专用 `pocketrun-ch1-api36` 模拟器（Android 16 / API 36、ARM64、App UID 10150）执行了当前预置绑定点版本：
+
+| 检查 | 实际结果 |
+| --- | --- |
+| 正常安装、目录映射、重复演示 | `Chapter7LinuxDemoTest`：`OK (1 test)`；Alpine 3.22.8、`/workspace`、行数 3、五阶段退出码 0 |
+| 取消、关闭、超时、安装/RUN 库存等生命周期 | `Chapter7LifecycleIntegrationTest`：`OK (12 tests)` |
+| App / tracer / guest 硬死亡 | 默认及 fallback 各三场景，共 6 场景通过；host 按 UID/PID/startTicks 选定自有对象，原生断言和显式 procfs 消失观察都通过 |
+| 安装发布前 App 死亡 | fsync 后未发布 stage 保留，生产安装器恢复并保留工作 CSV，重跑成功 |
+| 资源与数据 | 原生检查 FD/读写线程/RUN 收尾；死亡恢复重新运行成功，原工作文件与无关 stage 未被当作垃圾删除 |
+
+这批死亡恢复使用 Debug APK SHA256 `58b62dda2ffb74f413164c152cfb01cd3b5da07e92d17ab71bd8fe9fcfe98b76`、Test APK SHA256 `6b96dbb4742acc58a6a36fec139e8f51815d905a6488b8cb2f2144fbfd52754f`。原生结果与 host 进程证据是同一批检查；不以 host ADB 退出码代替 JUnit 成功。
+
+<details>
+<summary>2026-11-19 的历史批次与原失败记录</summary>
+
 2026-11-19，在本任务获授权的 Android 16 / API 36、ARM64 云真机上，`Chapter7LinuxDemoTest.actualInstallationMappingAndRepeatedAlpinePipeline()` 实际执行了安装、复用安装和两次正常演示：
 
 | 检查 | 已记录结果 |
@@ -177,6 +192,8 @@ stage 和 run 的恢复条件不同。run 目录还需检查 App UID 相关进�
 正常演示的 JSON 输出没有单独打印 `cleanupStatus`；这一项由实际通过的测试源码断言。不能把它描述成原始 JSON 已包含的字段。
 
 早期启动探测还真实观察到 PRoot 版本与 Linux `id -u` 返回 App UID，但它只说明基本启动链可用，与正常演示不是同一批证据。上表不把探测、静态检查、界面计划和生命周期计划拼成“一轮全过”，也不冒充 Case Center 原生报告。
+
+</details>
 
 <details>
 <summary>证据对应的构建与可运行检查</summary>
@@ -243,7 +260,7 @@ Alpine 原始来源是[官方 3.22.8 / aarch64 minirootfs](https://dl-cdn.alpine
 
 JADX 1.5.1 的重建结果有 **32 个错误**，属于部分可读的反编译代码，不是原始源码；出错或缺失的方法不能补猜。可访问的[Ditto 包源码候选](https://github.com/WindySha/ditto-termux-packages)尚未核为整个 App 的原始源码或本次 APK 的对应版本，也不替代修改后程序的对应源码与许可证交付。React Native / TurboModule 是 PocketRun 的选择，不能据此反推 Ditto 同样使用它们。
 
-这份对照不扩大上方验证结论：candidate1 的正常演示仍是原批次 `OK (1 test)`、0.344 秒、重复两次；原生命周期 10 项中的 3 项失败仍是失败。candidate2 有独立的新正常路径及 12 项生命周期通过记录，但显式 App 死亡恢复仍有失败，当前预置绑定点的数据版本也未完成真机验收，不能称为完整通过。
+这份对照不扩大历史批次的结论：candidate1 的正常演示是原批次 `OK (1 test)`、0.344 秒、重复两次，原生命周期失败仍保留；candidate2 的正常路径和生命周期另有独立记录。当前预置绑定点版本的完整本机检查见“已经验证什么”，其中默认/fallback 的 App、tracer、guest 死亡恢复和安装死亡恢复属于 2026-11-20 的新批次。不同批次不拼成一轮结果。
 
 </details>
 
