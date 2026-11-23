@@ -5,7 +5,7 @@ title: 用 Linux 命令读取同一份工作文件
 description: 在普通 App UID 下启动固定的 Alpine 派生命令环境，核对版本、目录、CSV 行数与命令及清理结果。
 ---
 
-> **本机原生验收已通过，正式发布继续收口。** 2026-11-20，任务专用 API 36 / ARM64 模拟器上已执行正常演示、12 项生命周期和 7 个 App/tracer/guest/安装死亡恢复场景。产品界面与最终组合回归仍需逐项核对；[Draft PR #12](https://github.com/kkkhs/pocketrun/pull/12) 提供源码基线。
+> **本机原生与实际产品界面已通过，正式发布继续收口。** 任务专用 API 36 / ARM64 模拟器已执行正常演示、12 项生命周期和 7 个 App/tracer/guest/安装死亡恢复场景。2026-11-23 另用仅含本章能力的源码构建 App，实际按钮返回 3 行、五阶段退出码 0 和清理确认；[Draft PR #12](https://github.com/kkkhs/pocketrun/pull/12) 提供源码，最终 CI 与源码快照继续推进。
 
 [上一章](chapter-6.md)，我们在 App 私有目录里准备了 `items.csv`，用 Android 自带的 toybox 读取它，得到包含表头的三行。
 
@@ -16,14 +16,14 @@ description: 在普通 App UID 下启动固定的 Alpine 派生命令环境，�
 ```text
 3.22.8
 /workspace
-10469
+10150
 3
 PR_EXITS:0,0,0,0,0
 ```
 
 前四行分别是 Alpine 版本、命令看见的工作目录、实际 UID 和行数。最后一行记录五个内部步骤的退出码；外层 PRoot 进程也必须退出 `0`。
 
-`10469` 是这台设备分配给 PocketRun 的 App UID，不是所有设备都应输出的常数。`3` 仍然是一行表头加两行商品，不是商品数量之和。
+`10150` 是这台模拟器分配给 PocketRun 的 App UID，不是所有设备都应输出的常数。`3` 仍然是一行表头加两行商品，不是商品数量之和。
 
 ## 先在界面跑一遍
 
@@ -36,6 +36,10 @@ PR_EXITS:0,0,0,0,0
 3. 点“运行 Linux 演示”。检查版本为 `3.22.8`、cwd 为 `/workspace`、实际 UID 与 App UID 一致；未修改的初始 CSV 应得到行数 `3`。
 4. 检查五个阶段退出码都为 `0`、PRoot 退出码为 `0`，且“资源清理”为 `done`。不能只看“命令状态：completed”。
 5. 再次准备，应提示“复用已校验安装”；再次运行，再核对目录、UID、文件结果与清理状态。
+
+下面是这次仅含第 7 章能力的实际 App 结果：安装被复用、原 CSV 保留；App/guest UID 都为 10150、cwd 为 `/workspace`、3 行、五阶段与外层退出码都为 0，142ms 后清理确认。
+
+![实际第 7 章 App 的 Linux 来源、行数、退出码和清理结果](assets/chapter-7-linux-result.png)
 
 操作尚未结束时可以点“取消 Linux 操作”。固定演示可能很快结束，来不及取消；“没有可取消的任务”不能算测到了取消。
 
@@ -172,6 +176,8 @@ stage 和 run 的恢复条件不同。run 目录还需检查 App UID 相关进�
 | 资源与数据 | 原生检查 FD/读写线程/RUN 收尾；死亡恢复重新运行成功，原工作文件与无关 stage 未被当作垃圾删除 |
 
 这批死亡恢复使用 Debug APK SHA256 `58b62dda2ffb74f413164c152cfb01cd3b5da07e92d17ab71bd8fe9fcfe98b76`、Test APK SHA256 `6b96dbb4742acc58a6a36fec139e8f51815d905a6488b8cb2f2144fbfd52754f`。原生结果与 host 进程证据是同一批检查；不以 host ADB 退出码代替 JUnit 成功。
+
+2026-11-23，合入观察器修复后，仅含第 7 章能力的源码又完整执行了正常演示、12 项生命周期与同样 7 个死亡恢复场景，全部通过。该批 Debug APK SHA256 为 `a1824358b31fa257f7087427465fdb33552198be574c39a146a246585abad674`，Test APK SHA256 为 `0e054a24e8c663c8da4c6cd77e458dc0ced795d6806c2d970610c448bc0ea7fa`；章首产品截图也来自这个包。
 
 <details>
 <summary>2026-11-19 的历史批次与原失败记录</summary>

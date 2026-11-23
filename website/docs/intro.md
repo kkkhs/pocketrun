@@ -48,7 +48,7 @@ PocketRun 要把 Android 手机变成 Agent 的执行环境：操作 App、处�
 4. [第 4 章](chapter-4.md)：让 shell 后端创建虚拟屏，把 Demo 路由到目标 `displayId`。
 5. [第 5 章](chapter-5.md)：看见虚拟屏里的页面，找到输入框、填入文字，再确认结果。
 6. [第 6 章（已发布）](chapter-6.md)：在 App 私有目录准备 CSV、运行固定命令管道，再检查输出和两个退出码；云真机专项与真实界面的正常演示分别记录，[源码快照](https://github.com/kkkhs/pocketrun/releases/tag/chapter-6)已发布。
-7. [第 7 章（本地开发中，未发布）](chapter-7.md)：在普通 App UID 下用最小 Alpine 环境读取同一份 CSV；安装、映射与重复正常演示已实测，完整生命周期和产品界面仍待验收。
+7. [第 7 章（发布验收中）](chapter-7.md)：在普通 App UID 下用最小 Alpine 环境读取同一份 CSV；本机正常演示、12 项生命周期与 7 个死亡恢复场景已通过。
 
 读图时分开两个问题：**层是“谁执行”，阶段是“先做什么、再做什么”。** React 与 App Kotlin 是同一个 App 中的两层，shell 后端是独立进程；一次任务可以多次经过这些层，并不是每层只对应一个步骤。
 
@@ -57,7 +57,7 @@ PocketRun 要把 Android 手机变成 Agent 的执行环境：操作 App、处�
 <details>
 <summary>查看第 6—13 章开发状态与计划</summary>
 - 第 6 章：工作目录与命令管道，[教程已发布](chapter-6.md)，[PR #11](https://github.com/kkkhs/pocketrun/pull/11) 已合并，[源码 Release](https://github.com/kkkhs/pocketrun/releases/tag/chapter-6)已发布。
-- 第 7 章：接入 PRoot / Alpine，代码与教程见 [Draft PR #12](https://github.com/kkkhs/pocketrun/pull/12)；待新真机验收，未正式发布。
+- 第 7 章：最小 PRoot / Alpine 的本机原生与死亡恢复验收已通过，代码与教程见 [Draft PR #12](https://github.com/kkkhs/pocketrun/pull/12)；产品界面与正式发布正在收口。
 - 第 8 章：交互式 PTY 终端，代码与教程见 [Draft PR #13](https://github.com/kkkhs/pocketrun/pull/13)；待新真机验收，未正式发布。
 - 第 9 章：工具校验、审批与 Agent 宿主验证，代码与教程见 [Draft PR #14](https://github.com/kkkhs/pocketrun/pull/14)；待新真机验收，未正式发布。
 - 第 10 章：单任务上下文。
