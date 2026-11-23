@@ -49,7 +49,8 @@ PocketRun 要把 Android 手机变成 Agent 的执行环境：操作 App、处�
 5. [第 5 章](chapter-5.md)：看见虚拟屏里的页面，找到输入框、填入文字，再确认结果。
 6. [第 6 章（已发布）](chapter-6.md)：在 App 私有目录准备 CSV、运行固定命令管道，再检查输出和两个退出码；云真机专项与真实界面的正常演示分别记录，[源码快照](https://github.com/kkkhs/pocketrun/releases/tag/chapter-6)已发布。
 7. [第 7 章（已发布）](chapter-7.md)：在普通 App UID 下用最小 Alpine 环境读取同一份 CSV；实际界面、正常演示、12 项生命周期与 7 个死亡恢复场景通过，[源码快照](https://github.com/kkkhs/pocketrun/releases/tag/chapter-7)可下载。
-8. [第 8 章（验收通过，发布中）](chapter-8.md)：用真正的 PTY 实时输入、改变尺寸、正常退出，并验证 120 秒期限后的自有资源清理。
+8. [第 8 章（已发布）](chapter-8.md)：用真正的 PTY 实时输入、改变尺寸、正常退出，并验证 120 秒期限后的自有资源清理；[源码快照](https://github.com/kkkhs/pocketrun/releases/tag/chapter-8)可下载。
+9. [第 9 章（验收通过，发布中）](chapter-9.md)：固定工具校验、手机逐次审批与来源/资源核对，包含真实执行中取消和原五秒期限。
 
 读图时分开两个问题：**层是“谁执行”，阶段是“先做什么、再做什么”。** React 与 App Kotlin 是同一个 App 中的两层，shell 后端是独立进程；一次任务可以多次经过这些层，并不是每层只对应一个步骤。
 
@@ -59,7 +60,7 @@ PocketRun 要把 Android 手机变成 Agent 的执行环境：操作 App、处�
 <summary>查看第 6—13 章开发状态与计划</summary>
 - 第 6 章：工作目录与命令管道，[教程已发布](chapter-6.md)，[PR #11](https://github.com/kkkhs/pocketrun/pull/11) 已合并，[源码 Release](https://github.com/kkkhs/pocketrun/releases/tag/chapter-6)已发布。
 - 第 7 章：[PR #12](https://github.com/kkkhs/pocketrun/pull/12)、main CI、Pages 与 [源码快照](https://github.com/kkkhs/pocketrun/releases/tag/chapter-7)已完成。
-- 第 8 章：独立章节包的 PTY、实际界面、生命周期与死亡恢复已通过；[Draft PR #13](https://github.com/kkkhs/pocketrun/pull/13) 的正式发布继续推进。
+- 第 8 章：[PR #13](https://github.com/kkkhs/pocketrun/pull/13)、main CI/Pages 和 [源码快照](https://github.com/kkkhs/pocketrun/releases/tag/chapter-8)已完成。
 - 第 9 章：工具校验、审批与 Agent 宿主验证，代码与教程见 [Draft PR #14](https://github.com/kkkhs/pocketrun/pull/14)；待新真机验收，未正式发布。
 - 第 10 章：单任务上下文。
 - 第 11 章：真实 Agent 循环与配置入口。

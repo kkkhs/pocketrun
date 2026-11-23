@@ -5,7 +5,7 @@ title: 在运行中的终端里输入，再观察结果
 description: 用真正的 PTY 连接固定 Linux shell，读取实时合流输出，调整尺寸，发送控制字符并检查退出与清理。
 ---
 
-> **本机 PTY、产品终端与 120 秒资源验收已通过。** 任务专用 API 36 / ARM64 模拟器已执行实际 PTY 集成、6 项生命周期、App/tracer 死亡恢复、实际界面输入/resize/Ctrl-C/正常退出，以及固定 120 秒超时后的进程、PTY/wake/RUN FD 和 IO 线程清理。最终集成 CI 与发布继续收口；[Draft PR #13](https://github.com/kkkhs/pocketrun/pull/13) 提供源码基线。
+> **本章已发布。** [PR #13](https://github.com/kkkhs/pocketrun/pull/13)、main CI/Pages 与 [chapter-8 源码快照](https://github.com/kkkhs/pocketrun/releases/tag/chapter-8)均已完成。独立章节 App 在任务专用 API 36 / ARM64 模拟器验证了真实 PTY、实际界面、6 项生命周期、App/tracer 死亡恢复，以及原 120 秒期限后的自有 FD/进程/IO/RUN 清理。
 
 [上一章](chapter-7.md)，我们让固定 Linux 脚本读取 CSV，等命令结束后收集输出。这适合一次性任务，但不能让用户在程序运行时继续输入。
 

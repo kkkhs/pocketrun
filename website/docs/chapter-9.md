@@ -5,7 +5,7 @@ title: 先批准一个固定工具，再检查它真的执行了什么
 description: 把设备信息、固定 Linux CSV 与目标虚拟屏接给 App Kotlin 的确定性宿主，验证参数、手机审批、结果与清理边界。
 ---
 
-> **待真机验收的本地草稿，尚未发布。** 当前源码已有工具宿主、Android / Linux 适配器与手机审批界面；下文是应执行的步骤与成功条件，不是已通过的端到端记录。新增集成需针对最终源码和 APK 重新检查，不能借用旧 JVM、前章或编译结果宣布云真机通过。
+> **独立章节 App 的实际工具与权限边界已通过，正式发布继续推进。** 任务专用 API 36 / ARM64 模拟器验证了 App 自配对/TLS/Binder/显示路由、CSV 手机批准及真实来源、显示输入后重新观察、执行中取消、原五秒期限、固定坏参数的 JS 桥拒绝与后端死亡失效。[Draft PR #14](https://github.com/kkkhs/pocketrun/pull/14) 提供源码；最终 CI、Pages 与源码快照继续推进。
 
 [上一章](chapter-8.md)，我们接上了交互式 PTY 的实现。前面几章已经分别给出了设备信息、目标虚拟屏、工作文件和 Linux 命令通道。
 
@@ -15,7 +15,7 @@ description: 把设备信息、固定 Linux CSV 与目标虚拟屏接给 App Kot
 
 ## 先在手机上跑一遍
 
-只使用自己拥有或明确获授权的设备与本 App 私有演示 CSV。Linux 工具沿用第 7 章的 Android 14 / API 34、ARM64 64 位 App 条件，以及固定的最小 BusyBox / musl 环境；前章未完成的生命周期验收仍需补齐。
+只使用自己拥有或明确获授权的设备与本 App 私有演示 CSV。Linux 工具沿用第 7 章的 Android 14 / API 34、ARM64 64 位 App 条件，以及固定的最小 BusyBox / musl 环境；本章继续独立核对工具审批与执行的生命周期，不用前章结果替代。
 
 打开“第 9 章 · 确定性工具宿主与手机审批”：
 
@@ -26,11 +26,19 @@ description: 把设备信息、固定 Linux CSV 与目标虚拟屏接给 App Kot
 5. 再申请一次，点“拒绝当前请求”。应得到 `rejected`，不能启动这一轮 Linux 读取。
 6. 再申请一次，可点“取消当前请求”；也可等待当前审批过期，再点“刷新过期状态”核对 `expired`。旧请求的同意不能授权下一次请求。
 
+这次独立第 9 章正常 App 的实际结果是 `succeeded / approved_by_app_ui`：固定 CSV 为 3 行，App/guest UID 10150、cwd `/workspace`、五阶段和 PRoot 退出码均为 0，来源完成且清理为 `done`。
+
+![实际手机批准后的固定 CSV 来源与清理结果](assets/chapter-9-csv-result.png)
+
 准备 Linux 本身会校验或安装固定环境。拒绝读取的意思是“不执行这次读取工具”，不是声称之前的准备从未触碰文件系统。
 
 有清理警告时只点“重试资源清理”，不能开始另一个工具来掩盖旧资源。工具失败仍应保留实际输出、退出码与错误，不把有输出或清理恢复当作工具成功。
 
-对应代码：`app/TaskHostPanel.tsx` 的 `submit()` 选择固定工具，`perform()` 调用原生接口；审批按钮调用 `decideFromAppUi()`，取消调用 `cancelFromAppUi()`。`app/specs/NativePocketRunTaskHost.ts` 当前共有八个入口：准备、读取就绪状态、提交、读取任务状态、手机决策、手机取消、刷新与清理重试。
+对应代码：`app/TaskHostPanel.tsx` 的 `submit()` 选择固定工具，`perform()` 调用原生接口；审批按钮调用 `decideFromAppUi()`，取消调用 `cancelFromAppUi()`。`app/specs/NativePocketRunTaskHost.ts` 中本章使用八个入口：准备、读取就绪状态、提交、读取任务状态、手机决策、手机取消、刷新与清理重试。
+
+实际显示工具先返回同一个 `displayId` 的截图与 9 个 UI 节点。手机批准固定文字后，输入事件被接收；再点观察，截图和 UI 树同时显示 `PocketRun_TaskHost_9`。输入成功与目标界面实际改变是两次检查。
+
+![手机批准后重新观察到的真实虚拟屏与 UI 树](assets/chapter-9-display-result.png)
 
 ## 工具请求不是任意命令
 
@@ -140,12 +148,29 @@ Linux 来源的 `cleanupStatus` 使用 `done / unproven`；宿主自身的 `clea
 | 范围 | 本草稿状态 |
 | --- | --- |
 | 三工具约定、手机 UI 八个入口、原生宿主与真实适配器 | 当前源码可读，新增集成待最终冻结和统一门禁 |
-| 真实设备信息、固定 Linux CSV、手机同意/拒绝/取消/过期 | **尚未取得本章完整真机与产品交互通过记录** |
-| 目标显示与输入 | **App 自有 typed-Binder 端口未就绪时明确拒绝；本章真实显示端到端待验证** |
-| 关闭失败、迟到回调、目标换代与死亡后的资源回收 | **待新版本定点复核与真机专项，不借旧 JVM 或前章证明** |
+| 真实设备信息、固定 Linux CSV、手机同意/拒绝/取消/过期 | 实际 App 已验证；CSV 为 3 行、App/guest UID 10150、`/workspace`、五阶段退出码 0、来源完成与清理确认 |
+| 目标显示与输入 | 实际 App 自有 TLS ADB → UID 2000 Binder → display 25 / epoch 413；观察返回 9 节点和真实截图，手机批准固定文字后重新观察确认相同目标上的 `PocketRun_TaskHost_9` |
+| 待批准时后端死亡 | 精确核对 UID/PID/startTicks 后终止自有后端；当前请求实际变为 `invalidated / BACKEND_DEATH`，没有把旧批准移到新目标 |
+| 执行中取消与五秒期限 | 手机批准后已启动的自有 PRoot 由测试夹具暂停；实际取消返回 `USER_CANCELLED`，原五秒执行期限返回 `EXECUTION_TIMEOUT`，两者资源清理为 `proven` |
+| 关闭失败、迟到回调与换代 | 核心回归与最终组合矩阵分别核对，旧结果不能覆盖新请求 |
 | 网站与公开交付 | **页面草稿渲染不等于产品已通过；PR / Pages / tag / Release 尚待完成** |
 
-现有 `Chapter9TaskHostIntegrationTest` 的源码包含真实设备信息、显示后端缺失拒绝，以及 Linux 请求停在手机审批前的检查。它没有替用户在手机同意 Linux 请求；即使这些测试以后运行成功，也不能替代实际 App UI 同意与执行结果的端到端验收。
+2026-11-23，独立第 9 章 Debug APK SHA256 `911c97addec0e0bfaa5cadf00e7f8813df20d56b4934119efb6e95e931245b0e`、Test APK SHA256 `e3bb6922c041cc8f1bfd9fdb78250b7e3d89ae9ad7efa990118bf67e344d3c3f` 实际执行了 `Chapter9TaskHostIntegrationTest` 的 4 项原生检查，全部通过；真实手机批准 CSV、执行中取消和原五秒期限另有独立实际 UI 与进程/RUN 证据。
+
+生产界面自配对 → TLS UID 2000 → Binder → 虚拟屏路由的 `ProductAdbBootstrapIntegrationTest` 也已通过（114.549s）。配对弹窗与 App 使用系统分屏保持可见；配对输入在最后创建显示前清空，实际显示注册和 Demo 目标由系统独立核对，不调用原生模块代替按钮动作。
+
+固定坏 JSON、重复键、未知工具、额外 path/argv/env、display 0、越界坐标、非法文本与旧 display epoch，还通过实际 JS → Codegen → Kotlin 界面逐项拒绝，`unexpected count=0`。这项使用本次测试专属开发 JS bundle，正常 App 与 Release 不启用诊断入口；临时构建覆盖已移除，正常 APK 已恢复。
+
+![实际 JS 桥的固定拒绝结果与旧显示代际检查](assets/chapter-9-bridge-rejections.png)
+
+<details>
+<summary>实际执行中取消与期限怎样核验</summary>
+
+固定 CSV 通常很快读完，不能把一次没命中的取消当成通过。设备测试使用 `Chapter9ProductLinuxHoldTest`：先校验任务专用模拟器、App UID、当前 boot、APK SHA 和一次性私有回执，再观察新 RUN，取得已启动 PRoot 的内核 `pidfd`。确认实际身份和停止状态后，由真实手机 UI 取消当前请求，或等待原来的五秒执行期限；夹具不制造工具结果，也不批准请求。
+
+这里 `EXECUTION_TIMEOUT` 与待批准时的 `APPROVAL_EXPIRED` 是两种原因，不能只看共同的 `expired` 状态。测试结束还核对原进程身份消失、RUN 回收和实际 App 的清理确认。Debug 的薄 JNI 仅为测试提供固定 STOP/CONT 的内核句柄操作，Release 不带这些测试导出；没有按裸 PID 重试信号的降级路径。
+
+</details>
 
 <details>
 <summary>如何安排最终检查，而不混用证据</summary>
@@ -162,9 +187,9 @@ Linux 来源的 `cleanupStatus` 使用 `done / unproven`；宿主自身的 `clea
 
 ## 本章先到受控宿主为止
 
-我们把“能做一个动作”与“何时获准做、目标是否仍有效、结果和资源是否已确认”接成了同一个受控宿主实现。它仍是确定性的单请求程序，本章真机与完整交付条件尚未满足。
+我们把“能做一个动作”与“何时获准做、目标是否仍有效、结果和资源是否已确认”接成了同一个受控宿主实现。它仍是确定性的单请求程序；独立章节 App 的实际验收已完成，公开交付继续按 CI、Pages 和源码快照核验。
 
-后面的第 10 章再完善单任务上下文，第 11 章才进入真实模型循环；目前都是后续计划。不为它们提前加入 Node 假设、MCP、自动审批、记忆或多任务产品界面。
+后续的单任务上下文见 [PR #17](https://github.com/kkkhs/pocketrun/pull/17)，真实模型循环见 [PR #18](https://github.com/kkkhs/pocketrun/pull/18)；两章已有实现与本机真实闭环记录，将随各自章节发布。本章先独立讲清单条工具、手机审批和资源边界。
 
 开发与发布分开推进：继续完善合法可执行的能力，但未完成真实 PR、main / Pages、注释 tag 与源码 Release 时如实标为未发布，不造发布链接。
 
