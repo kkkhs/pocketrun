@@ -9,7 +9,7 @@ description: 在原有工具宿主上维护一个目标、有界步骤账本、�
 
 读者应看到同一个任务编号、一个目标，以及两条各自带有审批和结果的步骤。第一条的 Android API 信息不会被第二条 CSV 行数覆盖；第二条失败也不会把整个任务显示为完成。
 
-> **源码已提交 [Draft PR #17](https://github.com/kkkhs/pocketrun/pull/17)；手机验收与网站发布待完成。** 下文是操作步骤和成功条件，不是已取得的设备记录。
+> **本机 App 已完成实际两步任务。** 2026-11-20，任务专用 API 36 / ARM64 模拟器上的实际界面保留设备与 CSV 两条来源，CSV 经手机按钮批准后返回 3 行，两条均清理确认，任务显示 `completed`。[Draft PR #17](https://github.com/kkkhs/pocketrun/pull/17) 提供源码；最终集成 CI、章节合并与发布继续推进。
 
 下面是账本的结构示例，不是设备截图；实际 API 和行数由工具返回：
 
@@ -29,6 +29,10 @@ description: 在原有工具宿主上维护一个目标、有界步骤账本、�
 3. 点“步骤 2：申请读取演示 CSV”。第一步仍在页面中，第二步停在 `pending_approval`（待批准），显示固定路径、安装代际与本次 request hash。对应 `SingleTaskPanel.tsx` CSV 按钮 → `submitTaskStep()`。
 4. 在手机点“同意任务当前步骤”。结果应由真实 Linux 来源返回；未修改的初始 CSV 行数应为 `3`，来源与清理也必须满足成功条件。对应 `TaskHostModule.decideFromAppUi()` → `TaskHost.onAppUiDecision()` → `AndroidTaskCapabilities.prepareCountDemoCsv()`。
 5. 核对两步数据后点“核对两步结果并结束任务”。只有这时任务变成 `completed`（任务完成）。对应 `TaskHostModule.finishTask()` → `SingleTaskContext.finish()`。
+
+这次实际运行里，两条步骤都保留在同一个 `task-1`：设备是 Android 16/API 36，CSV 为 3 行；点最后的核对按钮后，任务才显示 `completed`。
+
+![实际同一任务的设备步骤、CSV 步骤和完成状态](assets/chapter-10-task-result.png)
 
 拒绝第二步会停止这整个任务，而不是悄悄跳过它。点“取消整个任务”也会停止当前工作；如果清理显示 `unproven`，只重试当前资源清理，不用一个新任务覆盖它。
 
@@ -132,7 +136,7 @@ if (current.phase == HostPhase.SUCCEEDED &&
 
 网站另跑 `test:toolchain`、`typecheck`、`build`、`audit:ci`。隔离构建用 `DOCUSAURUS_NO_PERSISTENT_CACHE=1`；正文目录、折叠内容与链接也应检查。2026-11-20 已检查本地正文在桌面、390px 手机与深浅主题下的实际渲染，无整页横向溢出；这不是手机 App 执行验收。
 
-真实设备验收需要合法设备授权与排他窗口：核对这版 APK SHA、两步真实来源、手机批准/拒绝、超时与取消、旧 nonce、失败清理。当前未操作设备，尚未取得本章完整 GUI/设备通过记录。
+2026-11-20 已在任务专用 API 36 / ARM64 模拟器实际点击完成两步任务：设备来源是 App UID 10150、Android 16/API 36；CSV 返回 `/workspace`、guest UID 10150、行数 3、五阶段退出码 0、`sourceStatus=completed`、`cleanupStatus=done`。同一账本同时保留两条结果，最后核对按钮将任务置为 `completed`。Android `Chapter10ContextIntegrationTest` 的两次设备请求也已通过；它是另一项检查，不替代本例 CSV 的实际手机批准。
 
 </details>
 
