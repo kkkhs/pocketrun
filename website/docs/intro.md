@@ -52,6 +52,7 @@ PocketRun 要把 Android 手机变成 Agent 的执行环境：操作 App、处�
 8. [第 8 章（已发布）](chapter-8.md)：用真正的 PTY 实时输入、改变尺寸、正常退出，并验证 120 秒期限后的自有资源清理；[源码快照](https://github.com/kkkhs/pocketrun/releases/tag/chapter-8)可下载。
 9. [第 9 章（已发布）](chapter-9.md)：固定工具校验、手机逐次审批与来源/资源核对，包含真实执行中取消和原五秒期限；[源码快照](https://github.com/kkkhs/pocketrun/releases/tag/chapter-9)可下载。
 10. [第 10 章（验收通过，发布中）](chapter-10.md)：同一个目标保留设备和 CSV 两条真实步骤，每步仍独立审批、核对来源与清理。
+11. [第 11 章（验收通过，发布中）](chapter-11.md)：真实模型选择工具，CSV 经手机批准后执行，再将两条真实结果送回模型总结。
 
 读图时分开两个问题：**层是“谁执行”，阶段是“先做什么、再做什么”。** React 与 App Kotlin 是同一个 App 中的两层，shell 后端是独立进程；一次任务可以多次经过这些层，并不是每层只对应一个步骤。
 
@@ -62,13 +63,13 @@ PocketRun 要把 Android 手机变成 Agent 的执行环境：操作 App、处�
 - 第 6 章：工作目录与命令管道，[教程已发布](chapter-6.md)，[PR #11](https://github.com/kkkhs/pocketrun/pull/11) 已合并，[源码 Release](https://github.com/kkkhs/pocketrun/releases/tag/chapter-6)已发布。
 - 第 7 章：[PR #12](https://github.com/kkkhs/pocketrun/pull/12)、main CI、Pages 与 [源码快照](https://github.com/kkkhs/pocketrun/releases/tag/chapter-7)已完成。
 - 第 8 章：[PR #13](https://github.com/kkkhs/pocketrun/pull/13)、main CI/Pages 和 [源码快照](https://github.com/kkkhs/pocketrun/releases/tag/chapter-8)已完成。
-- 第 9 章：工具校验、审批与 Agent 宿主验证，代码与教程见 [Draft PR #14](https://github.com/kkkhs/pocketrun/pull/14)；待新真机验收，未正式发布。
-- 第 10 章：单任务上下文。
-- 第 11 章：真实 Agent 循环与配置入口。
+- 第 9 章：[PR #14](https://github.com/kkkhs/pocketrun/pull/14)、main CI/Pages 与 [源码快照](https://github.com/kkkhs/pocketrun/releases/tag/chapter-9)已完成。
+- 第 10 章：[单任务上下文 PR #17](https://github.com/kkkhs/pocketrun/pull/17)已合并，独立两步任务已验收，源码快照发布中。
+- 第 11 章：[模型循环 PR #18](https://github.com/kkkhs/pocketrun/pull/18)已合并，最终正常包的三回合真实模型与手机批准 CSV 已验收，源码快照发布中。
 - 第 12 章：可查看、纠正和删除的记忆。
 - 第 13 章：完整任务与故障恢复。
 
-第 0—7 章教程与源码快照已发布，各章的实际设备和发布记录可独立核对。第 8 章的独立章节包、产品 PTY 与资源验收已通过，正式发布推进中；第 9 章仍按 [Draft PR #14](https://github.com/kkkhs/pocketrun/pull/14) 收口。第 10、11 章已有 [单任务上下文 PR #17](https://github.com/kkkhs/pocketrun/pull/17) 与 [模型循环 PR #18](https://github.com/kkkhs/pocketrun/pull/18)，在后续章节整合发布。第 12—13 章是计划。每次只增加一项能力，并在引入资源的同一章验证取消、死亡和清理。
+第 0—9 章教程与源码快照已发布，各章的实际设备和发布记录可独立核对。第 10、11 章实现已合并，最终验收记录与源码快照按章补齐。第 12—13 章是计划。每次只增加一项能力，并在引入资源的同一章验证取消、死亡和清理。
 
 </details>
 

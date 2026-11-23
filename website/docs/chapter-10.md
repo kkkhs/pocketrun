@@ -9,7 +9,7 @@ description: 在原有工具宿主上维护一个目标、有界步骤账本、�
 
 读者应看到同一个任务编号、一个目标，以及两条各自带有审批和结果的步骤。第一条的 Android API 信息不会被第二条 CSV 行数覆盖；第二条失败也不会把整个任务显示为完成。
 
-> **本机 App 已完成实际两步任务。** 2026-11-20，任务专用 API 36 / ARM64 模拟器上的实际界面保留设备与 CSV 两条来源，CSV 经手机按钮批准后返回 3 行，两条均清理确认，任务显示 `completed`。[Draft PR #17](https://github.com/kkkhs/pocketrun/pull/17) 提供源码；最终集成 CI、章节合并与发布继续推进。
+> **本机 App 已完成实际两步任务。** 任务专用 API 36 / ARM64 模拟器上的实际界面保留设备与 CSV 两条来源，CSV 经手机按钮批准后返回 3 行，两条均清理确认，任务显示 `completed`。2026-11-23 的独立章节包再次完成这条流程；[PR #17](https://github.com/kkkhs/pocketrun/pull/17) 已合并，main CI 与 Pages 通过，实际结果截图和源码快照随本次发布补齐。
 
 下面是账本的结构示例，不是设备截图；实际 API 和行数由工具返回：
 
@@ -150,7 +150,7 @@ if (current.phase == HostPhase.SUCCEEDED &&
 
 ## 本章源码
 
-- [Draft PR #17：单任务上下文与两步演示](https://github.com/kkkhs/pocketrun/pull/17)
+- [PR #17：单任务上下文与两步演示，已合并](https://github.com/kkkhs/pocketrun/pull/17)
 - [固定实现提交 `56c26ee`](https://github.com/kkkhs/pocketrun/commit/56c26ee290136420812cde1add43ba2dbd3f80ff)
 
 本章源码 Release 在实际验收与合并后建立。

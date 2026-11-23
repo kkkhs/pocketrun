@@ -9,7 +9,7 @@ description: 原生 Kotlin 使用官方 Anthropic Java SDK，把真实模型回�
 
 读者应看到模型回合数、同一个任务编号，以及第 10 章面板里的两条实际工具结果。CSV 仍停在手机审批前；模型回复里的“同意”没有任何授权效果。
 
-> **本机模拟器已完成真实模型与工具闭环。** 2026-11-20，在任务专用 API 36 / ARM64 模拟器上，官方 Java SDK 经本机 Ferry 网关调用 Seed 2.1 Turbo：模型三轮调用，设备信息与 CSV 两条真实步骤成功，手机批准 CSV，资源清理后模型给出一致总结。同一 App 内重新开始、拒绝和取消也已实际操作。[Draft PR #18](https://github.com/kkkhs/pocketrun/pull/18) 提供模型循环基线；最终集成 CI、网站与源码 Release 随整体验收发布。
+> **最终集成包已完成真实模型与工具闭环。** 2026-11-23，在任务专用 API 36 / ARM64 模拟器上，官方 Java SDK 经本机 Ferry 网关调用 Seed 2.1 Turbo：模型三轮调用，设备信息与 CSV 两条真实步骤成功，手机批准 CSV，资源清理后模型给出一致总结。[PR #18](https://github.com/kkkhs/pocketrun/pull/18) 已合并；本次补齐固定 Debug 网关策略、最终包验收截图与源码快照。
 
 ## 先看一次真实结果
 
@@ -19,7 +19,11 @@ description: 原生 Kotlin 使用官方 Anthropic Java SDK，把真实模型回�
 
 同一次运行的工具账本里，设备步骤是 `not_required`，CSV 是 `approved_by_app_ui`；**模型回合数与工具步骤数不是同一个计数**。这次模型先请求设备，再请求 CSV，最后总结，共三轮、两条工具步骤。
 
-![同一任务中的设备信息、手机批准的 CSV 和真实来源](assets/chapter-11-tool-ledger.png)
+![同一完成任务中的设备信息与手机批准的 CSV 步骤](assets/chapter-11-tool-ledger.png)
+
+同一任务向下滚动，CSV 来源记录显示 `approved_by_app_ui`、行数 3、五阶段退出码 0，以及完成和清理状态。这次读取耗时 143ms；下面与上一张都是同一 App、同一 `task-1` 的实际截图，仅裁剪了页面范围。
+
+![同一任务中 CSV 的实际来源、退出码与资源清理](assets/chapter-11-csv-source.png)
 
 本次使用的是 Ferry 的 `claude-doubao-seed-2-1-turbo`，不是默认配置中的 Claude Opus。它验证了 App 内官方 SDK、Messages 协议、手机审批和真实工具的整条链路；直接 Anthropic 服务仍需读者自己的合法调用配置。
 
@@ -149,8 +153,8 @@ API 凭据只从遮罩输入框提交一次到原生配置入口。AndroidKeySto
 | `AnthropicSdkProtocolTest` | 本地合成 SSE：官方 SDK 全块累积、响应头前取消、禁重定向，以及实际生产包装层的流中取消与旧结果隔离；**不是模型调用或 Android 运行** |
 | `AgentLoopPanel.test.tsx` | 凭据遮罩与清空、固定目标、取消、错误不回显，以及初始配置晚返回不会覆盖编辑；**不是手机 GUI 验收** |
 | `Chapter11CredentialStoreTest` / `Chapter11SdkRuntimeTest` | API 36 / ARM64 已执行；隔离测试别名和演示凭据。SDK runtime 是合成事件检查，不请求网络 |
-| `Chapter11LocalGatewayIntegrationTest` | 显式本机选项下调用实际生产 transport，收到真实模型 `tool_use` 并回放完整消息；1 项通过，不执行或批准工具 |
-| 真实 App 模型与工具闭环 | 三轮模型调用、两条工具步骤、手机批准 CSV、真实行数 3 和清理确认；同 App 新任务、拒绝、取消与审批过期也已观察 |
+| `Chapter11LocalGatewayIntegrationTest` | 显式本机选项下调用实际生产 transport；分别检查真实模型首轮 `tool_use` 和三回合完整消息回放。后者只提交合成工具观察，不执行或批准工具 |
+| 真实 App 模型与工具闭环 | 最终正常包三轮模型调用、两条工具步骤、手机批准 CSV、真实行数 3 和清理确认；早期同 App 新任务、拒绝、取消与审批过期记录另外保留 |
 
 <details>
 <summary>最终验证与公开交付前的清单</summary>
@@ -161,7 +165,11 @@ App：typecheck、lint、Jest、audit；Android：相关 JVM、ARM64 Debug/Relea
 
 2026-11-20 的实际 App 验收使用源码检查点 `749199f`（模型策略修复），Debug APK SHA256 `58b62dda2ffb74f413164c152cfb01cd3b5da07e92d17ab71bd8fe9fcfe98b76`、AndroidTest APK SHA256 `6b96dbb4742acc58a6a36fec139e8f51815d905a6488b8cb2f2144fbfd52754f`。本次实际模型为 Seed 2.1 Turbo，经本机 Ferry；完成运行为三轮、累计 201 个输出 token，两条来源记录均成功且清理确认。
 
-验收同时保留了两次 `MODEL_TRANSPORT_ERROR` 与原审批过期运行；后续成功不改写它们。Debug 构造检查通过；项目没有 Release 单元测试 task，改用实际 Release 编译类执行 HTTPS 成功、Loopback HTTP 拒绝检查，未把不存在的 task 记为通过。
+2026-11-23 合入已发布章节历史后的正常集成包再次完成 `task-1`：三回合、累计 520 个输出 token、3157 字节模型上下文，两条账本记录均成功且清理确认。Debug APK SHA256 为 `134329e82f2a2abda257b9fd7da78305baae8ab37a3137625e795f164377502b`，Test APK SHA256 为 `924cd2b1e36c4bdd10b2c2124f727650b34c361f3b3ecc5c4679cc159bd304b3`。90 项 taskhost JVM 回归零失败、零跳过，Debug/Release/AndroidTest 构建通过；同一正常 App/Test 包的 Keystore、SDK runtime、真实模型首轮、三回合协议回放与任务上下文共 5 项 Android 检查通过。
+
+本次仍保留实际 App 的两次审批过期和两次第三回合 `MODEL_TRANSPORT_ERROR`。独立 Android 三回合协议检查通过；临时错误类型诊断运行完成了两回合任务，未产生错误类型。随后恢复原生产 transport，核对正常包中没有诊断 logger，再取得章首的三回合成功。成功运行不证明此前网络错误根因已查明，也不替此前失败补写成功状态。
+
+Debug 构造检查通过；项目没有 Release 单元测试 task，改用实际 Release 编译类执行 HTTPS 成功、Loopback HTTP 拒绝检查，未把不存在的 task 记为通过。
 
 本地第 10、11 章网页已检查桌面、390px 手机与深浅主题，无整页横向溢出；新增实际截图仍随最后网站构建与页面核验。Pages、注释 tag 与源码 Release 在最终集成 CI 与章节合并后补齐，不公开 Debug 签名 APK。
 
@@ -175,7 +183,7 @@ App：typecheck、lint、Jest、audit；Android：相关 JVM、ARM64 Debug/Relea
 
 ## 本章源码
 
-- [Draft PR #18：原生模型循环与加密配置](https://github.com/kkkhs/pocketrun/pull/18)
+- [PR #18：原生模型循环与加密配置，已合并](https://github.com/kkkhs/pocketrun/pull/18)
 - [固定实现与修复提交 `15cabc4`](https://github.com/kkkhs/pocketrun/commit/15cabc461d407591140877c0bb20f202325eb6bb)
 - [官方模型标识与能力](https://platform.claude.com/docs/en/about-claude/models/overview)
 
