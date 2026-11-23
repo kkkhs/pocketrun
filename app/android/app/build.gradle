@@ -98,7 +98,7 @@ android {
         versionName "1.0"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         // External death protocols are exercised by their host driver, not default discovery.
-        testInstrumentationRunnerArguments notClass: "io.github.kkkhs.pocketrun.Chapter6HostDeathTest,io.github.kkkhs.pocketrun.Chapter7HostDeathTest"
+        testInstrumentationRunnerArguments notClass: "io.github.kkkhs.pocketrun.Chapter6HostDeathTest,io.github.kkkhs.pocketrun.Chapter7HostDeathTest,io.github.kkkhs.pocketrun.Chapter8HostDeathTest"
     }
     signingConfigs {
         debug {
