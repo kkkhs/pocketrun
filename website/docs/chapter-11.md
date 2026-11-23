@@ -184,6 +184,7 @@ Debug 构造检查通过；项目没有 Release 单元测试 task，改用实际
 ## 本章源码
 
 - [PR #18：原生模型循环与加密配置，已合并](https://github.com/kkkhs/pocketrun/pull/18)
+- [PR #20：固定 Debug 策略、三回合真实模型与手机批准工具验收](https://github.com/kkkhs/pocketrun/pull/20)
 - [固定实现与修复提交 `15cabc4`](https://github.com/kkkhs/pocketrun/commit/15cabc461d407591140877c0bb20f202325eb6bb)
 - [官方模型标识与能力](https://platform.claude.com/docs/en/about-claude/models/overview)
 

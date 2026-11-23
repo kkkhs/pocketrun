@@ -151,6 +151,7 @@ if (current.phase == HostPhase.SUCCEEDED &&
 ## 本章源码
 
 - [PR #17：单任务上下文与两步演示，已合并](https://github.com/kkkhs/pocketrun/pull/17)
+- [PR #20：独立任务与最终模型包的实际验收记录](https://github.com/kkkhs/pocketrun/pull/20)
 - [固定实现提交 `56c26ee`](https://github.com/kkkhs/pocketrun/commit/56c26ee290136420812cde1add43ba2dbd3f80ff)
 
 本章源码 Release 在实际验收与合并后建立。
