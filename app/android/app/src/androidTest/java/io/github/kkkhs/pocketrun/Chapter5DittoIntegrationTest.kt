@@ -658,18 +658,14 @@ class Chapter5DittoIntegrationTest {
         // UiDevice uses Instrumentation.getUiAutomation with exactly these Configurator flags.
         // Retain the actual object acquired by THIS test, not a name/global service reference.
         val flags = Configurator.getInstance().uiAutomationFlags
-        val ownedAutomation = checkNotNull(instrumentation.getUiAutomation(flags))
-        try {
-            val device = UiDevice.getInstance(instrumentation)
-            assertFalse("Demo title must not appear on the main display", device.hasObject(By.displayId(0).text("PocketRun Virtual Display Demo")))
-            assertFalse("Demo input must not appear on the main display", device.hasObject(By.displayId(0).desc(INPUT_DESCRIPTION)))
-            assertFalse("Virtual-display text must not be injected into a main-display EditText",
-                device.hasObject(By.displayId(0).clazz("android.widget.EditText").text(INPUT_TEXT)))
-        } finally {
-            // This fixture alone acquired it after all its backend PIDs died. A later test must
-            // not inherit its registration. Do not obtain/disconnect any other automation here.
-            ownedAutomation.javaClass.getMethod("disconnect").invoke(ownedAutomation)
-        }
+        checkNotNull(instrumentation.getUiAutomation(flags))
+        val device = UiDevice.getInstance(instrumentation)
+        assertFalse("Demo title must not appear on the main display", device.hasObject(By.displayId(0).text("PocketRun Virtual Display Demo")))
+        assertFalse("Demo input must not appear on the main display", device.hasObject(By.displayId(0).desc(INPUT_DESCRIPTION)))
+        assertFalse("Virtual-display text must not be injected into a main-display EditText",
+            device.hasObject(By.displayId(0).clazz("android.widget.EditText").text(INPUT_TEXT)))
+        // Instrumentation owns this observer and its callback until the runner finishes.
+        // Select this method in a separate invocation; App UID cannot call hidden disconnect().
     }
 
     private fun assertImagesRemoved() {
