@@ -5,7 +5,7 @@ title: 用 Linux 命令读取同一份工作文件
 description: 在普通 App UID 下启动固定的 Alpine 派生命令环境，核对版本、目录、CSV 行数与命令及清理结果。
 ---
 
-> **本机原生与实际产品界面已通过，正式发布继续收口。** 任务专用 API 36 / ARM64 模拟器已执行正常演示、12 项生命周期和 7 个 App/tracer/guest/安装死亡恢复场景。2026-11-23 另用仅含本章能力的源码构建 App，实际按钮返回 3 行、五阶段退出码 0 和清理确认；[Draft PR #12](https://github.com/kkkhs/pocketrun/pull/12) 提供源码，最终 CI 与源码快照继续推进。
+> **本章已发布。** [PR #12](https://github.com/kkkhs/pocketrun/pull/12)、main CI、Pages 与 [chapter-7 源码快照](https://github.com/kkkhs/pocketrun/releases/tag/chapter-7)均已完成。任务专用 API 36 / ARM64 模拟器验证了实际 App 界面、正常演示、12 项生命周期和 7 个死亡恢复场景；本章仍是普通 App UID 下的最小 BusyBox/musl 环境。
 
 [上一章](chapter-6.md)，我们在 App 私有目录里准备了 `items.csv`，用 Android 自带的 toybox 读取它，得到包含表头的三行。
 
@@ -253,7 +253,7 @@ Alpine 原始来源是[官方 3.22.8 / aarch64 minirootfs](https://dl-cdn.alpine
 
 当前最小环境不携带 apk/libapk、ssl_client、OpenSSL 等完整候选中的程序，不提供包安装或完整发行版能力。移除未使用程序不等于所有公开分发义务已完成。
 
-实际 APK 已打入 17 份许可证/版权文本与索引，但**私有对应源码归档、上游主页和将来准备创建的 tag 都不是已完成的公开源码交付**。发布时需提供版本匹配的完整对应源码、修改与构建/安装/必要重链接说明，核对可访问下载及校验和，不先公开二进制或派生 rootfs 再补来源。本教程不提供公开调试签名 APK 下载。
+实际 APK 已打入 17 份许可证/版权文本与索引。[chapter-7 源码 Release](https://github.com/kkkhs/pocketrun/releases/tag/chapter-7) 同时提供版本匹配的对应源码、修改、构建与复现说明，公开下载和校验和均已核对；入口在 `app/third_party/linux/matching_sources/`。本教程不提供公开调试签名 APK 下载。
 
 </details>
 
@@ -280,7 +280,7 @@ JADX 1.5.1 的重建结果有 **32 个错误**，属于部分可读的反编译�
 
 练习：如果 Linux 命令返回 `completed`，但清理是 `unproven`，为什么不能直接删除临时目录并宣布完成？`/workspace` 与 `/root` 分别说明路径还是权限？
 
-### 本地源码与待建快照
+### 本章源码与固定快照
 
 | 本地阅读入口 | 重点 |
 | --- | --- |
@@ -291,6 +291,6 @@ JADX 1.5.1 的重建结果有 **32 个错误**，属于部分可读的反编译�
 | `LinuxDirectoryLease.kt`、`LinuxRecoveryProbe.kt` | 所有权、文件锁、保守恢复与真实引用观察 |
 | `app/android/app/src/androidTest/java/io/github/kkkhs/pocketrun/Chapter7LinuxDemoTest.kt` | 实际安装和重复两次演示断言 |
 
-表中的 Kotlin 生产文件均在前文给出的 `app/android/app/src/main/java/io/github/kkkhs/pocketrun/` 下。公开仓库尚无本章已发布快照，暂不生成指向不存在文件或 tag 的成功链接。
+表中的 Kotlin 生产文件均在前文给出的 `app/android/app/src/main/java/io/github/kkkhs/pocketrun/` 下。固定源码是合并提交 [`2c49a78`](https://github.com/kkkhs/pocketrun/tree/2c49a78e7e26f5f3edd711ab66f7c1d5e577a91a)，对应 [`chapter-7` 注释 tag](https://github.com/kkkhs/pocketrun/tree/chapter-7)。
 
-验收与实际发布完成后，再登记真实 PR、已核验提交上的 `chapter-7` 注释 tag、源码 Release 和匹配的第三方对应源码下载，将本地路径补为可访问的固定快照链接。已发布的前章日期与测试数字保持各自历史快照，不随本章更新。
+[源码 Release](https://github.com/kkkhs/pocketrun/releases/tag/chapter-7) 提供完整源码归档与 SHA256SUMS，包含版本匹配的第三方对应源码和复现说明；公开下载已按校验和核验。已发布前章的日期与测试数字保留各自历史快照。
