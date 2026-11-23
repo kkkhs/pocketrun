@@ -146,6 +146,7 @@ export default function AdbPanel({ colors }: { colors: Colors }) {
       {control('检查连接', 'probe', busy || status?.connected !== true)}
       {control('取消 / 断开', 'disconnect', false)}
       <Text
+        testID="adb-operation-status"
         accessibilityLiveRegion="polite"
         style={[styles.text, { color: colors.text }]}
       >

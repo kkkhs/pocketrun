@@ -5,7 +5,7 @@ title: 用 Linux 命令读取同一份工作文件
 description: 在普通 App UID 下启动固定的 Alpine 派生命令环境，核对版本、目录、CSV 行数与命令及清理结果。
 ---
 
-> **本地开发草稿，尚未发布。** 已在授权云真机跑通实际安装、目录映射和重复两次的正常演示。完整生命周期专项及真实产品界面的验收仍待收口；下面的界面文字是应检查的结果，不是已完成的截图。
+> **本章已发布。** [PR #12](https://github.com/kkkhs/pocketrun/pull/12)、main CI、Pages 与 [chapter-7 源码快照](https://github.com/kkkhs/pocketrun/releases/tag/chapter-7)均已完成。任务专用 API 36 / ARM64 模拟器验证了实际 App 界面、正常演示、12 项生命周期和 7 个死亡恢复场景；本章仍是普通 App UID 下的最小 BusyBox/musl 环境。
 
 [上一章](chapter-6.md)，我们在 App 私有目录里准备了 `items.csv`，用 Android 自带的 toybox 读取它，得到包含表头的三行。
 
@@ -16,14 +16,14 @@ description: 在普通 App UID 下启动固定的 Alpine 派生命令环境，�
 ```text
 3.22.8
 /workspace
-10469
+10150
 3
 PR_EXITS:0,0,0,0,0
 ```
 
 前四行分别是 Alpine 版本、命令看见的工作目录、实际 UID 和行数。最后一行记录五个内部步骤的退出码；外层 PRoot 进程也必须退出 `0`。
 
-`10469` 是这台设备分配给 PocketRun 的 App UID，不是所有设备都应输出的常数。`3` 仍然是一行表头加两行商品，不是商品数量之和。
+`10150` 是这台模拟器分配给 PocketRun 的 App UID，不是所有设备都应输出的常数。`3` 仍然是一行表头加两行商品，不是商品数量之和。
 
 ## 先在界面跑一遍
 
@@ -36,6 +36,10 @@ PR_EXITS:0,0,0,0,0
 3. 点“运行 Linux 演示”。检查版本为 `3.22.8`、cwd 为 `/workspace`、实际 UID 与 App UID 一致；未修改的初始 CSV 应得到行数 `3`。
 4. 检查五个阶段退出码都为 `0`、PRoot 退出码为 `0`，且“资源清理”为 `done`。不能只看“命令状态：completed”。
 5. 再次准备，应提示“复用已校验安装”；再次运行，再核对目录、UID、文件结果与清理状态。
+
+下面是这次仅含第 7 章能力的实际 App 结果：安装被复用、原 CSV 保留；App/guest UID 都为 10150、cwd 为 `/workspace`、3 行、五阶段与外层退出码都为 0，142ms 后清理确认。
+
+![实际第 7 章 App 的 Linux 来源、行数、退出码和清理结果](assets/chapter-7-linux-result.png)
 
 操作尚未结束时可以点“取消 Linux 操作”。固定演示可能很快结束，来不及取消；“没有可取消的任务”不能算测到了取消。
 
@@ -161,6 +165,23 @@ stage 和 run 的恢复条件不同。run 目录还需检查 App UID 相关进�
 
 ## 已经验证什么
 
+2026-11-20，任务专用 `pocketrun-ch1-api36` 模拟器（Android 16 / API 36、ARM64、App UID 10150）执行了当前预置绑定点版本：
+
+| 检查 | 实际结果 |
+| --- | --- |
+| 正常安装、目录映射、重复演示 | `Chapter7LinuxDemoTest`：`OK (1 test)`；Alpine 3.22.8、`/workspace`、行数 3、五阶段退出码 0 |
+| 取消、关闭、超时、安装/RUN 库存等生命周期 | `Chapter7LifecycleIntegrationTest`：`OK (12 tests)` |
+| App / tracer / guest 硬死亡 | 默认及 fallback 各三场景，共 6 场景通过；host 按 UID/PID/startTicks 选定自有对象，原生断言和显式 procfs 消失观察都通过 |
+| 安装发布前 App 死亡 | fsync 后未发布 stage 保留，生产安装器恢复并保留工作 CSV，重跑成功 |
+| 资源与数据 | 原生检查 FD/读写线程/RUN 收尾；死亡恢复重新运行成功，原工作文件与无关 stage 未被当作垃圾删除 |
+
+这批死亡恢复使用 Debug APK SHA256 `58b62dda2ffb74f413164c152cfb01cd3b5da07e92d17ab71bd8fe9fcfe98b76`、Test APK SHA256 `6b96dbb4742acc58a6a36fec139e8f51815d905a6488b8cb2f2144fbfd52754f`。原生结果与 host 进程证据是同一批检查；不以 host ADB 退出码代替 JUnit 成功。
+
+2026-11-23，合入观察器修复后，仅含第 7 章能力的源码又完整执行了正常演示、12 项生命周期与同样 7 个死亡恢复场景，全部通过。该批 Debug APK SHA256 为 `a1824358b31fa257f7087427465fdb33552198be574c39a146a246585abad674`，Test APK SHA256 为 `0e054a24e8c663c8da4c6cd77e458dc0ced795d6806c2d970610c448bc0ea7fa`；章首产品截图也来自这个包。
+
+<details>
+<summary>2026-11-19 的历史批次与原失败记录</summary>
+
 2026-11-19，在本任务获授权的 Android 16 / API 36、ARM64 云真机上，`Chapter7LinuxDemoTest.actualInstallationMappingAndRepeatedAlpinePipeline()` 实际执行了安装、复用安装和两次正常演示：
 
 | 检查 | 已记录结果 |
@@ -177,6 +198,8 @@ stage 和 run 的恢复条件不同。run 目录还需检查 App UID 相关进�
 正常演示的 JSON 输出没有单独打印 `cleanupStatus`；这一项由实际通过的测试源码断言。不能把它描述成原始 JSON 已包含的字段。
 
 早期启动探测还真实观察到 PRoot 版本与 Linux `id -u` 返回 App UID，但它只说明基本启动链可用，与正常演示不是同一批证据。上表不把探测、静态检查、界面计划和生命周期计划拼成“一轮全过”，也不冒充 Case Center 原生报告。
+
+</details>
 
 <details>
 <summary>证据对应的构建与可运行检查</summary>
@@ -230,7 +253,7 @@ Alpine 原始来源是[官方 3.22.8 / aarch64 minirootfs](https://dl-cdn.alpine
 
 当前最小环境不携带 apk/libapk、ssl_client、OpenSSL 等完整候选中的程序，不提供包安装或完整发行版能力。移除未使用程序不等于所有公开分发义务已完成。
 
-实际 APK 已打入 17 份许可证/版权文本与索引，但**私有对应源码归档、上游主页和将来准备创建的 tag 都不是已完成的公开源码交付**。发布时需提供版本匹配的完整对应源码、修改与构建/安装/必要重链接说明，核对可访问下载及校验和，不先公开二进制或派生 rootfs 再补来源。本教程不提供公开调试签名 APK 下载。
+实际 APK 已打入 17 份许可证/版权文本与索引。[chapter-7 源码 Release](https://github.com/kkkhs/pocketrun/releases/tag/chapter-7) 同时提供版本匹配的对应源码、修改、构建与复现说明，公开下载和校验和均已核对；入口在 `app/third_party/linux/matching_sources/`。本教程不提供公开调试签名 APK 下载。
 
 </details>
 
@@ -243,7 +266,7 @@ Alpine 原始来源是[官方 3.22.8 / aarch64 minirootfs](https://dl-cdn.alpine
 
 JADX 1.5.1 的重建结果有 **32 个错误**，属于部分可读的反编译代码，不是原始源码；出错或缺失的方法不能补猜。可访问的[Ditto 包源码候选](https://github.com/WindySha/ditto-termux-packages)尚未核为整个 App 的原始源码或本次 APK 的对应版本，也不替代修改后程序的对应源码与许可证交付。React Native / TurboModule 是 PocketRun 的选择，不能据此反推 Ditto 同样使用它们。
 
-这份对照不扩大上方验证结论：candidate1 的正常演示仍是原批次 `OK (1 test)`、0.344 秒、重复两次；原生命周期 10 项中的 3 项失败仍是失败。candidate2 有独立的新正常路径及 12 项生命周期通过记录，但显式 App 死亡恢复仍有失败，当前预置绑定点的数据版本也未完成真机验收，不能称为完整通过。
+这份对照不扩大历史批次的结论：candidate1 的正常演示是原批次 `OK (1 test)`、0.344 秒、重复两次，原生命周期失败仍保留；candidate2 的正常路径和生命周期另有独立记录。当前预置绑定点版本的完整本机检查见“已经验证什么”，其中默认/fallback 的 App、tracer、guest 死亡恢复和安装死亡恢复属于 2026-11-20 的新批次。不同批次不拼成一轮结果。
 
 </details>
 
@@ -257,7 +280,7 @@ JADX 1.5.1 的重建结果有 **32 个错误**，属于部分可读的反编译�
 
 练习：如果 Linux 命令返回 `completed`，但清理是 `unproven`，为什么不能直接删除临时目录并宣布完成？`/workspace` 与 `/root` 分别说明路径还是权限？
 
-### 本地源码与待建快照
+### 本章源码与固定快照
 
 | 本地阅读入口 | 重点 |
 | --- | --- |
@@ -268,6 +291,6 @@ JADX 1.5.1 的重建结果有 **32 个错误**，属于部分可读的反编译�
 | `LinuxDirectoryLease.kt`、`LinuxRecoveryProbe.kt` | 所有权、文件锁、保守恢复与真实引用观察 |
 | `app/android/app/src/androidTest/java/io/github/kkkhs/pocketrun/Chapter7LinuxDemoTest.kt` | 实际安装和重复两次演示断言 |
 
-表中的 Kotlin 生产文件均在前文给出的 `app/android/app/src/main/java/io/github/kkkhs/pocketrun/` 下。公开仓库尚无本章已发布快照，暂不生成指向不存在文件或 tag 的成功链接。
+表中的 Kotlin 生产文件均在前文给出的 `app/android/app/src/main/java/io/github/kkkhs/pocketrun/` 下。固定源码是合并提交 [`2c49a78`](https://github.com/kkkhs/pocketrun/tree/2c49a78e7e26f5f3edd711ab66f7c1d5e577a91a)，对应 [`chapter-7` 注释 tag](https://github.com/kkkhs/pocketrun/tree/chapter-7)。
 
-验收与实际发布完成后，再登记真实 PR、已核验提交上的 `chapter-7` 注释 tag、源码 Release 和匹配的第三方对应源码下载，将本地路径补为可访问的固定快照链接。已发布的前章日期与测试数字保持各自历史快照，不随本章更新。
+[源码 Release](https://github.com/kkkhs/pocketrun/releases/tag/chapter-7) 提供完整源码归档与 SHA256SUMS，包含版本匹配的第三方对应源码和复现说明；公开下载已按校验和核验。已发布前章的日期与测试数字保留各自历史快照。

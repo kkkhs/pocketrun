@@ -726,3 +726,36 @@ Java_io_github_kkkhs_pocketrun_PtyNative_nativeClose(JNIEnv*, jclass, jlong id) 
     }
     return JNI_TRUE;
 }
+
+#ifndef NDEBUG
+// Instrumentation-only namespace; no PTY entry point or release export is changed.
+extern "C" JNIEXPORT jint JNICALL
+Java_io_github_kkkhs_pocketrun_Chapter9HoldTestNative_nativePidfdOpen(JNIEnv* env, jclass, jint pid) {
+    if (pid <= 1 || pid == getpid()) {
+        Throw(env, "java/lang/IllegalArgumentException", "Test pidfd requires a non-self process PID."); return -1;
+    }
+    const int fd = MoveAboveStdio(static_cast<int>(syscall(__NR_pidfd_open, pid, 0U)));
+    if (fd < 0) ThrowIo(env, ErrnoMessage("test pidfd_open"));
+    return fd;
+}
+
+extern "C" JNIEXPORT jboolean JNICALL
+Java_io_github_kkkhs_pocketrun_Chapter9HoldTestNative_nativePidfdSendSignal(
+    JNIEnv* env, jclass, jint fd, jint signal_number) {
+    if (fd < 3 || (signal_number != SIGSTOP && signal_number != SIGCONT)) {
+        Throw(env, "java/lang/IllegalArgumentException", "Test pidfd only allows STOP/CONT on an owned descriptor."); return JNI_FALSE;
+    }
+    if (syscall(__NR_pidfd_send_signal, fd, signal_number, nullptr, 0U) == 0) return JNI_TRUE;
+    if (errno != ESRCH) ThrowIo(env, ErrnoMessage("test pidfd_send_signal"));
+    return JNI_FALSE;  // Caller may interpret ESRCH as gone only after proving the original identity.
+}
+
+extern "C" JNIEXPORT void JNICALL
+Java_io_github_kkkhs_pocketrun_Chapter9HoldTestNative_nativePidfdClose(JNIEnv* env, jclass, jint fd) {
+    if (fd < 3) {
+        Throw(env, "java/lang/IllegalArgumentException", "Test pidfd descriptor is invalid."); return;
+    }
+    // The test relinquishes ownership before this one-shot close; never retry a reused FD after EINTR.
+    if (syscall(SYS_close, fd) != 0) ThrowIo(env, ErrnoMessage("test pidfd close"));
+}
+#endif
