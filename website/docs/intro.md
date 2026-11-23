@@ -50,7 +50,8 @@ PocketRun 要把 Android 手机变成 Agent 的执行环境：操作 App、处�
 6. [第 6 章（已发布）](chapter-6.md)：在 App 私有目录准备 CSV、运行固定命令管道，再检查输出和两个退出码；云真机专项与真实界面的正常演示分别记录，[源码快照](https://github.com/kkkhs/pocketrun/releases/tag/chapter-6)已发布。
 7. [第 7 章（已发布）](chapter-7.md)：在普通 App UID 下用最小 Alpine 环境读取同一份 CSV；实际界面、正常演示、12 项生命周期与 7 个死亡恢复场景通过，[源码快照](https://github.com/kkkhs/pocketrun/releases/tag/chapter-7)可下载。
 8. [第 8 章（已发布）](chapter-8.md)：用真正的 PTY 实时输入、改变尺寸、正常退出，并验证 120 秒期限后的自有资源清理；[源码快照](https://github.com/kkkhs/pocketrun/releases/tag/chapter-8)可下载。
-9. [第 9 章（验收通过，发布中）](chapter-9.md)：固定工具校验、手机逐次审批与来源/资源核对，包含真实执行中取消和原五秒期限。
+9. [第 9 章（已发布）](chapter-9.md)：固定工具校验、手机逐次审批与来源/资源核对，包含真实执行中取消和原五秒期限；[源码快照](https://github.com/kkkhs/pocketrun/releases/tag/chapter-9)可下载。
+10. [第 10 章（验收通过，发布中）](chapter-10.md)：同一个目标保留设备和 CSV 两条真实步骤，每步仍独立审批、核对来源与清理。
 
 读图时分开两个问题：**层是“谁执行”，阶段是“先做什么、再做什么”。** React 与 App Kotlin 是同一个 App 中的两层，shell 后端是独立进程；一次任务可以多次经过这些层，并不是每层只对应一个步骤。
 

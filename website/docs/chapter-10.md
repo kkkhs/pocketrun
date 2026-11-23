@@ -138,6 +138,8 @@ if (current.phase == HostPhase.SUCCEEDED &&
 
 2026-11-20 已在任务专用 API 36 / ARM64 模拟器实际点击完成两步任务：设备来源是 App UID 10150、Android 16/API 36；CSV 返回 `/workspace`、guest UID 10150、行数 3、五阶段退出码 0、`sourceStatus=completed`、`cleanupStatus=done`。同一账本同时保留两条结果，最后核对按钮将任务置为 `completed`。Android `Chapter10ContextIntegrationTest` 的两次设备请求也已通过；它是另一项检查，不替代本例 CSV 的实际手机批准。
 
+合入独立第 9 章源码后，第 10 章独立包又执行相同实际界面流程：目标与两步记录同属 `task-1`，任务最终为 `completed`，CSV 来源完成、清理确认、202ms、行数 3。该 Debug APK SHA256 为 `a61950af5b3c7c2bb2dac1355a558d0b386739559520b746973aba03597f87b5`，Test APK SHA256 为 `2fc3f213e2f2cbb02611282e0b7f906ea598f6197a0892c0bbc39375036c6a7a`；82 项相关 JVM 回归零失败、零跳过，Android 上的一项 context 集成也通过。
+
 </details>
 
 ## 得到的是一个有边界的任务
