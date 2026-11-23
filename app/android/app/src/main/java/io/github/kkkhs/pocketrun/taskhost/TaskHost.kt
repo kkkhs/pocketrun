@@ -87,7 +87,7 @@ class TaskHost private constructor(
     private var executionSequence = 0L
     private var closed = false
 
-    fun submit(call: RawToolCall): HostStatus {
+    fun submit(call: RawToolCall, taskDeadlineNanos: Long? = null): HostStatus {
         refresh()
         var launch: Launch? = null
         try {
@@ -104,10 +104,10 @@ class TaskHost private constructor(
                 // Sequence makes a repeated injected nonce unable to authorize a later request.
                 val nonce = "${requestSequence}_$sourceNonce"
                 val requestHash = requestHash(nonce, action, binding)
-                val request = ActiveRequest(nonce, requestHash, action, binding)
+                val request = ActiveRequest(nonce, requestHash, action, binding, taskDeadlineNanos)
                 active = request
                 if (action.approvalRequired) {
-                    request.approvalDeadlineNanos = deadline(clock.nowNanos(), approvalTtlNanos)
+                    request.approvalDeadlineNanos = boundedDeadline(request, approvalTtlNanos)
                     status = view(request, HostPhase.PENDING_APPROVAL,
                         deadline = request.approvalDeadlineNanos, actor = APP_PHONE_UI_ACTOR)
                 } else {
@@ -195,6 +195,8 @@ class TaskHost private constructor(
         return synchronized(lock) { active !== cleanup.request }
     }
 
+    internal fun nowNanos(): Long = clock.nowNanos()
+
     fun state(): HostStatus {
         refresh()
         return synchronized(lock) { status }
@@ -247,6 +249,13 @@ class TaskHost private constructor(
         cleanup?.let(::cleanupAndCommit)
     }
 
+    /** Context expiry shares every approval/start/completion gate, even without a context poll. */
+    private fun boundedDeadline(request: ActiveRequest, duration: Long): Long {
+        val now = clock.nowNanos()
+        val taskDeadline = request.taskDeadlineNanos
+        return if (taskDeadline != null && taskDeadline - now < duration) taskDeadline else deadline(now, duration)
+    }
+
     private fun expireApprovalLocked(request: ActiveRequest): Boolean {
         if (!isDue(clock.nowNanos(), request.approvalDeadlineNanos)) return false
         request.approvalConsumed = true
@@ -273,7 +282,7 @@ class TaskHost private constructor(
         if (request.action.approvalRequired && expireApprovalLocked(request)) return null
         executionSequence = Math.addExact(executionSequence, 1L)
         request.executionEpoch = executionSequence
-        request.executionDeadlineNanos = deadline(clock.nowNanos(), executionTimeoutNanos)
+        request.executionDeadlineNanos = boundedDeadline(request, executionTimeoutNanos)
         request.preparing = true
         status = view(request, HostPhase.EXECUTING, deadline = request.executionDeadlineNanos)
         return Launch(request, executionSequence)
@@ -655,6 +664,7 @@ class TaskHost private constructor(
         val hash: String,
         val action: ParsedAction,
         val binding: Binding,
+        val taskDeadlineNanos: Long?,
     ) {
         val backendEpoch = binding.backendEpoch
         var approvalConsumed = false

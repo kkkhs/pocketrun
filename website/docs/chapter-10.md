@@ -48,7 +48,7 @@ description: 在原有工具宿主上维护一个目标、有界步骤账本、�
 `SingleTaskContext.submit()` 调用原有 `TaskHost.submit()`。CSV 仍只有空参数 `{}`，不能附带命令、路径、`approved: true` 或审批角色。模型、网页内容和任务描述都没有同意入口。
 
 ```kotlin
-val status = host.submit(copied)
+val status = host.submit(copied, taskDeadlineNanos = deadline)
 steps += ContextStep(number, copied, status)
 pendingNumber = number
 phase = ContextPhase.RUNNING
@@ -109,7 +109,9 @@ if (current.phase == HostPhase.SUCCEEDED &&
 
 `ContextBudget` 约束配置本身：最多 16 步、128 KiB 上下文、32 KiB 单结果、300 秒，调用者不能放开无限预算。元数据按每步 768 字节保守预留；小型固定参数及结果字段按 UTF-8 长度计量。这不是模型 tokenizer 的 token 数。
 
-期限使用单调时钟。当前由读状态和原生操作触发维护；页面每 250 ms 查询一次，模块失效时关闭账本与宿主。它不宣称是进程死亡后还能恢复的后台任务调度器。
+期限使用与宿主相同的单调时钟与纳秒单位。账本把绝对总期限交给 `TaskHost.submit()`，收紧这一条请求的审批和执行期限；手机批准、实际启动和结果提交都复用同一检查门。即使页面没有先查询状态，过期批准也不能开始工具。
+
+页面每 250 ms 查询状态用于展示，不是授权安全门。模块失效时关闭账本与宿主；关闭标志不可逆，后续刷新、清理重试或旧回调不能把它变回可开始新目标的状态。它不宣称是进程死亡后还能恢复的后台任务调度器。
 
 整个任务有递增 `taskId`，工具各有原有 nonce/execution epoch。取消后仍保留已完成结果及当前清理状态；底层 TaskHost 拒绝旧回调，旧 taskId 不能提交新步骤。
 

@@ -34,11 +34,12 @@ data class ContextStatus(
 /** One in-memory task ledger, using the existing host's sole execution/approval/cleanup slot. */
 class SingleTaskContext(
     private val host: TaskHost,
-    private val clock: MonotonicClock = MonotonicClock(System::nanoTime),
+    private val clock: MonotonicClock = MonotonicClock(host::nowNanos),
     private val budget: ContextBudget = ContextBudget(),
 ) : Closeable {
     private val lock = Any()
     private var sequence = 0L
+    private var closed = false
     private var taskId: String? = null
     private var goal: String? = null
     private var phase = ContextPhase.IDLE
@@ -49,7 +50,7 @@ class SingleTaskContext(
 
     fun begin(value: String): ContextStatus = synchronized(lock) {
         refreshLocked()
-        check(phase != ContextPhase.CLOSED) { "Task context is closed." }
+        check(!closed) { "Task context is closed." }
         if (isActive() || hostOwnsSlot()) throw HostBusyException()
         val nextGoal = value.trim()
         require(bytes(nextGoal) in 1..1024) { "Task goal must be 1..1024 UTF-8 bytes." }
@@ -82,7 +83,7 @@ class SingleTaskContext(
         }
         val number = steps.size + 1
         val status = try {
-            host.submit(copied)
+            host.submit(copied, taskDeadlineNanos = deadline)
         } catch (_: ToolValidationException) {
             return stopLocked(ContextPhase.FAILED, "TOOL_BINDING_REJECTED")
         }
@@ -129,7 +130,10 @@ class SingleTaskContext(
     }
 
     override fun close() = synchronized(lock) {
+        closed = true
         if (isActive()) stopLocked(ContextPhase.CLOSED, "CONTEXT_CLOSED")
+        // Capture the cancelled request's cleanup before idle host.close() drops its nonce.
+        refreshLocked()
         phase = ContextPhase.CLOSED
         host.close()
         refreshLocked()
@@ -145,8 +149,10 @@ class SingleTaskContext(
         val current = host.state()
         // A new task or stale host state can never be attached to this step.
         if (current.requestNonce != previous.status.requestNonce || current.tool != previous.call.tool) {
-            phase = ContextPhase.FAILED
-            code = "HOST_CORRELATION_LOST"
+            if (!closed) {
+                phase = ContextPhase.FAILED
+                code = "HOST_CORRELATION_LOST"
+            }
             pendingNumber = null
             return
         }
