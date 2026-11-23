@@ -5,7 +5,7 @@ title: 先批准一个固定工具，再检查它真的执行了什么
 description: 把设备信息、固定 Linux CSV 与目标虚拟屏接给 App Kotlin 的确定性宿主，验证参数、手机审批、结果与清理边界。
 ---
 
-> **独立章节 App 的实际工具与权限边界已通过，正式发布继续推进。** 任务专用 API 36 / ARM64 模拟器验证了 App 自配对/TLS/Binder/显示路由、CSV 手机批准及真实来源、显示输入后重新观察、执行中取消、原五秒期限、固定坏参数的 JS 桥拒绝与后端死亡失效。[Draft PR #14](https://github.com/kkkhs/pocketrun/pull/14) 提供源码；最终 CI、Pages 与源码快照继续推进。
+> **本章已发布。** [PR #14](https://github.com/kkkhs/pocketrun/pull/14)、main CI/Pages 与 [chapter-9 源码快照](https://github.com/kkkhs/pocketrun/releases/tag/chapter-9)均已完成。独立章节 App 验证了实际工具、手机逐次审批、来源与资源边界，包含真正执行中取消、原五秒期限和固定坏参数的 JS 桥拒绝。
 
 [上一章](chapter-8.md)，我们接上了交互式 PTY 的实现。前面几章已经分别给出了设备信息、目标虚拟屏、工作文件和 Linux 命令通道。
 
