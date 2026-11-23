@@ -2,7 +2,9 @@
 
 面向 React / TypeScript 开发者，学习让 Agent 在 Android 手机上操作 App、处理文件和执行命令。
 
-教程站已上线至第 5 章：第 1 章跑通 React → Kotlin，第 2 章取得 App 自有 ADB 启动入口，第 3 章完成 UID 2000 的 `app_process` 后端与 Binder 通信，第 4 章创建演示 VirtualDisplay 并验证 `displayId` 路由，第 5 章从同一显示读取截图和 UI 树、定向输入并重新观察结果。后续能力按章节推进。本地第 6 章正在开发，已有云真机文件、命令与生命周期专项记录，但真实产品界面及完整验收尚未完成，未发布。本地第 7 章已跑通普通 App UID 下的最小 Alpine 正常演示，完整生命周期和产品界面仍待验收，未发布。
+教程站已上线至第 6 章：第 1 章跑通 React → Kotlin，第 2 章取得 App 自有 ADB 启动入口，第 3 章完成 UID 2000 的 `app_process` 后端与 Binder 通信，第 4 章创建演示 VirtualDisplay 并验证 `displayId` 路由，第 5 章从同一显示读取截图和 UI 树、定向输入并重新观察结果。第 6 章在 App 私有目录准备 CSV、运行固定命令管道并检查输出与退出码；云真机专项与真实界面的正常演示分别记录，不代表所有异常分支都已在界面命中。[PR #11](https://github.com/kkkhs/pocketrun/pull/11) 已合并，`chapter-6` 源码快照已发布。后续能力按章节推进。
+
+第 7 章已在任务专用本机模拟器完成最小 Alpine 的安装、映射与重复演示、12 项生命周期、7 个 App/tracer/guest/安装死亡恢复场景。仅含第 7 章能力的实际 App 界面也已通过；最终 CI/源码发布正在收口，各批次的实际结果见章节正文。
 
 ## 阅读教程
 
@@ -12,7 +14,7 @@
 - [第 3 章：启动 shell 后端](website/docs/chapter-3.md)
 - [第 4 章：把 Demo App 放进虚拟屏](website/docs/chapter-4.md)
 - [第 5 章：看见界面，再操作它](website/docs/chapter-5.md)
-- [第 6 章：工作目录与命令管道（本地开发草稿，未全面验收）](website/docs/chapter-6.md)
+- [第 6 章：工作目录与命令管道（已发布）](https://kkkhs.github.io/pocketrun/chapter-6/) · [源码快照](https://github.com/kkkhs/pocketrun/releases/tag/chapter-6)
 - [第 7 章：PRoot 与最小 Alpine 环境（本地开发草稿，正常演示已实测，未全面验收/未发布）](website/docs/chapter-7.md)
 - [章节源码快照](https://github.com/kkkhs/pocketrun/releases)
 - [参考：系统概览](https://kkkhs.github.io/pocketrun/architecture/)
