@@ -20,6 +20,7 @@ import WorkspacePanel from './WorkspacePanel';
 import LinuxPanel from './LinuxPanel';
 import PtyPanel from './PtyPanel';
 import TaskHostPanel from './TaskHostPanel';
+import SingleTaskPanel from './SingleTaskPanel';
 import NativePocketRunDevice, {
   type DeviceInfo,
 } from './specs/NativePocketRunDevice';
@@ -137,6 +138,7 @@ function DeviceScreen() {
         <LinuxPanel colors={colors} />
         <PtyPanel colors={colors} />
         <TaskHostPanel colors={colors} />
+        <SingleTaskPanel colors={colors} />
       </ScrollView>
     </View>
   );
