@@ -1,0 +1,350 @@
+{
+  "status": "STATIC_AND_SOURCE_REPRODUCTION_ONLY",
+  "source_bundle_reproduced_byte_identically": true,
+  "source_bundle_reproduction_exit_codes": [
+    0,
+    0,
+    0,
+    0
+  ],
+  "source_bundle_reproduction_logs": "/data00<private-candidate>/sourcebundle-verification/rebuilt/logs/build-reproduced-result.json",
+  "final_build_exit_codes": [
+    0,
+    0,
+    0,
+    0
+  ],
+  "artifacts": [
+    {
+      "name": "libproot.so",
+      "bytes": 334208,
+      "sha256": "0e5b9a21954ec529ae75d68c45c9e50277e9b7bb1e7138f3651b5336849f855e",
+      "align": "0x4000",
+      "elf_type": 3,
+      "interp": "/system/bin/linker64",
+      "needed": [
+        "libdl.so",
+        "libc.so"
+      ],
+      "gnu_stack_flags": [
+        6
+      ],
+      "wx": false,
+      "textrel": false
+    },
+    {
+      "name": "libproot_loader.so",
+      "bytes": 3000,
+      "sha256": "1396d5c21670602730b02c25b0d723c606a6d6f4d23c7e77cac4b6bdd70cd555",
+      "align": "0x4000",
+      "elf_type": 3,
+      "interp": null,
+      "needed": [],
+      "gnu_stack_flags": [
+        6
+      ],
+      "wx": false,
+      "textrel": false
+    },
+    {
+      "name": "libalpine_bin_busybox.so",
+      "bytes": 919304,
+      "sha256": "da988cc7d4ab9d83f1798f6e92cf4aa0ba5b0b8fd2bae5f1c7bd3f882a569c81",
+      "align": "0x10000",
+      "elf_type": 3,
+      "interp": "/lib/ld-musl-aarch64.so.1",
+      "needed": [
+        "libc.musl-aarch64.so.1"
+      ],
+      "gnu_stack_flags": [
+        6
+      ],
+      "wx": false,
+      "textrel": false
+    },
+    {
+      "name": "libalpine_lib_ld_musl_aarch64_so_1.so",
+      "bytes": 723480,
+      "sha256": "42fb025bc758b76e60e7b3b0fcdcfab93b6ba1694b363244c2e8e6f51847e28c",
+      "align": "0x10000",
+      "elf_type": 3,
+      "interp": null,
+      "needed": [],
+      "gnu_stack_flags": [
+        6
+      ],
+      "wx": false,
+      "textrel": false
+    },
+    {
+      "name": "libalpine_sbin_apk.so",
+      "bytes": 69264,
+      "sha256": "7e6a2fcb49a5206018866dfe7e9f1b13eacda0c2c12f6d5920a8126a8c32a8ad",
+      "align": "0x10000",
+      "elf_type": 3,
+      "interp": "/lib/ld-musl-aarch64.so.1",
+      "needed": [
+        "libcrypto.so.3",
+        "libz.so.1",
+        "libapk.so.2.14.10",
+        "libc.musl-aarch64.so.1"
+      ],
+      "gnu_stack_flags": [
+        6
+      ],
+      "wx": false,
+      "textrel": false
+    },
+    {
+      "name": "libalpine_usr_bin_getconf.so",
+      "bytes": 67320,
+      "sha256": "a97db0e7b82b367ecc4eb3e79a1c34345df98212712abfb2dc0fc5065eccfee2",
+      "align": "0x10000",
+      "elf_type": 3,
+      "interp": "/lib/ld-musl-aarch64.so.1",
+      "needed": [
+        "libc.musl-aarch64.so.1"
+      ],
+      "gnu_stack_flags": [
+        6
+      ],
+      "wx": false,
+      "textrel": false
+    },
+    {
+      "name": "libalpine_usr_bin_getent.so",
+      "bytes": 67528,
+      "sha256": "3f546761ca3af0bea288e0773d45b9595729beccc3a6a9e03cdc64ac7a3574e0",
+      "align": "0x10000",
+      "elf_type": 3,
+      "interp": "/lib/ld-musl-aarch64.so.1",
+      "needed": [
+        "libc.musl-aarch64.so.1"
+      ],
+      "gnu_stack_flags": [
+        6
+      ],
+      "wx": false,
+      "textrel": false
+    },
+    {
+      "name": "libalpine_usr_bin_iconv.so",
+      "bytes": 67240,
+      "sha256": "3c0782718d643a0fa05667eaf40c5ad8d637d6165d80ab58ec8ad7c030e959d8",
+      "align": "0x10000",
+      "elf_type": 3,
+      "interp": "/lib/ld-musl-aarch64.so.1",
+      "needed": [
+        "libc.musl-aarch64.so.1"
+      ],
+      "gnu_stack_flags": [
+        6
+      ],
+      "wx": false,
+      "textrel": false
+    },
+    {
+      "name": "libalpine_usr_bin_scanelf.so",
+      "bytes": 67424,
+      "sha256": "5178c52acd1df6c76260c3bdcc7f1657e3921e688d4ca4ad4da771752a5e42b1",
+      "align": "0x10000",
+      "elf_type": 3,
+      "interp": "/lib/ld-musl-aarch64.so.1",
+      "needed": [
+        "libc.musl-aarch64.so.1"
+      ],
+      "gnu_stack_flags": [
+        6
+      ],
+      "wx": false,
+      "textrel": false
+    },
+    {
+      "name": "libalpine_usr_bin_ssl_client.so",
+      "bytes": 67472,
+      "sha256": "477a365ad2b059c32f1d0d2323cbcade0cac66cccbb7173ec4ccf5f0e6f86062",
+      "align": "0x10000",
+      "elf_type": 3,
+      "interp": "/lib/ld-musl-aarch64.so.1",
+      "needed": [
+        "libssl.so.3",
+        "libcrypto.so.3",
+        "libc.musl-aarch64.so.1"
+      ],
+      "gnu_stack_flags": [
+        6
+      ],
+      "wx": false,
+      "textrel": false
+    },
+    {
+      "name": "libalpine_usr_lib_engines_3_afalg_so.so",
+      "bytes": 67680,
+      "sha256": "94485f090ad4a485b79e49b30e70bf0ceeca82dcb6e724fb017420485d3c87b4",
+      "align": "0x10000",
+      "elf_type": 3,
+      "interp": null,
+      "needed": [
+        "libcrypto.so.3",
+        "libc.musl-aarch64.so.1"
+      ],
+      "gnu_stack_flags": [
+        6
+      ],
+      "wx": false,
+      "textrel": false
+    },
+    {
+      "name": "libalpine_usr_lib_engines_3_capi_so.so",
+      "bytes": 67168,
+      "sha256": "d6e5adf7b31da38f8cff6af82a54b653ed8871c6dd6ca811e513761db1e7a5aa",
+      "align": "0x10000",
+      "elf_type": 3,
+      "interp": null,
+      "needed": [],
+      "gnu_stack_flags": [
+        6
+      ],
+      "wx": false,
+      "textrel": false
+    },
+    {
+      "name": "libalpine_usr_lib_engines_3_loader_attic_so.so",
+      "bytes": 67952,
+      "sha256": "03af561885d47d01393778abb1d301b1c15937e167b2e82863335f8ea01de63a",
+      "align": "0x10000",
+      "elf_type": 3,
+      "interp": null,
+      "needed": [
+        "libcrypto.so.3",
+        "libc.musl-aarch64.so.1"
+      ],
+      "gnu_stack_flags": [
+        6
+      ],
+      "wx": false,
+      "textrel": false
+    },
+    {
+      "name": "libalpine_usr_lib_engines_3_padlock_so.so",
+      "bytes": 67168,
+      "sha256": "60553df3387da7bac371dbf3c857dd01ea99f7f6850e78330e913048958543cd",
+      "align": "0x10000",
+      "elf_type": 3,
+      "interp": null,
+      "needed": [],
+      "gnu_stack_flags": [
+        6
+      ],
+      "wx": false,
+      "textrel": false
+    },
+    {
+      "name": "libalpine_usr_lib_libapk_so_2_14_10.so",
+      "bytes": 200328,
+      "sha256": "f0a0702b8d24132d8c3eef41c9ec07ad54ab524d47fc3ec3b300789142f4acc9",
+      "align": "0x10000",
+      "elf_type": 3,
+      "interp": null,
+      "needed": [
+        "libssl.so.3",
+        "libcrypto.so.3",
+        "libz.so.1",
+        "libc.musl-aarch64.so.1"
+      ],
+      "gnu_stack_flags": [
+        6
+      ],
+      "wx": false,
+      "textrel": false
+    },
+    {
+      "name": "libalpine_usr_lib_libcrypto_so_3.so",
+      "bytes": 4598680,
+      "sha256": "256f7a8a62afbcf989d0c47477d19892df822b05d50176f412d6b2e015e2a578",
+      "align": "0x10000",
+      "elf_type": 3,
+      "interp": null,
+      "needed": [
+        "libc.musl-aarch64.so.1"
+      ],
+      "gnu_stack_flags": [
+        6
+      ],
+      "wx": false,
+      "textrel": false
+    },
+    {
+      "name": "libalpine_usr_lib_libssl_so_3.so",
+      "bytes": 868240,
+      "sha256": "abcf0ff69cf1de1dfe744cea2a307c6960693f4164a585e297ed73ad6013aaba",
+      "align": "0x10000",
+      "elf_type": 3,
+      "interp": null,
+      "needed": [
+        "libcrypto.so.3",
+        "libc.musl-aarch64.so.1"
+      ],
+      "gnu_stack_flags": [
+        6
+      ],
+      "wx": false,
+      "textrel": false
+    },
+    {
+      "name": "libalpine_usr_lib_libz_so_1_3_2.so",
+      "bytes": 133008,
+      "sha256": "ceb6a1bb9ae4f99b87e4dc8a70e9df45f6586139c314e06eac0ce85d999e11cb",
+      "align": "0x10000",
+      "elf_type": 3,
+      "interp": null,
+      "needed": [
+        "libc.musl-aarch64.so.1"
+      ],
+      "gnu_stack_flags": [
+        6
+      ],
+      "wx": false,
+      "textrel": false
+    },
+    {
+      "name": "libalpine_usr_lib_ossl_modules_legacy_so.so",
+      "bytes": 133008,
+      "sha256": "1a8f5314e1128e82188e101949f6c267daee8a80a033308ab958bd16fef21d0d",
+      "align": "0x10000",
+      "elf_type": 3,
+      "interp": null,
+      "needed": [
+        "libcrypto.so.3",
+        "libc.musl-aarch64.so.1"
+      ],
+      "gnu_stack_flags": [
+        6
+      ],
+      "wx": false,
+      "textrel": false
+    }
+  ],
+  "rootfs_data_asset": {
+    "path": "/data00<private-candidate>/output-final/assets/alpine-3.22.8-aarch64-data-only.tar.gz",
+    "bytes": 151067,
+    "sha256": "309998f972ab094c5c810e364837be4477f38fe4ff68dbbc9f4ffac4e7c3fd7c",
+    "regular_elf_files": 0,
+    "regular_executable_permission_files": 0,
+    "derivative_not_original_upstream_sha": true
+  },
+  "source_bundle": {
+    "path": "/data00<private-candidate>/output-final/proot-talloc-corresponding-source-candidate.tar.gz",
+    "sha256": "eb5d7c20067c7c14e1ffb5047408a96270b95ae4682dd34bc80dc526252165ef",
+    "bytes": 1227275,
+    "scope": "PRoot+talloc+local adapter/scripts/fullDiff; Alpine package Corresponding Source not collected"
+  },
+  "full_diff_sha256": "c5caed68d2619164e48cbbfad004fe5e5f2728cf8a76f4a0be66d394b9245d1f",
+  "upstream_default_seccomp_compiled": true,
+  "installed_package_notices": 16,
+  "app_target_sdk_required": 36,
+  "compile_api": 35,
+  "device_executables_run": false,
+  "apk_created_or_installed": false,
+  "published": false
+}

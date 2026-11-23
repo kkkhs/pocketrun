@@ -6,6 +6,7 @@ import java.io.File
 import java.io.InputStream
 import java.io.OutputStream
 import java.util.concurrent.CancellationException
+import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.TimeoutException
@@ -20,12 +21,25 @@ class CommandPipeline : Closeable {
         val stderr: String,
         val exitCodes: List<Int>,
         val durationMillis: Long,
+        val cleanupProven: Boolean = true,
+        val cleanupFailure: String? = null,
     )
 
     class Run internal constructor() {
         internal val cancelled = AtomicBoolean(false)
         internal val failure = AtomicReference<String?>(null)
         internal val processes = ArrayList<Process>()
+        internal val cleanupFailure = AtomicReference<String?>(null)
+        @Volatile internal var cleanupProven = false
+        internal var terminateOwned: ((Process) -> Unit)? = null
+        internal var executing = false // guarded by the pipeline lock.
+        internal var executed = false
+        @Volatile internal var ioCleanupProven = true
+        @Volatile internal var ioExecutor: ExecutorService? = null
+        internal val terminationLock = Any()
+        internal val streamClosers = ArrayList<Thread>()
+        internal val streamsScheduled = HashSet<Process>()
+        internal val streamFailure = AtomicReference<String?>(null)
     }
 
     private val lock = Any()
@@ -39,6 +53,8 @@ class CommandPipeline : Closeable {
     }
 
     fun execute(run: Run, directory: File, commands: List<List<String>>, timeoutMillis: Long = TIMEOUT_MS,
+        env: Map<String, String> = emptyMap(), clearEnvironment: Boolean = false,
+        onStarted: ((Process) -> Unit)? = null, terminateOwned: ((Process) -> Unit)? = null,
         validate: () -> Unit = {}): Result {
         val started = System.nanoTime()
         val stdout = LimitedOutput(MAX_OUTPUT_BYTES)
@@ -47,18 +63,36 @@ class CommandPipeline : Closeable {
             Thread(task, "PocketRun-PipeIO").apply { isDaemon = true }
         }
         val deadline = started + TimeUnit.MILLISECONDS.toNanos(timeoutMillis)
+        // Allocate before marking the reservation executing: allocation failure has launched no resources.
+        synchronized(lock) {
+            check(current === run && !run.executed) { "命令管道已失效或重复执行。" }
+            run.terminateOwned = terminateOwned
+            run.executing = true
+            run.executed = true
+            run.ioCleanupProven = false
+            run.ioExecutor = io
+        }
         try {
             require(timeoutMillis in 1..TIMEOUT_MS) { "管道超时时间无效。" }
             require(directory.isDirectory && commands.size in 1..2) { "管道工作目录或阶段无效。" }
             validate()
-            commands.forEach { require(it.isNotEmpty() && it.size <= 8 && it.all(String::isNotEmpty)) }
+            commands.forEach { require(it.isNotEmpty() && it.size <= 96 && it.all { value -> value.isNotEmpty() && 0.toChar() !in value }) }
+            require(env.size <= 16 && env.all { (key, value) ->
+                key.matches(Regex("[A-Z_][A-Z0-9_]{0,63}")) && value.length <= 4096 && 0.toChar() !in value
+            }) { "命令环境无效。" }
             for (command in commands) {
-                synchronized(lock) {
+                val process = synchronized(lock) {
                     check(current === run && !closed) { "命令管道已失效。" }
                     if (run.cancelled.get()) throw CancellationException()
                     if (System.nanoTime() >= deadline) throw TimeoutException()
-                    run.processes += ProcessBuilder(command).directory(directory).start()
+                    ProcessBuilder(command).directory(directory).apply {
+                        environment().apply {
+                            if (clearEnvironment) clear()
+                            putAll(env)
+                        }
+                    }.start().also { run.processes += it }
                 }
+                onStarted?.invoke(process)
             }
             run.processes.first().outputStream.close()
             val readers = run.processes.map { process ->
@@ -100,11 +134,21 @@ class CommandPipeline : Closeable {
             terminate(run)
             io.shutdownNow()
             try {
-                io.awaitTermination(1, TimeUnit.SECONDS)
+                run.ioCleanupProven = io.awaitTermination(1, TimeUnit.SECONDS)
+                if (!run.ioCleanupProven) run.cleanupFailure.updateAndGet {
+                    listOfNotNull(it, "cleanup_unproven: pipe IO threads did not terminate.").joinToString("; ")
+                }
+                else if (run.cleanupProven) run.cleanupFailure.set(null)
             } catch (_: InterruptedException) {
+                run.cleanupFailure.updateAndGet {
+                    listOfNotNull(it, "cleanup_unproven: pipe IO cleanup interrupted.").joinToString("; ")
+                }
                 Thread.currentThread().interrupt()
             } finally {
-                synchronized(lock) { if (current === run) current = null }
+                synchronized(lock) {
+                    run.executing = false
+                    if (current === run && run.cleanupProven && run.ioCleanupProven) current = null
+                }
             }
         }
         val exits = run.processes.map { if (it.isAlive) -1 else it.exitValue() }
@@ -114,11 +158,34 @@ class CommandPipeline : Closeable {
         val status = when {
             run.cancelled.get() -> "cancelled"
             run.failure.get() != null -> checkNotNull(run.failure.get())
+            !run.cleanupProven || !run.ioCleanupProven -> "failed"
             exits.size != commands.size || exits.any { it != 0 } -> "failed"
             else -> "completed"
         }
         return Result(status, outputText, errorText, exits,
-            TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - started))
+            TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - started),
+            run.cleanupProven && run.ioCleanupProven, run.cleanupFailure.get())
+    }
+
+    internal fun abandon(run: Run) {
+        terminate(run)
+        val retryIO = synchronized(lock) { !run.executing && !run.ioCleanupProven }
+        if (retryIO) {
+            try {
+                run.ioCleanupProven = run.ioExecutor?.awaitTermination(1, TimeUnit.SECONDS) == true
+            } catch (_: InterruptedException) {
+                Thread.currentThread().interrupt()
+                run.cleanupFailure.updateAndGet {
+                    listOfNotNull(it, "cleanup_unproven: pipe IO retry interrupted.").joinToString("; ")
+                }
+            }
+        }
+        synchronized(lock) {
+            if (current === run && !run.executing && run.cleanupProven && run.ioCleanupProven) {
+                run.cleanupFailure.set(null)
+                current = null
+            }
+        }
     }
 
     fun cancel(): Boolean {
@@ -178,15 +245,49 @@ class CommandPipeline : Closeable {
         terminate(run)
     }
 
-    private fun terminate(run: Run) {
+    private fun terminate(run: Run) = synchronized(run.terminationLock) {
         val processes = synchronized(lock) { run.processes.toList() }
+        val failures = ArrayList<String>()
         processes.forEach { process ->
-            runCatching { process.destroyForcibly() }
-            runCatching { process.outputStream.close() }
-            runCatching { process.inputStream.close() }
-            runCatching { process.errorStream.close() }
-            runCatching { process.waitFor(500, TimeUnit.MILLISECONDS) }
+            try {
+                val owned = run.terminateOwned
+                if (owned != null) owned(process)
+                else {
+                    if (process.isAlive) process.destroyForcibly()
+                    if (!process.waitFor(500, TimeUnit.MILLISECONDS)) throw IllegalStateException("Java child not reaped.")
+                }
+                if (process.isAlive) throw IllegalStateException("Owned child still alive.")
+            } catch (error: Exception) {
+                if (error is InterruptedException) Thread.currentThread().interrupt()
+                failures += error.message ?: error.javaClass.simpleName
+            }
+            // close() itself can block behind a reader. Bound it, track it, and never declare that thread reclaimed early.
+            if (!process.isAlive && run.streamsScheduled.add(process)) {
+                listOf(process.outputStream, process.inputStream, process.errorStream).forEach { stream ->
+                    val closer = Thread({
+                        try { stream.close() }
+                        catch (error: Exception) { run.streamFailure.compareAndSet(null, error.message ?: error.javaClass.simpleName) }
+                    }, "PocketRun-PipeClose").apply { isDaemon = true }
+                    run.streamClosers += closer
+                    closer.start()
+                }
+            }
         }
+        val deadline = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(500)
+        run.streamClosers.forEach { closer ->
+            try {
+                val remaining = deadline - System.nanoTime()
+                if (remaining > 0) TimeUnit.NANOSECONDS.timedJoin(closer, remaining)
+            } catch (_: InterruptedException) {
+                Thread.currentThread().interrupt()
+                failures += "Stream cleanup interrupted."
+            }
+        }
+        if (run.streamClosers.any { it.isAlive }) failures += "Stream close threads did not terminate."
+        run.streamFailure.get()?.let { failures += "Stream close failed: $it" }
+        run.cleanupProven = failures.isEmpty() && processes.none { it.isAlive }
+        if (failures.isNotEmpty()) run.cleanupFailure.set("cleanup_unproven: " + failures.joinToString("; "))
+        else if (run.ioCleanupProven) run.cleanupFailure.set(null)
     }
 
     private class LimitedOutput(private val limit: Int) {

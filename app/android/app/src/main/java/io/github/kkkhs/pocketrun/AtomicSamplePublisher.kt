@@ -22,5 +22,15 @@ internal object AtomicSamplePublisher {
         }
     }
 
+    fun publishDirectory(source: File, target: File): Boolean {
+        if (android) return renameNoReplace(source.absolutePath, target.absolutePath)
+        return try {
+            Files.move(source.toPath(), target.toPath())
+            true
+        } catch (_: FileAlreadyExistsException) {
+            false
+        }
+    }
+
     private external fun renameNoReplace(source: String, target: String): Boolean
 }

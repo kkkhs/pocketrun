@@ -1,0 +1,30 @@
+PocketRun Chapter 7 Linux candidate — license scope and distribution gate
+Audit date: 2026-11-19
+This is a source/compliance audit, NOT Chapter 7 device acceptance or permission to publish a binary.
+
+1. Android App versus separate programs
+PRoot is started as a separate ProcessBuilder child using command-line arguments, environment and byte pipes. It is not loaded by JNI/dlopen into the App. Packaging an executable under jniLibs with a .so filename does not turn that executable into an App-linked library.
+On these facts, the App and PRoot are normally separate works in an aggregate (GPLv2 section 2; GPLv3 section 5). This does not automatically put unrelated Kotlin, React Native/JS or App code under GPL. A process boundary alone is not an absolute legal exemption: later shared-address-space linking, copied GPL code or intimate exchange of program-internal structures would require a new assessment. Distribution conditions must not restrict the individual GPL-covered programs' rights.
+
+2. PRoot and talloc are a combined executable
+PRoot v5.1.107.102 source headers permit GPL-2.0-or-later. The candidate statically links talloc 2.5.0, whose talloc.c/talloc.h headers permit LGPL-3.0-or-later. GPLv2-only is not an appropriate license claim for this combined executable. Exercise PRoot's later-version permission and distribute the combined PRoot executable under GPLv3; preserve talloc's LGPLv3-or-later notices and additional permissions. The separate PRoot loader also originates in GPL-2.0-or-later source; preserve its notices and corresponding source.
+The full PRoot+talloc source archive, six-file adapter diff, generated replace.h and reproduction/build scripts are in matching_sources/proot-talloc/. The source archive SHA256 is eb5d7c20067c7c14e1ffb5047408a96270b95ae4682dd34bc80dc526252165ef. It was byte-reproduced by the candidate builder; this audit verifies its provenance/hashes and does not claim a new compilation or device run.
+Full source and instructions for recompiling/relinking PRoot with a modified talloc are the relevant LGPLv3 section 4(d)(0) material. Android platform libraries not copied into the distribution are a distinct system-library question. An App source URL is not a substitute for this combined executable's source.
+
+3. Do not call Alpine "MIT"
+The fixed official Alpine minirootfs is 3.22.8/aarch64, SHA256 36091efacd083c1cf5a8c837272530bff4fc72db1fbfdef559f52de0d890bca4. Its installed database has 16 packages with distinct licenses. The original 17 guest ELF files are mapped individually in fixed-payload-inventory.json. BusyBox/apk-tools/scanelf are GPLv2-only; musl is MIT with third-party permissive notices; musl-utils contains BSD-2-Clause getconf/getent and GPLv2-or-later iconv; OpenSSL is Apache-2.0; zlib is Zlib; CA data includes MPL-2.0. Package-level metadata is not a license for every unrelated file or static dependency.
+
+4. Full 19-ELF candidate is BLOCKED for public binary/rootfs distribution
+The original apk-tools/libapk2 2.14.13-r0 and ssl_client 1.37.0-r20 are recorded as GPL-2.0-only and directly link distributed Apache-2.0 OpenSSL 3.5.9 libraries. The exact apk-tools source LICENSE and SPDX headers have no later-version grant; a scan of the collected exact source found no OpenSSL linking exception. ssl_client.c has no per-file grant or copyright header; its package grant is GPLv2-only. Do not invent an exception, relabel them GPLv3, or treat separately bundled OpenSSL as absent. The GPLv2 system-library exception explicitly excludes a component that itself accompanies the executable. Source delivery alone does not resolve incompatible licensing. Obtain applicable rights evidence or genuinely omit these linked works from the shipped scope.
+
+5. Minimal variant can avoid that particular incompatibility
+A precisely scoped variant retaining only the original BusyBox ELF and musl ELF plus PRoot and loader no longer distributes apk/libapk/ssl_client/OpenSSL. BusyBox's dynamic dependencies contain only musl; its static utmps/skalibs dependencies must still be included in the source and copyright inventory. Their ISC license is compatible with GPLv2. See MINIMAL-DISTRIBUTION.txt for the proposed scope, exact fixed hashes and data cleanup. This is conditional until the real minimal asset, bindings, APK contents, notices and source delivery are checked.
+
+6. Public delivery is still NOT fulfilled by this local directory
+GPLv2 section 3 and GPLv3 section 6 require the relevant Corresponding Source delivery mechanism. A notice with an upstream homepage URL, a private archive, a future Git commit, or a model-written report is not completed public source delivery. For Internet distribution, prefer equivalent-access, version-matched source archives alongside the binary at the designated distribution place (GPLv2 section 3 final paragraph; GPLv3 section 6(d)), with exact checksums and build/install/relink scripts. If GPLv3 source is hosted elsewhere, explicit directions and availability must satisfy section 6(d); GPLv2-only recipients still need equivalent source access from the same designated place. No three-year written source offer has been created or backed here.
+This audit makes no claim that a GPLv3 User Product transaction occurred. Assess installation-information requirements if distribution is tied to transfer of a User Product. Keep instructions for modifying/rebuilding/re-signing/reinstalling the executable-bearing APK, where applicable, without disclosing a private signing key. A development test is not a substitute for those instructions or recipient access.
+
+Authoritative text copies: licenses/GPL-2.0.txt, GPL-3.0.txt, LGPL-3.0.txt and component notices.
+References: https://www.gnu.org/licenses/gpl-faq.html#MereAggregation
+https://www.gnu.org/licenses/gpl-faq.html#GPLIncompatibleLibs
+https://www.gnu.org/licenses/license-list.html#apache2
