@@ -26,7 +26,25 @@ export type TaskHostReadiness = {
   displayId: number | null;
 };
 
+export type SingleTaskState = {
+  taskId: string | null;
+  goal: string | null;
+  phase: string;
+  code: string | null;
+  stepsJson: string;
+  contextBytes: number;
+  maxContextBytes: number;
+  maxResultBytes: number;
+  maxSteps: number;
+  maxDurationMillis: number;
+};
+
 export interface Spec extends TurboModule {
+  beginTask(goal: string): Promise<SingleTaskState>;
+  submitTaskStep(taskId: string, tool: string, argumentsJson: string): Promise<SingleTaskState>;
+  getSingleTaskState(): Promise<SingleTaskState>;
+  finishTask(taskId: string): Promise<SingleTaskState>;
+  cancelTask(taskId: string): Promise<SingleTaskState>;
   prepareHost(): Promise<TaskHostReadiness>;
   getHostReadiness(): Promise<TaskHostReadiness>;
   submitTool(tool: string, argumentsJson: string): Promise<TaskHostState>;
