@@ -1,6 +1,9 @@
 package io.github.kkkhs.pocketrun
 
+import android.accessibilityservice.AccessibilityServiceInfo
+import android.app.ActivityOptions
 import android.content.Intent
+import android.graphics.Rect
 import android.hardware.display.DisplayManager
 import android.os.Build
 import android.os.Bundle
@@ -9,11 +12,15 @@ import android.provider.Settings
 import android.system.Os
 import android.system.OsConstants
 import android.util.Log
+import android.view.WindowInsets
+import android.view.WindowManager
 import android.view.accessibility.AccessibilityNodeInfo
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import androidx.test.uiautomator.By
 import androidx.test.uiautomator.Configurator
+import androidx.test.uiautomator.Condition
+import androidx.test.uiautomator.Direction
 import androidx.test.uiautomator.UiDevice
 import androidx.test.uiautomator.UiObject2
 import androidx.test.uiautomator.UiScrollable
@@ -30,7 +37,7 @@ import org.junit.Test
 import org.junit.runner.RunWith
 
 /**
- * Selected Pixel only. Fresh Settings credentials never leave device memory; no screenshots/dumps,
+ * Task-owned API 36 ARM64 emulator only. Fresh Settings credentials never leave device memory; no screenshots/dumps,
  * shell bootstrap, test AdbClient/key, native-module invocation, or teardown of other paired owners.
  * Every business mutation is an actual production UI button -> JS onPress -> AdbModule.
  * This creates a display but deliberately NEVER requests its UI tree while the observer is connected.
@@ -54,7 +61,10 @@ class ProductAdbBootstrapIntegrationTest {
         var failure: AssertionError? = null
         try {
             stage = "instrumentation-observer"
-            observer.acquire() // The holder exists even if getUiAutomation returns null or throws.
+            val automation = observer.acquire() // The holder exists even if getUiAutomation returns null or throws.
+            automation.serviceInfo = automation.serviceInfo.apply {
+                flags = flags or AccessibilityServiceInfo.FLAG_RETRIEVE_INTERACTIVE_WINDOWS
+            }
             device = UiDevice.getInstance(instrumentation)
             launchApp()
             assertTrue("Do not reuse/stop a pre-existing product backend", !appControl("停止 shell 后端").isEnabled)
@@ -62,26 +72,49 @@ class ProductAdbBootstrapIntegrationTest {
 
             stage = "settings-fresh-pairing"
             openAlreadyEnabledWirelessDebugging()
+            stage = "settings-connect-port"
             connectionPort = port(requiredSettingsText(ADDRESS))
-            val pair = device.wait(Until.findObject(By.pkg(SETTINGS_PACKAGE).text(PAIR_ENTRY)), 5000)
-            checkNotNull(pair) { "The authorized Settings pairing entry is missing." }.click()
+            stage = "settings-native-split-screen"
+            enterNativeSplitScreen()
+            stage = "settings-open-pair-dialog"
+            // Settings is the first/top split pane. Scroll it to focus its real window before lookup.
+            device.swipe(device.displayWidth / 2, device.displayHeight * 5 / 12,
+                device.displayWidth / 2, device.displayHeight / 8, 20)
+            repeat(12) {
+                val pair = device.findObject(By.pkg(SETTINGS_PACKAGE).text(PAIR_ENTRY))
+                val visible = pair?.visibleBounds?.let { it.width() > 0 && it.height() > 0 } == true
+                pair?.recycle()
+                if (!visible) checkNotNull(device.findObject(By.pkg(SETTINGS_PACKAGE)
+                    .res("com.android.settings:id/recycler_view"))).scroll(Direction.DOWN, 0.8f)
+            }
+            checkNotNull(device.findObject(By.pkg(SETTINGS_PACKAGE).text(PAIR_ENTRY))) {
+                "The authorized Settings pairing entry is missing."
+            }.click()
+            stage = "settings-pair-code"
             pairingCode = requiredSettingsText(PAIR_CODE).toCharArray()
+            stage = "settings-pair-port"
             pairingPort = port(requiredSettingsText(ADDRESS))
+            Log.i("PocketRun-ProductAdb", "phase=settings-pair-listener-before-app listening=${pairListenerPresent()}")
 
             // NEW_TASK only: do not press Back/dismiss the still-live Settings pairing dialog.
             stage = "production-pair"
             launchApp()
+            Log.i("PocketRun-ProductAdb", "phase=settings-pair-listener-after-app listening=${pairListenerPresent()}")
             wroteInputs = true
+            stage = "production-pair-port-input"
             setInputWithoutLogging("配对端口", pairingPort.toString())
+            stage = "production-pair-code-input"
             setInputWithoutLogging("六位配对码", String(checkNotNull(pairingCode)))
+            stage = "production-pair-click"
             clickApp("配对")
-            waitAppText(Pattern.compile("配对完成。现在使用无线调试主页的连接端口。"))
+            stage = "production-pair-result"
+            waitAppText(Pattern.compile("配对完成。现在使用无线调试主页的连接端口。"), "adb-operation-status")
             success("production-paired")
 
             stage = "production-connect"
             setInputWithoutLogging("连接端口", connectionPort.toString())
             clickApp("连接")
-            waitAppText(Pattern.compile("连接已验证，连接端 UID：2000"))
+            waitAppText(Pattern.compile("连接已验证，连接端 UID：2000"), "adb-operation-status")
             success("production-connected", uid = 2000)
 
             stage = "production-backend-start"
@@ -98,15 +131,32 @@ class ProductAdbBootstrapIntegrationTest {
             assertEquals("Binder ping must preserve the production backend PID", backendPid, checkNotNull(ping.group(1)).toInt())
             success("production-binder-pong", uid = 2000, pid = backendPid)
 
+            stage = "production-clear-pairing-inputs"
+            for (label in listOf("六位配对码", "配对端口", "连接端口")) setInputWithoutLogging(label, "")
+            wroteInputs = false
+            val manager = context.getSystemService(DisplayManager::class.java)
+            val previousIds = manager.displays.map { it.displayId }.toSet()
             stage = "production-display-create"
-            clickApp("创建演示虚拟屏")
-            val displayText = DISPLAY_CREATED.matcher(waitAppText(DISPLAY_CREATED))
-            assertTrue("Production UI must acknowledge its actual created display", displayText.matches())
-            val displayId = checkNotNull(displayText.group(1)).toInt()
-            assertTrue("Display ID must be non-default", displayId > 0)
-            assertTrue("DisplayManager must independently register that ID",
-                context.getSystemService(DisplayManager::class.java).getDisplay(displayId) != null)
-            success("production-display-created-no-tree-query", uid = 2000, pid = backendPid, displayId = displayId)
+            clickApp("创建演示虚拟屏") // Last UI action: launching the Demo can focus its own display.
+            val until = System.nanoTime() + java.util.concurrent.TimeUnit.SECONDS.toNanos(12)
+            var displayId: Int? = null
+            while (displayId == null && System.nanoTime() < until) {
+                val created = manager.displays.singleOrNull { it.name == VirtualDisplaySession.DISPLAY_NAME &&
+                    it.displayId > 0 && it.displayId !in previousIds }
+                if (created != null) {
+                    val tasks = device.executeShellCommand("dumpsys activity activities")
+                    check(tasks.length <= 524288)
+                    var current: Int? = null
+                    tasks.lineSequence().forEach { line ->
+                        Regex("^\\s*Display #(\\d+)(?:\\s|:|$)").find(line)?.let { current = it.groupValues[1].toInt() }
+                        if (current == created.displayId && line.contains("DisplayDemoActivity")) displayId = current
+                    }
+                }
+                if (displayId == null) Thread.sleep(50)
+            }
+            val actualId = checkNotNull(displayId) { "The real UI action did not create and route its Demo display." }
+            assertTrue(manager.getDisplay(actualId) != null)
+            success("production-display-created-no-tree-query", uid = 2000, pid = backendPid, displayId = actualId)
         } catch (error: Throwable) {
             observer.diagnoseFailure("product-test-$stage-catch", error) // Classes + fixed category only, no raw cause/message.
             failure = AssertionError("Product bootstrap blocked at $stage (${error.javaClass.simpleName}); credentials withheld.")
@@ -122,11 +172,11 @@ class ProductAdbBootstrapIntegrationTest {
             pairingCode = null
             pairingPort = 0
             connectionPort = 0
-            val observerExited = observer.closeAndConfirm()
+            val workerExited = observer.closeAndConfirmWorker()
             Log.i("PocketRun-ObserverDiag", "stage=product-test-cleanup sourceUID=${Process.myUid()} sourcePID=${Process.myPid()} " +
-                "fieldsCleared=$fieldsCleared callbackAndWorkerExited=$observerExited privateInstrumentationState=untouched")
-            if (!fieldsCleared || !observerExited) {
-                failure = AssertionError("Bootstrap cleanup blocked: fieldsCleared=$fieldsCleared observerExited=$observerExited.")
+                "fieldsCleared=$fieldsCleared acquisitionWorkerExited=$workerExited frameworkCleanup=runner-finish-pending")
+            if (!fieldsCleared || !workerExited) {
+                failure = AssertionError("Bootstrap cleanup blocked: fieldsCleared=$fieldsCleared workerExited=$workerExited.")
             }
             // Retain the actual product pairing/backend/display for the main-owned continuation.
             // No cancel/disconnect product button, unpair, releaseDisplay, stopBackend, or force-stop.
@@ -135,15 +185,15 @@ class ProductAdbBootstrapIntegrationTest {
     }
 
     /**
-     * Normal App UID cannot read the hardware serial on this Pixel. The main's same-run fresh
-     * provider/native serial + boot guard writes this App-private nonce-bound receipt via run-as.
+     * Normal App UID uses the host's owned-AVD attestation, not privileged hardware identifiers.
+     * The main's fresh AVD/serial + boot guard writes this App-private nonce-bound receipt via run-as.
      * This is an explicit host identity attestation, NOT a boolean bypass or privileged phone API.
      */
     private fun authorizeBeforeObserver() {
         var point = "explicit-arguments"
         try {
             check(arguments.getString("authorizedSerial") == AUTHORIZED_SERIAL)
-            check(arguments.getString("authorizedApi") == "35" && Build.VERSION.SDK_INT == 35)
+            check(arguments.getString("authorizedApi") == "36" && Build.VERSION.SDK_INT == 36)
             check(context.packageName == "io.github.kkkhs.pocketrun")
             check(context.applicationInfo.uid == Process.myUid())
             val nonce = checkNotNull(arguments.getString("deviceBindingNonce"))
@@ -229,21 +279,40 @@ class ProductAdbBootstrapIntegrationTest {
 
     private fun launchApp() {
         context.startActivity(Intent().setClassName(context.packageName, "${context.packageName}.MainActivity")
-            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK), ActivityOptions.makeBasic().setLaunchDisplayId(0).toBundle())
         assertTrue("The real production MainActivity must be visible", device.wait(Until.hasObject(
             By.displayId(0).pkg(context.packageName)), 8000))
     }
 
     /** Reuses the existing pairing fixture's Settings route/regex; never changes toggle/Always/network policy. */
     private fun openAlreadyEnabledWirelessDebugging() {
-        context.startActivity(Intent(Settings.ACTION_APPLICATION_DEVELOPMENT_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+        stage = "settings-open-developer-options"
+        context.startActivity(Intent(Settings.ACTION_APPLICATION_DEVELOPMENT_SETTINGS)
+            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK))
         assertTrue("Authorized Settings must open", device.wait(Until.hasObject(By.pkg(SETTINGS_PACKAGE)), 5000))
-        UiScrollable(UiSelector().scrollable(true)).setMaxSearchSwipes(12)
+        stage = "settings-scroll-wireless"
+        UiScrollable(UiSelector().packageName(SETTINGS_PACKAGE).scrollable(true)).setMaxSearchSwipes(12)
             .scrollIntoView(UiSelector().textMatches("无线调试|Wireless debugging"))
+        stage = "settings-click-wireless"
         checkNotNull(device.wait(Until.findObject(By.pkg(SETTINGS_PACKAGE).text(WIRELESS_ENTRY)), 5000))
             .click()
+        stage = "settings-wait-pair-entry"
         assertTrue("User-approved wireless debugging must already expose pairing; do not toggle/approve it here",
             device.wait(Until.hasObject(By.pkg(SETTINGS_PACKAGE).text(PAIR_ENTRY)), 5000))
+    }
+
+    private fun enterNativeSplitScreen() {
+        device.pressRecentApps()
+        checkNotNull(device.wait(Until.findObject(By.pkg("com.android.launcher3")
+            .desc(Pattern.compile("Settings.*"))), 5000)) { "The selected recent task must be Settings." }
+        val icons = device.findObjects(By.res("com.android.launcher3:id/icon"))
+        check(icons.size == 1) { "Native split entry must identify exactly the current task icon." }
+        icons.single().click()
+        checkNotNull(device.wait(Until.findObject(By.pkg("com.android.launcher3").text("Split screen")), 5000)).click()
+        checkNotNull(device.wait(Until.findObject(By.pkg("com.android.launcher3")
+            .res("com.android.launcher3:id/snapshot").desc("PocketRun")), 5000)).click()
+        assertTrue("Both App and Settings must remain visible for the live pairing dialog", device.wait(
+            Until.hasObject(By.pkg(context.packageName)), 5000) && device.hasObject(By.pkg(SETTINGS_PACKAGE)))
     }
 
     private fun requiredSettingsText(pattern: Pattern): String {
@@ -258,18 +327,57 @@ class ProductAdbBootstrapIntegrationTest {
         check(it in 1..65535) { "Current Settings port is invalid." }
     }
 
+    private fun pairListenerPresent(): Boolean {
+        val listeners = device.executeShellCommand("ss -ltn")
+        check(listeners.length <= 65536)
+        return listeners.lineSequence().any { line ->
+            line.trim().split(Regex("\\s+")).getOrNull(3)?.endsWith(":$pairingPort") == true
+        }
+    }
+
     private fun appControl(label: String): UiObject2 {
-        val selector = By.displayId(0).pkg(context.packageName).desc(label)
-        device.findObject(selector)?.let { return it }
-        UiScrollable(UiSelector().scrollable(true)).setMaxSearchSwipes(12)
-            .scrollIntoView(UiSelector().description(label))
-        return checkNotNull(device.wait(Until.findObject(selector), 5000)) { "Required production control is missing." }
+        val statusId = label.endsWith("-operation-status")
+        val selector = By.displayId(0).pkg(context.packageName).apply {
+            if (statusId) res(label) else desc(label)
+        }
+        repeat(3) { attempt ->
+            val control = device.findObject(selector)
+            val bounds = control?.visibleBounds
+            val window = Rect().also { control?.accessibilityNodeInfo?.window?.getBoundsInScreen(it) }
+            val bars = context.getSystemService(WindowManager::class.java).currentWindowMetrics.windowInsets
+                .getInsets(WindowInsets.Type.systemBars())
+            if (bounds != null && bounds.width() > 0 && bounds.height() > 0 &&
+                bounds.centerY() in window.top + bars.top + 20 until window.bottom - bars.bottom - 20) return checkNotNull(control)
+            control?.recycle()
+            if (attempt == 2) error("Required production control is not safely visible.")
+            if (attempt == 0 || bounds == null) {
+                val scroller = checkNotNull(device.findObject(By.displayId(0).pkg(context.packageName).scrollable(true)))
+                val visible = Condition<UiObject2, UiObject2?> { scope ->
+                    val found = scope.findObject(selector)
+                    if (found?.visibleBounds?.let { it.width() > 0 && it.height() > 0 } == true) found
+                    else { found?.recycle(); null }
+                }
+                try {
+                    (scroller.scrollUntil(Direction.UP, visible)
+                        ?: scroller.scrollUntil(Direction.DOWN, visible))?.recycle()
+                } finally { scroller.recycle() }
+            } else {
+                check(window.height() > 200) { "The actual App window is too small for a safe control." }
+                val upper = window.top + window.height() / 3
+                val lower = window.top + window.height() * 2 / 3
+                val start = if (bounds.centerY() < window.top + bars.top + 20) upper else lower
+                val end = if (bounds.centerY() < window.top + bars.top + 20) lower else upper
+                device.swipe(window.centerX(), start, window.centerX(), end, 20)
+            }
+        }
+        error("Required production control is not safely visible.")
     }
 
     private fun clickApp(label: String) {
         val control = appControl(label)
         try {
             assertTrue("Production control must be enabled: $label", control.isEnabled)
+            Log.i("PocketRun-ProductAdb", "phase=ui-control-touch label=$label bounds=${control.visibleBounds}")
             control.click() // Real UI touch -> onPress; never call the native module as a test shortcut.
         } finally { control.recycle() }
     }
@@ -289,9 +397,36 @@ class ProductAdbBootstrapIntegrationTest {
         }
     }
 
-    private fun waitAppText(pattern: Pattern): String {
+    private fun waitAppText(pattern: Pattern, controlLabel: String? = null): String {
         // Only sanitized, fixed status patterns are inspected; no raw hierarchy/error panel output.
         val selector = By.displayId(0).pkg(context.packageName).text(pattern)
+        if (controlLabel != null) {
+            appControl(controlLabel).recycle()
+            val result = device.wait(Until.findObject(selector.res(controlLabel)), 16000)
+            if (result == null) {
+                val status = appControl(controlLabel)
+                val category = try {
+                    when (status.text) {
+                        "请输入系统显示的六位配对码。" -> "INVALID_CODE_INPUT"
+                        "请输入 1～65535 的整数端口。" -> "INVALID_PORT_INPUT"
+                        "操作超时，连接已关闭。" -> "TRANSPORT_TIMEOUT"
+                        "配对失败，请检查配对码和配对端口。" -> "PAIR_REJECTED"
+                        "尚未连接。" -> "NOT_STARTED"
+                        "正在操作，最多等待 15 秒…" -> "STILL_RUNNING"
+                        "ADB 操作失败。" -> "NATIVE_ERROR"
+                        null -> "NO_STATUS_TEXT"
+                        else -> if (status.text?.contains("ECONNREFUSED") == true) "CONNECT_REFUSED"
+                            else if (status.text?.contains("Connection closed") == true) "CONNECTION_CLOSED"
+                            else if (status.text?.let { pattern.matcher(it).matches() } == true) "EXPECTED_TEXT_SELECTOR_MISS"
+                            else "UNEXPECTED_STATUS"
+                    }
+                } finally { status.recycle() }
+                Log.i("PocketRun-ProductAdb", "phase=adb-ui-result category=$category")
+                throw IllegalStateException("The actual ADB UI did not report success.")
+            }
+            try { return checkNotNull(result.text) }
+            finally { result.recycle() }
+        }
         var visible = device.findObject(selector)
         // Status is below the controls in the real ScrollView. Search twice to account for a
         // promise resolving after the first pass; never accept a native-client substitute.
@@ -329,7 +464,7 @@ class ProductAdbBootstrapIntegrationTest {
         private val CONSUMED_BINDINGS = mutableSetOf<String>()
         private val BINDING_KEYS = setOf("schema_v", "serial", "api", "abi", "app_uid", "boot_count",
             "source_apk_sha256", "expires_at_epoch", "nonce")
-        private const val AUTHORIZED_SERIAL = "58131JEBF07460"
+        private const val AUTHORIZED_SERIAL = "emulator-5556"
         private const val SETTINGS_PACKAGE = "com.android.settings"
         private val WIRELESS_ENTRY = Pattern.compile("无线调试|Wireless debugging")
         private val PAIR_ENTRY = Pattern.compile("使用配对码配对设备|Pair device with pairing code")

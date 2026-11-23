@@ -77,7 +77,7 @@ internal class OwnedInstrumentationObserver(
                     // Cached observers are not ours. Only publish a handle after fresh identity proof.
                     if (newlyOwned) automation.set(local)
                     else bindingFailure = OwnedCallbackBindUnknown()
-                    if (closed.get()) disconnectAndDrain(if (newlyOwned) local else null)
+                    if (closed.get()) diagnostic("late-observer-framework-owned", extra = "frameworkCleanup=runner-finish-pending")
                 } catch (error: Throwable) {
                     bindingFailure = OwnedCallbackBindUnknown(error)
                     diagnoseFailure("callback-bind-or-late-cleanup-threw", error)
@@ -101,12 +101,11 @@ internal class OwnedInstrumentationObserver(
         }
     }
 
-    /** No global service lookup, hidden fields, name-only cleanup, or takeover of another owner. */
-    fun closeAndConfirm(): Boolean {
+    /** Stop only our acquisition worker; Instrumentation.finish owns observer/callback teardown. */
+    fun closeAndConfirmWorker(): Boolean {
         closed.set(true)
         diagnostic("cleanup-start", extra = "instanceHandle=${automation.get() != null}")
         worker?.interrupt()
-        disconnectAndDrain(automation.getAndSet(null))
         var interrupted = Thread.interrupted()
         try {
             try { worker?.join(700) }
@@ -114,30 +113,11 @@ internal class OwnedInstrumentationObserver(
         } finally {
             if (interrupted) Thread.currentThread().interrupt()
         }
-        val drained = disconnectAndDrain(automation.getAndSet(null))
+        automation.set(null)
         val workerExited = worker?.isAlive != true
-        diagnostic("cleanup-result", extra = "callbackDrain=$drained workerExited=$workerExited " +
+        diagnostic("cleanup-result", extra = "workerExited=$workerExited frameworkCleanup=runner-finish-pending " +
             "privateInstrumentationState=untouched")
-        return workerExited && drained
-    }
-
-    private fun disconnectAndDrain(instance: UiAutomation?): Boolean {
-        if (instance != null) {
-            try {
-                instance.javaClass.getMethod("disconnect").invoke(instance)
-                diagnostic("owned-instance-disconnect-returned")
-            } catch (error: Throwable) {
-                diagnoseFailure("owned-instance-disconnect-threw", error)
-            }
-        }
-        val drained = try {
-            callbacks.stopAndJoin(700) { thread -> (thread as HandlerThread).looper?.quit() }
-        } catch (error: Throwable) {
-            diagnoseFailure("owned-callback-cleanup-threw", error)
-            false
-        }
-        diagnostic("owned-callback-cleanup-result", extra = "instanceHandle=${instance != null} callbackDrain=$drained")
-        return drained // Callback exit does NOT assert that hidden Instrumentation state was reset.
+        return workerExited
     }
 
     fun diagnoseFailure(stage: String, error: Throwable) = diagnostic(stage, error)
