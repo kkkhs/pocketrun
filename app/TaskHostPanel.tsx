@@ -1,0 +1,309 @@
+import { useEffect, useRef, useState } from 'react';
+import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
+import NativeTaskHost, {
+  type TaskHostReadiness,
+  type TaskHostState,
+} from './specs/NativePocketRunTaskHost';
+
+type Colors = { text: string; muted: string };
+type ToolChoice = 'device' | 'linux' | 'observe' | 'demoText';
+type PanelActionResult = TaskHostState | TaskHostReadiness |
+  { state: TaskHostState; readiness: TaskHostReadiness };
+const FIXED_DEMO_TEXT = 'PocketRun_TaskHost_9';
+type RejectionSample = { label: string; tool: string; argumentsJson: string; expectedCode: string };
+type RejectionResult = { label: string; code: string };
+const FIXED_REJECTION_SAMPLES: ReadonlyArray<RejectionSample> = [
+  { label: '坏 JSON', tool: 'android.device_info', argumentsJson: '{', expectedCode: 'E_TASK_HOST' },
+  { label: '重复 JSON 键', tool: 'android.device_info', argumentsJson: '{"x":1,"x":2}', expectedCode: 'E_TASK_HOST' },
+  { label: '未知工具', tool: 'linux.shell', argumentsJson: '{}', expectedCode: 'E_TASK_UNKNOWN_TOOL' },
+  { label: '额外 path', tool: 'linux.count_demo_csv', argumentsJson: '{"path":"fixed-rejected"}', expectedCode: 'E_TASK_UNKNOWN_ARGUMENT' },
+  { label: '额外 argv', tool: 'linux.count_demo_csv', argumentsJson: '{"argv":"fixed-rejected"}', expectedCode: 'E_TASK_UNKNOWN_ARGUMENT' },
+  { label: '额外 env', tool: 'linux.count_demo_csv', argumentsJson: '{"env":"fixed-rejected"}', expectedCode: 'E_TASK_UNKNOWN_ARGUMENT' },
+  { label: 'displayId 0', tool: 'android.virtual_display_observe_or_demo_input', argumentsJson: '{"action":"observe","expectedDisplayId":0,"expectedDisplayEpoch":1}', expectedCode: 'E_TASK_INVALID_DISPLAY_ID' },
+  { label: '越界坐标', tool: 'android.virtual_display_observe_or_demo_input', argumentsJson: '{"action":"demo_tap","expectedDisplayId":1,"expectedDisplayEpoch":1,"x":720,"y":0}', expectedCode: 'E_TASK_INVALID_TAP' },
+  { label: '非法文本', tool: 'android.virtual_display_observe_or_demo_input', argumentsJson: '{"action":"demo_text","expectedDisplayId":1,"expectedDisplayEpoch":1,"text":"bad\\ntext"}', expectedCode: 'E_TASK_INVALID_TEXT' },
+];
+
+function rejectedCode(failure: unknown): string {
+  if (typeof failure === 'object' && failure !== null && 'code' in failure &&
+      typeof failure.code === 'string' && /^[A-Z0-9_]{1,64}$/.test(failure.code)) return failure.code;
+  return 'NO_CODE';
+}
+
+function decrementPositiveDecimal(value: string): string | null {
+  if (!/^[1-9][0-9]*$/.test(value) || value === '1') return null;
+  const digits = value.split('');
+  let index = digits.length - 1;
+  while (digits[index] === '0') { digits[index] = '9'; index--; }
+  digits[index] = String(Number(digits[index]) - 1);
+  return digits.join('').replace(/^0+/, '') || '0';
+}
+
+function taskHostModule() {
+  if (!NativeTaskHost) throw new Error('TaskHost 原生模块未注册，请重新构建 Android 应用。');
+  return NativeTaskHost;
+}
+
+function displayArguments(readiness: TaskHostReadiness, action: 'observe' | 'demo_text'): string {
+  if (!readiness.displayReady || readiness.displayId === null || readiness.displayId <= 0 ||
+      readiness.displayEpoch === null || !/^[1-9][0-9]*$/.test(readiness.displayEpoch)) {
+    throw new Error('App 自有 typed-Binder 虚拟屏尚未就绪；不会回退默认屏或主机 ADB。');
+  }
+  const suffix = action === 'demo_text' ? `,"text":${JSON.stringify(FIXED_DEMO_TEXT)}` : '';
+  return `{"action":"${action}","expectedDisplayId":${readiness.displayId},` +
+    `"expectedDisplayEpoch":${readiness.displayEpoch}${suffix}}`;
+}
+
+export default function TaskHostPanel({ colors }: { colors: Colors }) {
+  const [readiness, setReadiness] = useState<TaskHostReadiness | null>(null);
+  const [state, setState] = useState<TaskHostState | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [diagnosticsExpanded, setDiagnosticsExpanded] = useState(false);
+  const [diagnosticsRunning, setDiagnosticsRunning] = useState(false);
+  const [rejectionResults, setRejectionResults] = useState<ReadonlyArray<RejectionResult>>([]);
+  const [diagnosticsSkipped, setDiagnosticsSkipped] = useState<string | null>(null);
+  const [unexpectedResolves, setUnexpectedResolves] = useState(0);
+  const live = useRef(true);
+  const inFlight = useRef(false);
+  const actionBusy = useRef(false);
+  const generation = useRef(0);
+
+  useEffect(() => {
+    live.current = true;
+    const initial = generation.current;
+    if (NativeTaskHost) {
+      Promise.all([NativeTaskHost.getHostReadiness(), NativeTaskHost.getTaskState()])
+        .then(([nextReadiness, nextState]) => {
+          if (live.current && initial === generation.current) {
+            setReadiness(nextReadiness); setState(nextState);
+          }
+        }).catch(failure => {
+          if (live.current && initial === generation.current) {
+            setError(failure instanceof Error ? failure.message : 'TaskHost 状态读取失败。');
+          }
+        });
+    }
+    const timer = setInterval(async () => {
+      if (!live.current || inFlight.current || !NativeTaskHost) return;
+      inFlight.current = true;
+      const request = generation.current;
+      try {
+        const [nextState, nextReadiness] = await Promise.all([
+          NativeTaskHost.getTaskState(), NativeTaskHost.getHostReadiness(),
+        ]);
+        if (live.current && request === generation.current) {
+          setState(nextState);
+          setReadiness(nextReadiness);
+        }
+      } catch { /* Explicit actions surface errors; polling never manufactures state. */ }
+      finally { inFlight.current = false; }
+    }, 250);
+    return () => { live.current = false; clearInterval(timer); };
+  }, []);
+
+  async function perform(action: () => Promise<PanelActionResult>) {
+    if (actionBusy.current) return;
+    actionBusy.current = true;
+    const request = ++generation.current;
+    setBusy(true);
+    setError(null);
+    try {
+      if (!NativeTaskHost) throw new Error('TaskHost 原生模块未注册，请重新构建 Android 应用。');
+      const value = await action();
+      if (!live.current || request !== generation.current) return;
+      if ('phase' in value) setState(value);
+      else if ('state' in value) { setState(value.state); setReadiness(value.readiness); }
+      else setReadiness(value);
+    } catch (failure) {
+      if (live.current && request === generation.current) {
+        setError(failure instanceof Error ? failure.message : 'TaskHost 操作失败。');
+      }
+    } finally {
+      actionBusy.current = false;
+      if (live.current && request === generation.current) setBusy(false);
+    }
+  }
+
+  function submit(choice: ToolChoice) {
+    const native = NativeTaskHost;
+    if (!native) return;
+    perform(async () => {
+      const fresh = await native.getHostReadiness();
+      const call = (() => {
+        switch (choice) {
+          case 'device': return ['android.device_info', '{}'] as const;
+          case 'linux':
+            if (!fresh.linuxReady) throw new Error('固定 Linux 工具尚未准备。');
+            return ['linux.count_demo_csv', '{}'] as const;
+          case 'observe': return ['android.virtual_display_observe_or_demo_input',
+            displayArguments(fresh, 'observe')] as const;
+          case 'demoText': return ['android.virtual_display_observe_or_demo_input',
+            displayArguments(fresh, 'demo_text')] as const;
+        }
+      })();
+      const next = await native.submitTool(call[0], call[1]);
+      return { state: next, readiness: fresh };
+    });
+  }
+
+  async function runFixedRejectionSamples() {
+    const taskActive = state?.phase === 'pending_approval' || state?.phase === 'executing';
+    if (actionBusy.current || taskActive || state?.cleanupState === 'unproven' || busy) return;
+    actionBusy.current = true;
+    setDiagnosticsRunning(true);
+    setRejectionResults([]);
+    setDiagnosticsSkipped(null);
+    setUnexpectedResolves(0);
+    setError(null);
+    const results: RejectionResult[] = [];
+    let unexpected = 0;
+    try {
+      const native = taskHostModule();
+      const fresh = await native.getHostReadiness();
+      const samples = [...FIXED_REJECTION_SAMPLES];
+      const staleEpoch = fresh.displayEpoch ? decrementPositiveDecimal(fresh.displayEpoch) : null;
+      if (fresh.displayReady && fresh.displayId !== null && fresh.displayId > 0 && staleEpoch !== null) {
+        samples.push({
+          label: '旧 display epoch',
+          tool: 'android.virtual_display_observe_or_demo_input',
+          argumentsJson: `{"action":"observe","expectedDisplayId":${fresh.displayId},"expectedDisplayEpoch":${staleEpoch}}`,
+          expectedCode: 'E_TASK_DISPLAY_TARGET_MISMATCH',
+        });
+      } else {
+        setDiagnosticsSkipped('旧 display epoch：当前没有可用且 epoch>1 的 App 虚拟屏，未执行该样例。');
+      }
+      for (const sample of samples) {
+        try {
+          await native.submitTool(sample.tool, sample.argumentsJson);
+          results.push({ label: sample.label, code: 'UNEXPECTED_RESOLVE' });
+          unexpected++;
+          break;
+        } catch (failure) {
+          const code = rejectedCode(failure);
+          results.push({ label: sample.label, code });
+          if (code !== sample.expectedCode) { unexpected++; break; }
+        }
+      }
+      if (live.current) {
+        setReadiness(fresh);
+        setRejectionResults(results);
+        setUnexpectedResolves(unexpected);
+      }
+    } catch (failure) {
+      if (live.current) setError(failure instanceof Error ? failure.message : '固定拒绝样例运行失败。');
+    } finally {
+      actionBusy.current = false;
+      if (live.current) setDiagnosticsRunning(false);
+    }
+  }
+
+  function button(label: string, disabled: boolean, action: () => void) {
+    return <Pressable accessibilityRole="button" accessibilityLabel={label}
+      accessibilityState={{ disabled }} disabled={disabled} onPress={action}
+      style={[styles.button, disabled && styles.disabled]}>
+      <Text style={styles.buttonText}>{label}</Text>
+    </Pressable>;
+  }
+
+  const active = state?.phase === 'pending_approval' || state?.phase === 'executing';
+  const pending = state?.phase === 'pending_approval' && state.requestNonce !== null;
+  const cleanupUnproven = state?.cleanupState === 'unproven';
+  let result: Record<string, unknown> = {};
+  try { result = state?.resultJson ? JSON.parse(state.resultJson) : {}; } catch { result = {}; }
+  const screenshotUri = typeof result.screenshotUri === 'string' && result.screenshotUri.startsWith('file://')
+    ? result.screenshotUri : null;
+
+  return <View style={styles.panel}>
+    <Text style={[styles.heading, { color: colors.text }]}>第 9 章 · 确定性工具宿主与手机审批</Text>
+    <Text style={{ color: colors.muted }}>宿主只有三个固定工具；不运行模型循环，不接受任意命令、argv、环境、绑定路径或可执行文件。</Text>
+    {button('准备固定 Linux 工具', busy || active || readiness?.linuxReady === true,
+      () => perform(() => taskHostModule().prepareHost()))}
+    {button('刷新工具目标', busy || active,
+      () => perform(() => taskHostModule().getHostReadiness()))}
+    <Text style={{ color: colors.text }}>App UID：{readiness?.packageUid ?? '(未读取)'}</Text>
+    <Text style={{ color: colors.text }}>Linux：{readiness?.linuxReady
+      ? `已校验 · generation ${readiness.rootfsGeneration}` : '未准备'}</Text>
+    <Text style={{ color: colors.text }}>typed Binder 虚拟屏：{readiness?.displayReady
+      ? `display ${readiness.displayId} · epoch ${readiness.displayEpoch}`
+      : '不可用（明确拒绝，不回退默认屏）'}</Text>
+
+    {__DEV__ && <View style={styles.diagnostics}>
+      {button(diagnosticsExpanded ? '收起工具参数拒绝示例' : '展开工具参数拒绝示例', false,
+        () => setDiagnosticsExpanded(value => !value))}
+      {diagnosticsExpanded && <>
+        <Text style={{ color: colors.muted }}>仅发送内置、非敏感的固定坏样本，经 JS → Codegen → Kotlin 验证拒绝边界；不提供自由 JSON、命令或自动审批。</Text>
+        {button('运行固定工具拒绝示例', busy || active || cleanupUnproven || diagnosticsRunning,
+          () => { runFixedRejectionSamples().catch(failure =>
+            setError(failure instanceof Error ? failure.message : '固定拒绝样例运行失败。')); })}
+        {diagnosticsRunning && <Text style={{ color: colors.muted }}>正在逐项验证；首次异常 resolve 或错误 code 将立即停止。</Text>}
+        {rejectionResults.map(item => <Text key={item.label} style={{ color: colors.text }}>{item.label}：{item.code}</Text>)}
+        {diagnosticsSkipped && <Text style={{ color: colors.muted }}>{diagnosticsSkipped}</Text>}
+        <Text style={{ color: colors.text }}>unexpected count：{unexpectedResolves}</Text>
+      </>}
+    </View>}
+
+    {button('运行 android.device_info', busy || active || cleanupUnproven, () => submit('device'))}
+    {button('申请读取固定演示 CSV 行数', busy || active || cleanupUnproven || !readiness?.linuxReady,
+      () => submit('linux'))}
+    {button('观察 App 演示虚拟屏', busy || active || cleanupUnproven || !readiness?.displayReady,
+      () => submit('observe'))}
+    {button('申请输入固定演示文本', busy || active || cleanupUnproven || !readiness?.displayReady,
+      () => submit('demoText'))}
+
+    {pending && <View style={styles.approval}>
+      <Text accessibilityLiveRegion="polite" style={{ color: colors.text }}>待审批工具：{state?.tool}</Text>
+      <Text selectable style={{ color: colors.text }}>目标：{state?.target}</Text>
+      <Text selectable style={{ color: colors.muted }}>request hash：{state?.requestHash}</Text>
+      <Text style={{ color: colors.muted }}>审批 actor：{state?.approvalActor}（固定手机 App UI）；nonce 仅当前请求一次有效。</Text>
+      <View style={styles.row}>
+        {button('同意当前请求', busy, () => state?.requestNonce &&
+          perform(() => taskHostModule().decideFromAppUi(state.requestNonce!, 'approve')))}
+        {button('拒绝当前请求', busy, () => state?.requestNonce &&
+          perform(() => taskHostModule().decideFromAppUi(state.requestNonce!, 'reject')))}
+      </View>
+    </View>}
+
+    {button('取消当前请求', busy || !active || state?.requestNonce === null,
+      () => state?.requestNonce &&
+        perform(() => taskHostModule().cancelFromAppUi(state.requestNonce!)))}
+    {button('刷新过期状态', busy, () => perform(() => taskHostModule().refreshTask()))}
+    {cleanupUnproven && button('重试资源清理', busy,
+      () => perform(() => taskHostModule().retryCleanup()))}
+
+    {state && <View accessibilityLiveRegion="polite" style={styles.result}>
+      <Text style={{ color: colors.text }}>任务状态：{state.phase} · 审批：{state.approvalState ?? '(none)'}</Text>
+      <Text style={{ color: colors.text }}>数据源状态：{String(result.sourceStatus ?? state.code ?? '(none)')}</Text>
+      <Text style={{ color: colors.text }}>资源清理：{String(result.cleanupStatus ?? state.cleanupState)}</Text>
+      <Text selectable style={{ color: colors.muted }}>绑定：{state.backendEpoch ?? '(none)'}</Text>
+      {'lineCount' in result && <Text style={{ color: colors.text }}>固定 /workspace/items.csv 行数：{String(result.lineCount)}</Text>}
+      {'guestUid' in result && <Text style={{ color: colors.text }}>guest UID：{String(result.guestUid || '(未取得)')} · cwd：{String(result.cwd || '(未取得)')}</Text>}
+      {'stageExitCodes' in result && <Text style={{ color: colors.text }}>阶段退出码：{String(result.stageExitCodes || '(none)')}</Text>}
+      {'exitCodes' in result && <Text style={{ color: colors.text }}>PRoot tracer / host 退出码：{String(result.exitCodes || '(none)')}</Text>}
+      {'stdout' in result && <Text selectable style={{ color: colors.text }}>stdout：{String(result.stdout || '(empty)')}</Text>}
+      {'stderr' in result && <Text selectable style={{ color: colors.text }}>stderr：{String(result.stderr || '(empty)')}</Text>}
+      {'androidVersion' in result && <Text style={{ color: colors.text }}>Android：{String(result.androidVersion)} · API {String(result.apiLevel)}</Text>}
+      {screenshotUri && <Image accessibilityLabel="TaskHost 虚拟屏实际截图" source={{ uri: screenshotUri }} style={styles.screenshot} resizeMode="contain" />}
+      {'uiTreeStatus' in result && <Text style={{ color: colors.text }}>UI 树：{String(result.uiTreeStatus)} · 节点 {String(result.nodeCount)} · truncated {String(result.treeTruncated)}</Text>}
+      {'uiTreeText' in result && <Text selectable style={{ color: colors.text }}>UI 树实际文字：{String(result.uiTreeText || '(empty)')}</Text>}
+      {result.accepted === 'true' && <Text style={{ color: colors.muted }}>Binder 仅确认输入事件被接收；需再次观察实际截图与 UI 树，不能据此声称已经填对。</Text>}
+      {state.message && <Text accessibilityRole="alert" style={{ color: colors.text }}>{state.message}</Text>}
+    </View>}
+    {error && <Text accessibilityRole="alert" style={{ color: colors.text }}>{error}</Text>}
+    <Text style={{ color: colors.muted }}>CSV 是本 App 私有演示数据；读取仍通过手机界面逐次审批。外部账号、用户数据、电脑代批和自动确认均不在本章边界内。</Text>
+  </View>;
+}
+
+const styles = StyleSheet.create({
+  panel: { gap: 12 },
+  heading: { fontSize: 21, fontWeight: '700' },
+  row: { flexDirection: 'row', gap: 8, flexWrap: 'wrap' },
+  button: { minHeight: 48, padding: 12, backgroundColor: '#1d4ed8', borderRadius: 8,
+    alignItems: 'center', justifyContent: 'center', flexGrow: 1 },
+  buttonText: { color: '#fff', fontSize: 16, fontWeight: '600' },
+  disabled: { opacity: 0.45 },
+  approval: { gap: 8, borderWidth: 1, borderColor: '#64748b', borderRadius: 8, padding: 10 },
+  diagnostics: { gap: 8, borderWidth: 1, borderColor: '#64748b', borderRadius: 8, padding: 10 },
+  result: { gap: 6 },
+  screenshot: { width: '100%', height: 360 },
+});

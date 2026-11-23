@@ -22,6 +22,9 @@ class AdbModule(private val context: ReactApplicationContext) : NativePocketRunA
     private val worker = Executors.newSingleThreadExecutor()
     private val timer = Executors.newSingleThreadScheduledExecutor()
     private val backend = PrivilegedBackendController(context)
+    private val taskHostDisplayRegistration = io.github.kkkhs.pocketrun.taskhost.TaskHostDisplayPortRegistry.install(
+        BinderTaskHostDisplayPort(backend),
+    )
     private var active: Operation? = null
     private var backendBusy = false
     private var backendGeneration = 0L
@@ -372,6 +375,7 @@ class AdbModule(private val context: ReactApplicationContext) : NativePocketRunA
     }
 
     override fun invalidate() {
+        taskHostDisplayRegistration.close()
         synchronized(lock) {
             disposed = true
             backendGeneration++

@@ -252,7 +252,7 @@ export default function DisplayPanel({ colors }: { colors: Colors }) {
       {control('读取 UI 树', 'tree', unavailable)}
       {control('点击演示输入框', 'tap', unavailable || !targetAvailable)}
       {control('输入固定 ASCII 文本', 'text', unavailable || !targetAvailable || tappedId !== info?.displayId)}
-      <Text accessibilityLiveRegion="polite" style={[styles.text, { color: colors.text }]}>{message}</Text>
+      <Text testID="display-operation-status" accessibilityLiveRegion="polite" style={[styles.text, { color: colors.text }]}>{message}</Text>
       {screenshot && (
         <>
           <Image accessibilityLabel="虚拟屏截图" source={{ uri: screenshot.uri }} style={styles.screenshot} resizeMode="contain" />
