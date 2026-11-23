@@ -78,7 +78,7 @@ export default function AgentLoopPanel({ colors }: { colors: Colors }) {
   const active = state?.phase === 'model' || state?.phase === 'tool';
   return <View style={styles.panel}>
     <Text style={[styles.heading, { color: colors.text }]}>第 11 章 · 真实模型与受控工具循环</Text>
-    <Text style={{ color: colors.muted }}>只使用自己有权调用的 endpoint 与 API 凭据。配置由原生 Keystore 加密；本教程没有预置密钥，也未取得真实模型通过记录。</Text>
+    <Text style={{ color: colors.muted }}>只使用自己有权调用的 endpoint 与 API 凭据。配置由原生 Keystore 加密，保存后不会回显密钥；工具实际结果和手机审批显示在第 10 章账本。</Text>
     <TextInput accessibilityLabel="模型 HTTPS endpoint" value={endpoint} onChangeText={value => { configurationEdited.current = true; setEndpoint(value); }}
       autoCapitalize="none" autoCorrect={false} style={[styles.input, { color: colors.text }]} />
     <TextInput accessibilityLabel="模型名称" value={model} onChangeText={value => { configurationEdited.current = true; setModel(value); }}

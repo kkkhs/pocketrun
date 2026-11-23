@@ -9,7 +9,19 @@ description: 原生 Kotlin 使用官方 Anthropic Java SDK，把真实模型回�
 
 读者应看到模型回合数、同一个任务编号，以及第 10 章面板里的两条实际工具结果。CSV 仍停在手机审批前；模型回复里的“同意”没有任何授权效果。
 
-> **源码已提交 [Draft PR #18](https://github.com/kkkhs/pocketrun/pull/18)，真实模型与手机验收待完成。** 目前尚未配置运行所需凭据，未执行真实模型请求；合成协议和控制器测试不能替代它。网站与源码 Release 在验收后发布。
+> **本机模拟器已完成真实模型与工具闭环。** 2026-11-20，在任务专用 API 36 / ARM64 模拟器上，官方 Java SDK 经本机 Ferry 网关调用 Seed 2.1 Turbo：模型三轮调用，设备信息与 CSV 两条真实步骤成功，手机批准 CSV，资源清理后模型给出一致总结。同一 App 内重新开始、拒绝和取消也已实际操作。[Draft PR #18](https://github.com/kkkhs/pocketrun/pull/18) 提供模型循环基线；最终集成 CI、网站与源码 Release 随整体验收发布。
+
+## 先看一次真实结果
+
+模型最后总结 Android 16、API 36、ARM64，以及演示 CSV 的 **3 行**。第 10 章账本保留了原始来源：App UID 10150、工作目录 `/workspace`、五个读取阶段退出码均为 0、`sourceStatus=completed`、`cleanupStatus=done`。两条步骤都清理确认，才进入 `completed`。
+
+![实际模型三轮完成后的回合数和总结](assets/chapter-11-model-result.png)
+
+同一次运行的工具账本里，设备步骤是 `not_required`，CSV 是 `approved_by_app_ui`；**模型回合数与工具步骤数不是同一个计数**。这次模型先请求设备，再请求 CSV，最后总结，共三轮、两条工具步骤。
+
+![同一任务中的设备信息、手机批准的 CSV 和真实来源](assets/chapter-11-tool-ledger.png)
+
+本次使用的是 Ferry 的 `claude-doubao-seed-2-1-turbo`，不是默认配置中的 Claude Opus。它验证了 App 内官方 SDK、Messages 协议、手机审批和真实工具的整条链路；直接 Anthropic 服务仍需读者自己的合法调用配置。
 
 ## 先配置，再看它请求工具
 
@@ -82,7 +94,7 @@ results += ContentBlockParam.ofToolResult(
 
 这里不把 React Native 当 Node。当前官方 TypeScript SDK 不支持 React Native，本章不增加 Hermes polyfill 栈；模型在 Kotlin 调用官方 `com.anthropic:anthropic-java:3.11.0`。
 
-这个版本已从 Maven Central 的实际元数据核实，并通过本项目 Kotlin 编译与 Android D8 构建。**编译兼容不是 Android 真机运行成功**：SDK/Jackson 的 Android runtime smoke 与 Keystore 检查只有可运行源码和 AndroidTest 构建，实际执行仍待设备窗口。
+这个版本已从 Maven Central 的实际元数据核实，并通过本项目 Kotlin 编译与 Android D8 构建。SDK/Jackson 的 Android runtime smoke、Keystore 保存/重载/损坏检查，以及实际生产 transport 的网络请求，都已在任务专用 API 36 / ARM64 模拟器执行。网络检查返回真实 `tool_use`，但不执行工具；章首的 App 运行才完成手机审批和真实工具闭环。
 
 `AnthropicModelTransport` 使用官方 `AnthropicOkHttpClientAsync`、`createStreaming()`、`MessageAccumulator.create()/accumulate()/message()` 和 `AsyncStreamResponse.close()`。异步 stream handle 在等待响应头时也能取消；SDK 请求期限 20 秒、重试为 0、每请求禁跟随重定向，日志与 OpenTelemetry 关闭。
 
@@ -107,6 +119,8 @@ API 凭据只从遮罩输入框提交一次到原生配置入口。AndroidKeySto
 读取配置只回传 endpoint、model 与 `hasCredential`，没有读出 API key 的方法。坏密文、丢失的 Keystore key 或无配置都会明确失败，不自动丢弃坏数据后装作可以继续请求。
 
 对应 `ModelSettings` 检查 HTTPS、URL 用户信息/query/fragment 和字段长度，`ModelCredentialStore.load()/save()` 校验 AES/GCM 密文并原子保存，`TaskHostModule.executeModel()` 只返回固定错误，不回显服务端错误体。
+
+本机验收只在 Debug 构建额外允许精确的 `http://127.0.0.1:8790`，通过任务专用模拟器的 `adb reverse` 连接宿主网关；其他 HTTP 主机、端口或路径一律拒绝。Release 的实际编译类已检查：HTTPS 可构造，固定 Loopback HTTP 仍拒绝。Ferry 使用自己的模型 ID；本次仅输入非秘密的 SDK 头部占位值，不导出宿主 CLI 的认证凭据，也不把占位值当成 Anthropic API key。
 
 这保护的是静态保存和接口曝光，不声称 JS/Java 字符串能被可靠瞬时擦除，也不宣称抵御已完全控制 App 进程的攻击者。本章不读取其他 CLI/OAuth 会话认证文件，不复制 token，不索要聊天账号密钥。
 
@@ -134,8 +148,9 @@ API 凭据只从遮罩输入框提交一次到原生配置入口。AndroidKeySto
 | `AgentLoopTest` | 合成模型消息驱动真实控制器/TaskHost 核心：审批、关联、完整块回放、串行步骤、拒绝、旧回合、取消、预算与清理失败 |
 | `AnthropicSdkProtocolTest` | 本地合成 SSE：官方 SDK 全块累积、响应头前取消、禁重定向，以及实际生产包装层的流中取消与旧结果隔离；**不是模型调用或 Android 运行** |
 | `AgentLoopPanel.test.tsx` | 凭据遮罩与清空、固定目标、取消、错误不回显，以及初始配置晚返回不会覆盖编辑；**不是手机 GUI 验收** |
-| `Chapter11CredentialStoreTest` / `Chapter11SdkRuntimeTest` | 可运行 Android 检查，隔离测试别名和演示凭据；**当前仅构建，未执行** |
-| 真实模型与工具闭环 | **未执行；缺合法配置和授权设备窗口** |
+| `Chapter11CredentialStoreTest` / `Chapter11SdkRuntimeTest` | API 36 / ARM64 已执行；隔离测试别名和演示凭据。SDK runtime 是合成事件检查，不请求网络 |
+| `Chapter11LocalGatewayIntegrationTest` | 显式本机选项下调用实际生产 transport，收到真实模型 `tool_use` 并回放完整消息；1 项通过，不执行或批准工具 |
+| 真实 App 模型与工具闭环 | 三轮模型调用、两条工具步骤、手机批准 CSV、真实行数 3 和清理确认；同 App 新任务、拒绝、取消与审批过期也已观察 |
 
 <details>
 <summary>最终验证与公开交付前的清单</summary>
@@ -144,7 +159,11 @@ App：typecheck、lint、Jest、audit；Android：相关 JVM、ARM64 Debug/Relea
 
 实际验收需要冻结源码/APK SHA、真实手机配置、真实模型回合、手机逐次同意/拒绝/取消、动作后的来源结果、晚返回和失败收尾。只用演示数据；HTTP 401、fixture、mock、JVM 通过或 SDK 编译不能写成真实 Agentloop 通过。
 
-2026-11-20 已实际检查本地第 10、11 章网页在桌面、390px 手机与深浅主题下的渲染，无整页横向溢出。App GUI 与真实模型/设备仍未验收；源码 Draft PR 已公开，Pages、注释 tag 与源码 Release 在最终验收后补齐，不公开 Debug 签名 APK。
+2026-11-20 的实际 App 验收使用源码检查点 `749199f`（模型策略修复），Debug APK SHA256 `58b62dda2ffb74f413164c152cfb01cd3b5da07e92d17ab71bd8fe9fcfe98b76`、AndroidTest APK SHA256 `6b96dbb4742acc58a6a36fec139e8f51815d905a6488b8cb2f2144fbfd52754f`。本次实际模型为 Seed 2.1 Turbo，经本机 Ferry；完成运行为三轮、累计 201 个输出 token，两条来源记录均成功且清理确认。
+
+验收同时保留了两次 `MODEL_TRANSPORT_ERROR` 与原审批过期运行；后续成功不改写它们。Debug 构造检查通过；项目没有 Release 单元测试 task，改用实际 Release 编译类执行 HTTPS 成功、Loopback HTTP 拒绝检查，未把不存在的 task 记为通过。
+
+本地第 10、11 章网页已检查桌面、390px 手机与深浅主题，无整页横向溢出；新增实际截图仍随最后网站构建与页面核验。Pages、注释 tag 与源码 Release 在最终集成 CI 与章节合并后补齐，不公开 Debug 签名 APK。
 
 </details>
 
