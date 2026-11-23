@@ -9,7 +9,7 @@ description: 在原有工具宿主上维护一个目标、有界步骤账本、�
 
 读者应看到同一个任务编号、一个目标，以及两条各自带有审批和结果的步骤。第一条的 Android API 信息不会被第二条 CSV 行数覆盖；第二条失败也不会把整个任务显示为完成。
 
-> **实现已通过本地门禁；手机验收与公开发布待完成。** 下文是操作步骤和成功条件，不是已取得的设备记录。
+> **源码已提交 [Draft PR #17](https://github.com/kkkhs/pocketrun/pull/17)；手机验收与网站发布待完成。** 下文是操作步骤和成功条件，不是已取得的设备记录。
 
 下面是账本的结构示例，不是设备截图；实际 API 和行数由工具返回：
 
@@ -37,7 +37,7 @@ description: 在原有工具宿主上维护一个目标、有界步骤账本、�
 <details>
 <summary>源码位置与发布状态</summary>
 
-本章新增源码在 `app/SingleTaskPanel.tsx` 和 `app/android/app/src/main/java/io/github/kkkhs/pocketrun/taskhost/SingleTaskContext.kt`；原生桥接在该包上一级的 `TaskHostModule.kt`。当前尚无公开固定源码快照；公开发布后补实际 PR、commit/tag 与源码 Release，不造未来链接。
+本章新增源码在 [SingleTaskPanel.tsx](https://github.com/kkkhs/pocketrun/blob/56c26ee290136420812cde1add43ba2dbd3f80ff/app/SingleTaskPanel.tsx) 和 [SingleTaskContext.kt](https://github.com/kkkhs/pocketrun/blob/56c26ee290136420812cde1add43ba2dbd3f80ff/app/android/app/src/main/java/io/github/kkkhs/pocketrun/taskhost/SingleTaskContext.kt)；原生桥接在该包上一级的 `TaskHostModule.kt`。这是已公开的固定源码提交，源码 Release 在真实验收与合并后建立。
 
 </details>
 
@@ -130,7 +130,7 @@ if (current.phase == HostPhase.SUCCEEDED &&
 
 在 App 跑 `npm run typecheck`、`npm run lint`、`npm test -- --runInBand`、`npm run audit:ci`；Android 跑相关 JVM、Debug / Release / AndroidTest 构建，ARM64 参数为 `-PreactNativeArchitectures=arm64-v8a --max-workers=2`。Debug 签名 APK 不公开发布。
 
-网站另跑 `test:toolchain`、`typecheck`、`build`、`audit:ci`。隔离构建用 `DOCUSAURUS_NO_PERSISTENT_CACHE=1`；正文目录、折叠内容与链接也应检查。桌面/手机深浅主题实际渲染截图仍待补齐。
+网站另跑 `test:toolchain`、`typecheck`、`build`、`audit:ci`。隔离构建用 `DOCUSAURUS_NO_PERSISTENT_CACHE=1`；正文目录、折叠内容与链接也应检查。2026-11-20 已检查本地正文在桌面、390px 手机与深浅主题下的实际渲染，无整页横向溢出；这不是手机 App 执行验收。
 
 真实设备验收需要合法设备授权与排他窗口：核对这版 APK SHA、两步真实来源、手机批准/拒绝、超时与取消、旧 nonce、失败清理。当前未操作设备，尚未取得本章完整 GUI/设备通过记录。
 
@@ -141,3 +141,10 @@ if (current.phase == HostPhase.SUCCEEDED &&
 本章把多条工具步骤放进同一个目标，保留结果、审批、失败原因和资源收尾。它没有长期记忆、MCP、产品 subagent、多任务并发或自动恢复。
 
 第 11 章再让真实模型选择下一条受限工具调用；本章手动按钮仅用于先看清任务边界。即使模型选择了一个工具，参数校验与手机审批也不能省掉。
+
+## 本章源码
+
+- [Draft PR #17：单任务上下文与两步演示](https://github.com/kkkhs/pocketrun/pull/17)
+- [固定实现提交 `56c26ee`](https://github.com/kkkhs/pocketrun/commit/56c26ee290136420812cde1add43ba2dbd3f80ff)
+
+本章源码 Release 在实际验收与合并后建立。
