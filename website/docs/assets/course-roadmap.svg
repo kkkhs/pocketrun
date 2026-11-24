@@ -29,7 +29,7 @@
     <text x="45" y="224" class="heading">第二阶段 · 看见并操作 Android App</text>
     <text x="45" y="258" class="body">4 创建目标虚拟屏</text>
     <text x="308" y="258" class="body">5 截图、UI 树与定向输入</text>
-    <text x="645" y="258" class="label">当前：第 4 章</text>
+    <text x="645" y="258" class="label">第 4—5 章</text>
   </g>
   <path d="M410 286 V314" class="edge" marker-end="url(#pr-roadmap-arrow)"/>
 
@@ -49,8 +49,8 @@
     <text x="45" y="522" class="body">9 工具契约与宿主</text>
     <text x="280" y="522" class="body">10 单任务上下文</text>
     <text x="520" y="522" class="body">11 真实 Agent 闭环</text>
-    <text x="45" y="558" class="body">12 跨任务记忆</text>
-    <text x="280" y="558" class="body">13 完整任务与恢复</text>
+    <text x="45" y="558" class="body">12 跨任务记忆（计划）</text>
+    <text x="280" y="558" class="body">13 完整任务与恢复（计划）</text>
     <text x="600" y="558" class="label">模型提议，执行层校验</text>
   </g>
 </svg>

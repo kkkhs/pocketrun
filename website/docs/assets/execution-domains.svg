@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 690" role="img" aria-labelledby="pr-domains-title pr-domains-desc" class="pr-domains-diagram">
   <title id="pr-domains-title">完整应用的逻辑分工和运行身份</title>
-  <desc id="pr-domains-desc">计划架构：UI把任务交给Agent，Agent通过受校验的工具入口请求执行。普通App UID一侧由Kotlin管理文件、ProcessBuilder、PRoot和PTY；ADB启动的shell UID2000后端负责虚拟屏、App启动、输入、截图和UI树。App通过Binder或本地命令通道访问后端。两侧共享Android系统和内核。Agent宿主仍需验证；当前仅实现UI调用Kotlin读取设备信息。</desc>
+  <desc id="pr-domains-desc">第1至11章的执行分工：UI把目标交给App Kotlin中的模型循环，循环请求endpoint模型服务并把提议交给受校验的工具入口。普通App UID一侧由Kotlin管理文件、ProcessBuilder、PRoot和PTY；自有ADB启动的shell UID2000后端持有虚拟屏、输入、截图和UI树。显示工具通过typed Binder调用后端，CSV由普通App本地启动子进程。两侧使用同一Android系统和内核，模型不授予执行权限。</desc>
   <style>
     .pr-domains-diagram { --app: #2a78d6; --shell: #eb6834; --ink: var(--ifm-font-color-base, #1c1e21); --muted: var(--ifm-color-emphasis-700, #606770); --border: var(--ifm-color-emphasis-300, #dadde1); --panel: var(--ifm-background-surface-color, #fff); font-family: system-ui, -apple-system, "Segoe UI", sans-serif; }
     html[data-theme="dark"] .pr-domains-diagram { --app: #3987e5; --shell: #d95926; }
@@ -15,7 +15,7 @@
     <marker id="pr-domains-arrow" markerWidth="9" markerHeight="8" refX="8" refY="4" orient="auto"><path d="M0 0 9 4 0 8Z" fill="var(--muted)"/></marker>
     <marker id="pr-domains-start" markerWidth="9" markerHeight="8" refX="1" refY="4" orient="auto"><path d="M9 0 0 4 9 8Z" fill="var(--muted)"/></marker>
   </defs>
-  <text x="20" y="28" class="label">完整架构 · 按后续章节实现</text>
+  <text x="20" y="28" class="label">第 1—11 章 · 当前执行分工</text>
   <rect x="20" y="292" width="350" height="242" rx="12" class="zone"/>
   <rect x="430" y="292" width="350" height="242" rx="12" class="zone"/>
 
@@ -35,9 +35,9 @@
   </g>
   <g data-node="agent">
     <rect x="292" y="56" width="216" height="110" rx="10" class="card"/>
-    <text x="314" y="94" class="heading">Agent</text>
-    <text x="314" y="127" class="body">决定下一步</text>
-    <text x="314" y="153" class="label">宿主在第9章验证</text>
+    <text x="314" y="94" class="heading">模型循环</text>
+    <text x="314" y="127" class="body">请求模型、处理提议</text>
+    <text x="314" y="153" class="label">App Kotlin · 第11章</text>
   </g>
   <g data-node="tools">
     <rect x="564" y="56" width="216" height="110" rx="10" class="card"/>
@@ -59,7 +59,7 @@
     <text x="64" y="453" class="body">PRoot / Alpine / PTY</text>
   </g>
   <g data-node="shell-runtime">
-    <title>App自有ADB连接启动shell后端。通过Binder和本地命令通道提供受授权的Android操作。</title>
+    <title>App自有ADB连接启动shell后端。通过typed Binder提供受约束的目标显示观察和输入。</title>
     <rect x="454" y="352" width="300" height="130" rx="9" class="card"/>
     <rect x="454" y="362" width="4" height="110" rx="2" fill="var(--shell)"/>
     <text x="474" y="388" class="heading">Android 后端</text>
@@ -67,7 +67,7 @@
     <text x="474" y="453" class="body">截图 / UI 树</text>
   </g>
   <text x="44" y="516" class="label">PRoot 不增加原有权限</text>
-  <text x="454" y="516" class="label">自有 ADB 启动 · Binder / TCP</text>
+  <text x="454" y="516" class="label">自有 ADB 启动 · typed Binder</text>
 
   <g data-node="system">
     <rect x="20" y="586" width="760" height="78" rx="10" class="card"/>
