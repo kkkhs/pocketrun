@@ -2,190 +2,330 @@
 sidebar_position: 12
 sidebar_label: 第 11 章 · 真实模型循环
 title: 让模型选下一步，仍由手机批准工具
-description: 原生 Kotlin 使用官方 Anthropic Java SDK，把真实模型回复与受控工具结果接成有界循环，并用 Keystore 保存配置。
+description: 沿设备信息和 CSV 的同一任务，理解模型提议、手机批准、真实工具结果和下一回合怎样连接。
 ---
 
-[上一章](chapter-10.md)把设备信息和演示 CSV 两条步骤放进同一个任务。本章仍做这件事，但不再由两个手动步骤按钮选择工具：**真实模型读取目标，提出工具调用，宿主执行获准动作，再把真实结果送给模型继续。**
+import ModelToolCycle from './assets/model-tool-cycle.svg';
+import modelResult from './assets/chapter-11-model-result.png';
+import toolLedger from './assets/chapter-11-tool-ledger.png';
+import csvSource from './assets/chapter-11-csv-source.png';
+import figureStyles from '@site/src/css/tutorial-figures.module.css';
 
-读者应看到模型回合数、同一个任务编号，以及第 10 章面板里的两条实际工具结果。CSV 仍停在手机审批前；模型回复里的“同意”没有任何授权效果。
+[上一章](chapter-10.md)，我们点两个步骤按钮，读取设备信息和演示 CSV，再把结果放在同一份账本里核对。
 
-> **最终集成包已完成真实模型与工具闭环。** 2026-11-23，在任务专用 API 36 / ARM64 模拟器上，官方 Java SDK 经本机 Ferry 网关调用 Seed 2.1 Turbo：模型三轮调用，设备信息与 CSV 两条真实步骤成功，手机批准 CSV，资源清理后模型给出一致总结。[PR #18](https://github.com/kkkhs/pocketrun/pull/18) 与[验收 PR #20](https://github.com/kkkhs/pocketrun/pull/20) 已合并，main CI、Pages 与[源码快照](https://github.com/kkkhs/pocketrun/releases/tag/chapter-11)已完成。
+本章目标不变：**先读设备信息，再读固定演示 CSV 行数，用真实结果总结。** 改变的是谁提出下一步：用户给目标，模型提出工具调用，手机上的宿主执行获准动作，再把结果交给模型继续。
 
-## 先看一次真实结果
+模型只负责提议。**CSV 仍等待手机批准；账本、参数校验和实际执行都复用前章代码。**
 
-模型最后总结 Android 16、API 36、ARM64，以及演示 CSV 的 **3 行**。第 10 章账本保留了原始来源：App UID 10150、工作目录 `/workspace`、五个读取阶段退出码均为 0、`sourceStatus=completed`、`cleanupStatus=done`。两条步骤都清理确认，才进入 `completed`。
+## 1. 先看同一任务怎样完成
 
-![实际模型三轮完成后的回合数和总结](assets/chapter-11-model-result.png)
+2026-11-23 的实际任务经历了三个模型回合：
 
-同一次运行的工具账本里，设备步骤是 `not_required`，CSV 是 `approved_by_app_ui`；**模型回合数与工具步骤数不是同一个计数**。这次模型先请求设备，再请求 CSV，最后总结，共三轮、两条工具步骤。
-
-![同一完成任务中的设备信息与手机批准的 CSV 步骤](assets/chapter-11-tool-ledger.png)
-
-同一任务向下滚动，CSV 来源记录显示 `approved_by_app_ui`、行数 3、五阶段退出码 0，以及完成和清理状态。这次读取耗时 143ms；下面与上一张都是同一 App、同一 `task-1` 的实际截图，仅裁剪了页面范围。
-
-![同一任务中 CSV 的实际来源、退出码与资源清理](assets/chapter-11-csv-source.png)
-
-本次使用的是 Ferry 的 `claude-doubao-seed-2-1-turbo`，不是默认配置中的 Claude Opus。它验证了 App 内官方 SDK、Messages 协议、手机审批和真实工具的整条链路；直接 Anthropic 服务仍需读者自己的合法调用配置。
-
-## 先配置，再看它请求工具
-
-本例只用本 App 私有演示 CSV，不访问账号、用户文件或外部网页。模型功能使用普通 App Kotlin 进程，要求 Android API 26+ 的 `java.time`；整体 Linux 演示仍沿用前章 Android 14/API 34、ARM64 条件。下面是具备合法配置和设备窗口后应执行的步骤。
-
-1. 在第 9 章准备固定 Linux 工具，确认安装 generation 和就绪状态。
-2. 打开“第 11 章 · 真实模型与受控工具循环”，填写自己有权使用的 HTTPS endpoint、模型名和 API 凭据。默认 endpoint 是 `https://api.anthropic.com`，模型名是 `claude-opus-5-5`；有默认地址不等于已有调用资格。
-3. 点“加密保存模型配置”。应只显示“已加密保存（不能读取）”，输入框清空，不展示保存的密钥。
-4. 点“开始真实模型两步任务”。目标固定为先读设备、再读演示 CSV；应看到 `model`（等待模型）和真实回合数。网络错误或超时必须停止，不生成工具成功记录。
-5. 在第 10 章账本查看模型提出的实际步骤。设备观察无需审批；CSV 应进入 `pending_approval`（待批准），显示原宿主绑定的固定目标与 request hash。
-6. 在手机点“同意任务当前步骤”。核对真实来源和 `proven`（清理确认），再看模型进入下一回合并给出简短总结。验收本例必须看见设备和 CSV 两条真实记录，不能只看总结里的数字。
-
-对应代码逐步是 `app/AgentLoopPanel.tsx` → `TaskHostModule.saveModelConfiguration()` / `startAgent()` → `taskhost/AgentLoop.start()` → `ModelToolSurface.parse()` → `SingleTaskContext.submit()` → 原有 `TaskHost`。审批仍调用 `TaskHostModule.decideFromAppUi()`，没有模型专用批准入口。
-
-点“取消模型与工具任务”会同时取消模型请求和当前受控步骤。拒绝 CSV、目标失效、失败或清理未确认都会终止循环；不会再问模型“换个方式偷偷执行”。修改或清除配置也会取消当前循环，旧配置的晚回复不能接到新任务。
-
-## 一回合只提议，不执行
-
-模型通过 Messages API 返回结构化 `tool_use` 块。工具名先从模型允许的下划线形式映射到原宿主名字；文本中的命令、JSON 示例或“approved”都不会被执行。
-
-| 模型工具名 | 原 TaskHost 工具 | 授权规则 |
+| 回合 | 模型提出什么 | 手机实际做了什么 |
 | --- | --- | --- |
-| `android_device_info` | `android.device_info` | 只读设备观察，不审批 |
-| `linux_count_demo_csv` | `linux.count_demo_csv` | 固定空参数，每条手机审批 |
-| `android_virtual_display` | `android.virtual_display_observe_or_demo_input` | 当前自有 displayId/epoch；观察无需审批，演示输入需要审批 |
+| 1 | 请求设备信息 | 读取 Android API，记下 Android16/API36/ARM64 |
+| 2 | 请求固定 CSV 行数 | 等手机批准，运行 Linux 工具，得到3行和来源/清理结果 |
+| 3 | 根据两条结果总结 | 正常结束，显示总结，账本仍保留原结果 |
 
-对应 `ModelToolSurface.tools()` 和 `parse()`。模型输入仍经过原生 `ToolSchema.validate()`；路径、命令、argv、额外字段、未知动作或越界输入一律拒绝。模型工具列表没有 `approve`、MCP、产品 subagent 或任意 shell。
+<figure style={{margin: '1.25rem 0', maxWidth: 400}}>
+  <img src={modelResult} alt="实际 task-1 三个模型回合完成，模型总结 Android16、API36、arm64-v8a 和 CSV 三行" style={{display: 'block', width: '100%', height: 'auto'}} />
+  <figcaption>最终正常包的真实模型总结。下面还要检查它所依据的工具来源。</figcaption>
+</figure>
 
-同一模型回合可能返回多条工具调用。先验证整回合的工具名、参数、数量与 ID，再逐条串行执行；上一条清理确认才处理下一条，不为它们启动并发任务。
+本次通过本机 Ferry 调用的是 **Seed 2.1 Turbo**，模型 ID 为 `claude-doubao-seed-2-1-turbo`，不是默认配置中的 Claude Opus。直接 Anthropic 服务需要读者自己的合法配置。
 
-## 结果回到原来的调用 ID
+**三回合不是固定流程常数。** 一回合可以提出多条工具；手机会逐条串行处理。这里恰好是两条工具分两回合请求，再一回合总结。验收看的是两条真实来源，而不只是回合数字。
 
-每条工具结果用模型返回的 `tool_use.id` 关联，不按“刚好第几个结果”猜测。宿主请求还有自己的 nonce 和 execution/backend epoch，两组标识用途不同：模型 ID 用于协议关联，宿主标识用于批准、目标与资源所有权。
+## 2. 谁在执行：模型服务与手机宿主分开
+
+先分清一个容易混淆的问题：**手机上运行的是 SDK、循环控制器和工具宿主；模型推理在 endpoint 对应的服务里。** 不是把大模型权重装进 App，也不是让模型进入 UID2000 后端执行。
+
+| 执行者 | 在这次任务里负责什么 |
+| --- | --- |
+| React / TypeScript，同一 App 进程 | 填配置、给目标、显示状态、手机同意/拒绝/取消 |
+| App Kotlin，同一 App UID | SDK 请求、检查模型提议、单任务账本、原 TaskHost |
+| endpoint 对应模型服务 | 读取消息和允许的工具，返回下一步提议或总结 |
+| Android API / PRoot与BusyBox | 产生真实设备信息和固定CSV结果；Linux仍是App UID子进程 |
+
+本例不使用虚拟屏；已有显示工具仍走 typed Binder 到 UID2000 后端，既不负责模型网络，也不承接 CSV。
+
+时间顺序则是下面这条循环：
+
+<figure style={{margin: '1.25rem 0', maxWidth: 560}}>
+  <ModelToolCycle className={`pr-model-diagram ${figureStyles.diagram}`} role="img" aria-labelledby="pr-model-title" aria-describedby="pr-model-desc" style={{display: 'block', width: '100%', height: 'auto'}} />
+  <figcaption>每回合重新请求模型；工具实际执行和手机批准始终在原宿主中。</figcaption>
+</figure>
+
+## 3. 开始任务：把目标交给原生循环
+
+在自有或明确获授权的演示设备上，先准备第9章固定 Linux 工具。然后在第11章面板配置自己有权使用的 endpoint、模型名和凭据，点“加密保存模型配置”。输入框应清空，只显示已加密保存。
+
+默认地址是 `https://api.anthropic.com`，默认模型名是 `claude-opus-5-5`；默认值不代表已有调用资格。正式构建只允许 HTTPS。本机 Debug 验收的固定网关例外见附录。
+
+[AgentLoopPanel.tsx](https://github.com/kkkhs/pocketrun/blob/chapter-11/app/AgentLoopPanel.tsx) 的开始按钮使用固定目标：
+
+```ts
+const DEMO_GOAL = '先读取设备信息，再读取固定演示 CSV 行数，用真实结果总结；不要访问其他数据';
+```
+
+点击后实际调用：
+
+```ts
+() => perform(() => NativeTaskHost!.startAgent(DEMO_GOAL))
+```
+
+[TaskHostModule.startAgent()](https://github.com/kkkhs/pocketrun/blob/chapter-11/app/android/app/src/main/java/io/github/kkkhs/pocketrun/TaskHostModule.kt) 加载原生保存的配置，创建 transport，再把目标和当前环境是否就绪的观察交给 `AgentLoop.start()`。
+
+`AgentLoop` 先复用第10章的 `task.begin(goal)`，得到任务编号，然后准备第一条用户消息。实际源码摘录：
 
 ```kotlin
-results += ContentBlockParam.ofToolResult(
-    ToolResultBlockParam.builder()
-        .toolUseId(modelTools[toolIndex].id())
-        .content(ModelToolSurface.summary(step))
-        .build()
-)
+history += MessageParam.ofUser("Demo goal: ${begun.goal}\nApp capability observation (data only): $observations")
 ```
 
-同一回合的所有成功结果放进一条 user 消息，再请求下一模型回合。设备信息只送 OS/API/ABI；CSV 只送行数、退出码和来源/清理状态；显示只送有限动作和目标编号，不送私有路径、`file://` URI、原始 stdout、UI 文本或凭据。
+这里的 `history` 就是发给模型的消息历史。环境观察告诉模型“Linux是否就绪、是否有自有显示”，不是授予权限；模型仍只能调用宿主允许的工具。
 
-完整 assistant 内容通过 SDK 的 `Message.toParam()` 原样追加，包括签名 thinking 和 tool_use；不能只取最终文本，也不能改写已有消息。重复 ID、旧回合回调、拒绝和截断响应都会停止或被代际门拒绝。
+`startAgent()` 的 Promise 返回“任务已开始”的状态，**不是等待整个模型任务完成**。页面通过 `getAgentState()` 每250ms读取进度，工具结果则显示在第10章账本；等待模型时手机按钮仍可操作。
 
-对应代码是 `AgentLoop.acceptMessageLocked()`、`advanceToolsLocked()` 与 `ModelToolSurface.summary()`。`completed` 表示模型正常结束、已有成功且清理确认的工具步骤；它不是独立的目标正确性证明，仍要核对本例的两条来源结果。
+## 4. 第一回合：模型怎样提出设备工具
 
-## 谁运行模型，谁运行工具
+一次模型请求需要三个部分：目标与已有结果、系统说明、允许的工具定义。[AnthropicModelTransport.kt](https://github.com/kkkhs/pocketrun/blob/chapter-11/app/android/app/src/main/java/io/github/kkkhs/pocketrun/taskhost/AnthropicModelTransport.kt) 用官方 Java SDK 组装：
 
-| 执行层级 | 负责什么 |
-| --- | --- |
-| React / TypeScript，同一普通 App 进程 | 配置入口、状态、手机同意/拒绝/取消；不是 Node |
-| App Kotlin，同一 App UID | 官方 Java SDK transport、单任务循环与原有宿主；模型网络 executor 与手机批准 executor 分开 |
-| PRoot / BusyBox，普通 App UID 子进程 | 固定 CSV 实际读取 |
-| typed Binder → 独立 UID 2000 后端 | 已有受限虚拟屏工具，未就绪即拒绝；不运行模型或 Linux |
+```kotlin
+val params = MessageCreateParams.builder().model(credential.settings.model)
+    .maxTokens(4096L).thinking(ThinkingConfigAdaptive.builder().build())
+    .system(ModelToolSurface.SYSTEM_PROMPT).messages(history)
+    .apply { ModelToolSurface.tools().forEach { addTool(it) } }.build()
+```
 
-阶段顺序则是另一件事：
+工具定义告诉模型哪些操作存在、参数格式是什么。它不会自动执行函数。手机必须读取回复，再决定这条调用能否进入宿主。
+
+实际请求使用流式 transport：
+
+```kotlin
+val stream = client.messages().createStreaming(params,
+    RequestOptions.builder().followRedirects(false).build())
+```
+
+响应逐块到达，SDK 的 `MessageAccumulator` 累积完整一回合，再交给循环校验。这里的流不是把每一块直接显示成聊天文字，也不会一见到工具名就执行尚未完整的参数。
+
+模型第一回合可以返回下面这样的 `tool_use`。**这是结构示例，不是原始网络日志**：
+
+```json
+{
+  "type": "tool_use",
+  "id": "call_device_example",
+  "name": "android_device_info",
+  "input": {}
+}
+```
+
+- `name` 选择允许的工具。
+- `input` 是这次参数；设备观察与固定 CSV 都是空参数。
+- `id` 标识这一次模型工具调用，稍后用于关联结果。
+
+工具名经过 [ModelToolSurface.parse()](https://github.com/kkkhs/pocketrun/blob/chapter-11/app/android/app/src/main/java/io/github/kkkhs/pocketrun/taskhost/ModelToolSurface.kt) 映射到原宿主，例如源码中的：
+
+```kotlin
+"android_device_info" to PocketRunTool.ANDROID_DEVICE_INFO.wireName,
+"linux_count_demo_csv" to PocketRunTool.LINUX_COUNT_DEMO_CSV.wireName,
+```
+
+这不是执行回复文本中的任意 JSON 或命令。只有结构化调用经过原有 `ToolSchema.validate()` 才能继续；未知名字、额外路径/命令参数、坏ID和越界目标都停止。
+
+## 5. 执行设备工具：仍走原来的任务账本
+
+[AgentLoop.acceptMessageLocked()](https://github.com/kkkhs/pocketrun/blob/chapter-11/app/android/app/src/main/java/io/github/kkkhs/pocketrun/taskhost/AgentLoop.kt) 先检查整回合，再执行第一条。下面是整回合检查的一部分：
+
+```kotlin
+calls.forEach { ModelToolSurface.parse(it) }
+require(calls.map { it.id() }.distinct().size == calls.size)
+require(calls.none { it.id() in seenIds })
+```
+
+因此“前一条合法、后一条非法”的批次不会先执行合法前缀。数量、停止原因、消息内容和预算也要通过检查，才进入工具阶段。
+
+执行时不另建一套模型工具引擎，而是调用原任务：
+
+```kotlin
+val submitted = task.submit(checkNotNull(taskId), ModelToolSurface.parse(modelTools[toolIndex]))
+```
+
+这相当于模型替用户选择了第10章的“步骤1”按钮，**没有替用户选择批准按钮**。设备信息无需批准，真实 Android adapter 读取结果，清理确认后账本回到 `ready`。
+
+这时循环还没有结束。模型需要读到这条结果，才能决定是否继续请求 CSV。
+
+## 6. 第二回合：CSV 提议怎样停在手机批准前
+
+设备结果回到模型后，本次模型提出 `linux_count_demo_csv`。宿主照旧绑定固定文件、安装代际与本次请求，让账本显示 `pending_approval`。
+
+在第10章当前步骤面板查看目标，点“同意任务当前步骤”。它仍调用已有手机入口：
+
+```ts
+NativeTaskHost!.decideFromAppUi(current.requestNonce!, 'approve')
+```
+
+这里来自 [SingleTaskPanel.tsx](https://github.com/kkkhs/pocketrun/blob/chapter-11/app/SingleTaskPanel.tsx)，不是模型专用函数。请求nonce用于手机批准与目标校验；模型回复里的“同意”“approved”或目标文字都没有这个效果。
+
+批准后才运行真实 Linux 工具，并核对文件来源、退出码与清理。下面两张是同一 App、同一 `task-1` 的实际账本与向下滚动的来源，分别裁剪了页面范围：
+
+<div style={{display: 'flex', gap: '1.5rem', flexWrap: 'wrap', margin: '1.25rem 0', alignItems: 'flex-start'}}>
+  <figure style={{margin: 0, flex: '0 1 360px', minWidth: 0, maxWidth: '100%'}}>
+    <img src={toolLedger} alt="同一完成任务保留设备信息，CSV审批为approved_by_app_ui、清理为proven" style={{display: 'block', width: '100%', height: 'auto'}} />
+    <figcaption>账本：两条工具同属一个目标。</figcaption>
+  </figure>
+  <figure style={{margin: 0, flex: '0 1 360px', minWidth: 0, maxWidth: '100%'}}>
+    <img src={csvSource} alt="同一次CSV来源记录为三行、五阶段退出码0、source completed、cleanup done，耗时143ms" style={{display: 'block', width: '100%', height: 'auto'}} />
+    <figcaption>来源：3行、五阶段退出码0、清理确认。</figcaption>
+  </figure>
+</div>
+
+拒绝或取消会停止当前任务；目标失效、来源失败、清理未确认也停止。循环不会再请求模型换一种方式绕过手机决定。
+
+## 7. 带回结果：模型为什么知道已经做了什么
+
+每次请求模型，它只知道你发出的消息。**工具已经在手机执行，不等于模型自动看到了结果。** App 必须再发一条消息。
+
+[AgentLoop.advanceToolsLocked()](https://github.com/kkkhs/pocketrun/blob/chapter-11/app/android/app/src/main/java/io/github/kkkhs/pocketrun/taskhost/AgentLoop.kt) 从当前成功且清理确认的步骤生成 `tool_result`：
+
+```kotlin
+results += ContentBlockParam.ofToolResult(ToolResultBlockParam.builder()
+    .toolUseId(modelTools[toolIndex].id()).content(ModelToolSurface.summary(step)).build())
+```
+
+`toolUseId` 使用模型原来的调用ID。它回答“这份结果属于哪个提议”，不是批准身份；宿主nonce回答的是另一件事——“手机批准了哪一条已绑定请求”。两者不能互换。
+
+`summary(step)` 只挑允许发送的字段。CSV只发送行数、退出码和来源/清理状态；设备只发送OS/API/ABI。完整stdout、私有路径、图片URI、UI正文和凭据不进入模型消息。
+
+同回合工具都处理完后，把结果追加为一条用户消息，再发请求：
+
+```kotlin
+history += resultMessage
+requestModelLocked()
+```
+
+以前的assistant消息也必须保留完整内容。源码通过 `message.toParam()` 追加整个回合，包括工具块和签名thinking；只保存最终文本，会丢掉下一回合需要关联的工具调用。
+
+## 8. 最后一回合：从原生状态到 React 总结
+
+模型读到设备与CSV结果后，本次正常返回 `end_turn` 和简短总结，不再提出工具。循环核对消息合法、已有任务成功且清理确认，再结束任务：
+
+```kotlin
+task.finish(checkNotNull(taskId))
+history += replay
+finalText = text
+phase = AgentPhase.COMPLETED
+```
+
+页面轮询的实际摘录是：
+
+```ts
+const value = await NativeTaskHost.getAgentState();
+if (live.current && request === generation.current) setState(value);
+```
+
+完整返回路径到这里才结束：
 
 ```text
-模型提出 tool_use → 宿主校验与绑定 → 必要时等手机批准
-  → 实际工具结果与清理 → 同 ID 的 tool_result → 下一模型回合
-  → 正常结束 / 取消 / 失败 / 预算终止
+真实工具结果 → TaskHost/任务账本 → 安全tool_result → 下一次模型请求
+  → 模型最终文本 → AgentStatus → TurboModule → React state与总结
 ```
 
-等待网络不能占住手机批准线程。请求和循环有自己的取消所有者；取消不仅是隐藏按钮，也不靠下一次页面轮询才停止网络。
+**`completed` 不是独立的目标正确性证明。** 控制器检查了协议、已有步骤和清理；读者仍要确认本例确有设备与CSV两条来源，总结中的数字与它们一致，而不是只相信流畅的回答。
 
-## 用实际平台支持的 SDK
+## 9. 小结：循环自动了，权限没有变
 
-这里不把 React Native 当 Node。当前官方 TypeScript SDK 不支持 React Native，本章不增加 Hermes polyfill 栈；模型在 Kotlin 调用官方 `com.anthropic:anthropic-java:3.11.0`。
+这一章把“请求下一步”接给真实模型，把“实际执行、手机批准、来源与清理”留给原宿主。多条调用串行运行，上一条结算后才继续。
 
-这个版本已从 Maven Central 的实际元数据核实，并通过本项目 Kotlin 编译与 Android D8 构建。SDK/Jackson 的 Android runtime smoke、Keystore 保存/重载/损坏检查，以及实际生产 transport 的网络请求，都已在任务专用 API 36 / ARM64 模拟器执行。网络检查返回真实 `tool_use`，但不执行工具；章首的 App 运行才完成手机审批和真实工具闭环。
+默认最多8工具步骤、8模型回合、120秒总期限、32768累计输出token和64KiB消息上下文。拒绝、错误、取消、截断或超预算时明确停止，不自动重放动作或增加权限。
 
-`AnthropicModelTransport` 使用官方 `AnthropicOkHttpClientAsync`、`createStreaming()`、`MessageAccumulator.create()/accumulate()/message()` 和 `AsyncStreamResponse.close()`。异步 stream handle 在等待响应头时也能取消；SDK 请求期限 20 秒、重试为 0、每请求禁跟随重定向，日志与 OpenTelemetry 关闭。
+练习：模型已经给出“CSV有3行”，但账本里只有设备信息，没有CSV步骤。你能用这句话宣布本例完成吗？应该沿哪条结果路径寻找证据？
+
+下一章再讨论跨任务记忆；这里保留的只是当前任务与有界消息历史。
+
+## 附录：SDK、配置与验证记录
+
+正文小段代码固定到 `chapter-11`。结构示例与真实截图分开，协议检查与实际工具执行也分别核对。
 
 <details>
-<summary>官方 API 来源与依赖冻结</summary>
+<summary>为什么在 Kotlin 使用官方 Java SDK</summary>
 
-- [官方 Java SDK](https://github.com/anthropics/anthropic-sdk-java)
-- [正式 Maven release 元数据](https://repo.maven.apache.org/maven2/com/anthropic/anthropic-java/maven-metadata.xml)
-- [官方流式示例](https://github.com/anthropics/anthropic-sdk-java/blob/main/anthropic-java-example/src/main/java/com/anthropic/example/MessagesStreamingExample.java)
-- [官方异步取消示例](https://github.com/anthropics/anthropic-sdk-java/blob/main/anthropic-java-example/src/main/java/com/anthropic/example/MessagesStreamingCancellationAsyncExample.java)
+React Native不是Node。当前官方TypeScript SDK不支持RN，所以本章在App Kotlin调用官方 `com.anthropic:anthropic-java:3.11.0`，不添加Hermes polyfill栈。模型网络需要API26+的 `java.time`；固定Linux演示仍需Android14/API34+、ARM64、App64位进程。
 
-3.11 的 `MessageParam` 是 union，使用 `ofUser()` / `ofUserOfContentBlockParams()`，不是旧资料里的 `MessageParam.builder()`。完整回放用实际发布 jar 的 `Message.toParam()`；未知 SDK 方法不凭旧示例猜。
+版本从Maven Central实际元数据核实，Kotlin编译、Android D8和SDK/Jackson runtime检查已执行。使用 `AnthropicOkHttpClientAsync`、`createStreaming()`、`MessageAccumulator` 和 `AsyncStreamResponse.close()`；响应头前已有可取消句柄。
 
-依赖只加入 PocketRun 的 `app/android/app/build.gradle`，相关 compile/runtime 配置锁在 `app/android/app/gradle.lockfile`。SDK 和 Jackson/OkHttp 等保留自己的许可，见 `app/THIRD_PARTY_NOTICES.md`；没有复制 SDK 执行框架或安装另一个 Node 环境。
+SDK期限20秒、重试0、禁跟随重定向、LogLevel.OFF、OpenTelemetry关闭。`MessageParam`使用 `ofUser()` / `ofUserOfContentBlockParams()`；完整回放使用发布jar的 `Message.toParam()`。
+
+- [官方Java SDK](https://github.com/anthropics/anthropic-sdk-java)
+- [Maven release元数据](https://repo.maven.apache.org/maven2/com/anthropic/anthropic-java/maven-metadata.xml)
+- [流式示例](https://github.com/anthropics/anthropic-sdk-java/blob/main/anthropic-java-example/src/main/java/com/anthropic/example/MessagesStreamingExample.java)
+- [异步取消示例](https://github.com/anthropics/anthropic-sdk-java/blob/main/anthropic-java-example/src/main/java/com/anthropic/example/MessagesStreamingCancellationAsyncExample.java)
+
+依赖在 `app/android/app/build.gradle` 和 `gradle.lockfile` 冻结；SDK/Jackson/OkHttp许可见 `app/THIRD_PARTY_NOTICES.md`。
 
 </details>
 
-## 秘密留在 App 私有存储
-
-API 凭据只从遮罩输入框提交一次到原生配置入口。AndroidKeyStore 保存 AES/GCM 的加密密钥；endpoint/model/API key 的加密信封写入 App `noBackupFilesDir`，不写 AsyncStorage、日志、源码常量或包内资源。
-
-读取配置只回传 endpoint、model 与 `hasCredential`，没有读出 API key 的方法。坏密文、丢失的 Keystore key 或无配置都会明确失败，不自动丢弃坏数据后装作可以继续请求。
-
-对应 `ModelSettings` 检查 HTTPS、URL 用户信息/query/fragment 和字段长度，`ModelCredentialStore.load()/save()` 校验 AES/GCM 密文并原子保存，`TaskHostModule.executeModel()` 只返回固定错误，不回显服务端错误体。
-
-本机验收只在 Debug 构建额外允许精确的 `http://127.0.0.1:8790`，通过任务专用模拟器的 `adb reverse` 连接宿主网关；其他 HTTP 主机、端口或路径一律拒绝。Release 的实际编译类已检查：HTTPS 可构造，固定 Loopback HTTP 仍拒绝。Ferry 使用自己的模型 ID；本次仅输入非秘密的 SDK 头部占位值，不导出宿主 CLI 的认证凭据，也不把占位值当成 Anthropic API key。
-
-这保护的是静态保存和接口曝光，不声称 JS/Java 字符串能被可靠瞬时擦除，也不宣称抵御已完全控制 App 进程的攻击者。本章不读取其他 CLI/OAuth 会话认证文件，不复制 token，不索要聊天账号密钥。
-
-## 达到预算，就停止
-
-默认最多 8 个工具步骤、8 个模型回合、120 秒总时间、32768 个累计输出 token、64 KiB 序列化消息上下文。每条工具结果和任务账本还受上一章的独立预算约束。
-
-模型说“再试一次”不能增加预算。`max_tokens`、refusal、未知停止原因、异常内容、结果超限或清理失败都不能进入工具执行；本章采用安全终止，不自动换模型或重放动作。
-
 <details>
-<summary>更细的期限和晚返回检查</summary>
+<summary>凭据怎样保存，本机网关例外是什么</summary>
 
-单请求控制器期限为 25 秒，SDK 本身为 20 秒；累计流事件最多 2048 个、序列化事件内容最多 256 KiB。全消息使用 SDK JSON 序列化计量，包含转义、签名和所有 assistant 块，不把日志 `toString()` 当字节预算。
+API凭据从遮罩输入提交到原生接口，保存后清空输入。AndroidKeyStore保存AES/GCM密钥；endpoint/model/APIkey的加密信封原子写入 `noBackupFilesDir`，不写AsyncStorage、日志、源码或APK资产。
 
-每次请求有独立代际。旧模型回合、取消后的回复或配置失效后的晚完成不能改写新回合；工具的旧 nonce/epoch 仍由原宿主拒绝。任务绝对期限同时收紧原宿主的审批、实际启动和结果提交检查门。
+读取配置只返回endpoint/model/hasCredential，不读出密钥。坏密文、缺失Keystore密钥或无配置明确失败；`ModelSettings`检查协议、URL用户信息/query/fragment及长度，`executeModel()`只返回固定错误，不回显服务端正文。
 
-取消先失效代际，再关闭当前 stream 与请求，取消 TaskHost 资源并保留未确认清理。配置改变时当前循环停止；不从缓存或失败记录恢复未确认工具动作。
+Debug只额外允许精确的 `http://127.0.0.1:8790`，本次通过任务专用模拟器的 `adb reverse` 连接宿主Ferry。其他HTTP主机、端口、路径拒绝；实际编译Release类已验证HTTPS允许、固定HTTP拒绝。Ferry使用自己的模型ID，本次仅提交非秘密SDK头部占位值，宿主CLI认证没有导入Android，占位值不是Anthropic APIkey。
+
+这是静态存储和接口曝光保护，不声称JS/Java字符串可瞬时擦除或抵御已完全控制App进程的攻击者；不读取其他CLI/OAuth认证、不复制token。
 
 </details>
 
-## 验证，不混用证据
+<details>
+<summary>工具白名单、预算与旧回合</summary>
 
-| 检查 | 证明范围 |
+模型工具名映射 `android_device_info → android.device_info`、`linux_count_demo_csv → linux.count_demo_csv`；已有 `android_virtual_display` 映射到受限显示工具，仍要求当前自有displayId/epoch，输入需手机批准。模型没有approve、任意shell、MCP或并发任务入口。
+
+整回合先校验停止原因、内容类型、工具数量/参数/ID及预算，再执行第一条。重复ID、拒绝、`max_tokens`、未知停止原因、截断、超限及清理失败都停止。
+
+控制器每请求25秒，SDK20秒；累计流事件最多2048，序列化事件最多256KiB，消息历史最多64KiB。实际SDK JSON计量包含转义与完整签名块，不把toString当字节预算。步骤结果/账本还有第10章独立预算。
+
+每个请求绑定代际，旧模型回复、配置改变或取消后的晚完成不能改写新任务。绝对任务期限收紧原宿主审批/启动/结果检查；等待模型不占用手机批准executor。
+
+取消先失效代际，关闭stream与请求、取消当前工具并保留未确认清理。修改或清除配置也取消当前循环，不从失败记录恢复未确认动作。
+
+</details>
+
+<details>
+<summary>验证分层：每个检查证明什么</summary>
+
+| 检查 | 范围 |
 | --- | --- |
-| `AgentLoopTest` | 合成模型消息驱动真实控制器/TaskHost 核心：审批、关联、完整块回放、串行步骤、拒绝、旧回合、取消、预算与清理失败 |
-| `AnthropicSdkProtocolTest` | 本地合成 SSE：官方 SDK 全块累积、响应头前取消、禁重定向，以及实际生产包装层的流中取消与旧结果隔离；**不是模型调用或 Android 运行** |
-| `AgentLoopPanel.test.tsx` | 凭据遮罩与清空、固定目标、取消、错误不回显，以及初始配置晚返回不会覆盖编辑；**不是手机 GUI 验收** |
-| `Chapter11CredentialStoreTest` / `Chapter11SdkRuntimeTest` | API 36 / ARM64 已执行；隔离测试别名和演示凭据。SDK runtime 是合成事件检查，不请求网络 |
-| `Chapter11LocalGatewayIntegrationTest` | 显式本机选项下调用实际生产 transport；分别检查真实模型首轮 `tool_use` 和三回合完整消息回放。后者只提交合成工具观察，不执行或批准工具 |
-| 真实 App 模型与工具闭环 | 最终正常包三轮模型调用、两条工具步骤、手机批准 CSV、真实行数 3 和清理确认；早期同 App 新任务、拒绝、取消与审批过期记录另外保留 |
+| AgentLoopTest | 合成消息驱动真实控制器/TaskHost：批准、关联、完整回放、串行、旧回合、取消、预算、清理失败 |
+| AnthropicSdkProtocolTest | 合成HTTP/SSE检查官方SDK累积、响应头前取消、禁重定向、流中取消与旧结果隔离；不是实际模型或Android执行 |
+| AgentLoopPanel.test.tsx | 遮罩/清空、固定目标、取消、错误不回显、初始化晚返回不覆盖编辑；不是GUI验收 |
+| Chapter11CredentialStoreTest / Chapter11SdkRuntimeTest | API36 ARM64已执行，隔离别名/演示凭据；runtime用合成事件、不请求网络 |
+| Chapter11LocalGatewayIntegrationTest | 真实模型首轮与三回合完整回放；后者只提交合成工具观察，不执行/批准工具 |
+| 真实App任务 | 正常包三模型回合、两真实工具、手机批准CSV3行、来源和清理核对；早期新任务/拒绝/取消/过期另记 |
 
-<details>
-<summary>最终验证与公开交付前的清单</summary>
+App typecheck/lint/Jest/audit、相关JVM与ARM64 Debug/Release/Test构建分别运行；参数 `-PreactNativeArchitectures=arm64-v8a --max-workers=2`。网站另跑toolchain/typecheck/build/audit与实际页面，隔离构建设置 `DOCUSAURUS_NO_PERSISTENT_CACHE=1`。文档改写不代表重新执行设备/模型验收。
 
-App：typecheck、lint、Jest、audit；Android：相关 JVM、ARM64 Debug/Release/AndroidTest 构建，参数 `-PreactNativeArchitectures=arm64-v8a --max-workers=2`。网站：test:toolchain、typecheck、build、audit，隔离构建设置 `DOCUSAURUS_NO_PERSISTENT_CACHE=1`。
-
-实际验收需要冻结源码/APK SHA、真实手机配置、真实模型回合、手机逐次同意/拒绝/取消、动作后的来源结果、晚返回和失败收尾。只用演示数据；HTTP 401、fixture、mock、JVM 通过或 SDK 编译不能写成真实 Agentloop 通过。
-
-2026-11-20 的实际 App 验收使用源码检查点 `749199f`（模型策略修复），Debug APK SHA256 `58b62dda2ffb74f413164c152cfb01cd3b5da07e92d17ab71bd8fe9fcfe98b76`、AndroidTest APK SHA256 `6b96dbb4742acc58a6a36fec139e8f51815d905a6488b8cb2f2144fbfd52754f`。本次实际模型为 Seed 2.1 Turbo，经本机 Ferry；完成运行为三轮、累计 201 个输出 token，两条来源记录均成功且清理确认。
-
-2026-11-23 合入已发布章节历史后的正常集成包再次完成 `task-1`：三回合、累计 520 个输出 token、3157 字节模型上下文，两条账本记录均成功且清理确认。Debug APK SHA256 为 `134329e82f2a2abda257b9fd7da78305baae8ab37a3137625e795f164377502b`，Test APK SHA256 为 `924cd2b1e36c4bdd10b2c2124f727650b34c361f3b3ecc5c4679cc159bd304b3`。90 项 taskhost JVM 回归零失败、零跳过，Debug/Release/AndroidTest 构建通过；同一正常 App/Test 包的 Keystore、SDK runtime、真实模型首轮、三回合协议回放与任务上下文共 5 项 Android 检查通过。
-
-本次仍保留实际 App 的两次审批过期和两次第三回合 `MODEL_TRANSPORT_ERROR`。独立 Android 三回合协议检查通过；临时错误类型诊断运行完成了两回合任务，未产生错误类型。随后恢复原生产 transport，核对正常包中没有诊断 logger，再取得章首的三回合成功。成功运行不证明此前网络错误根因已查明，也不替此前失败补写成功状态。
-
-Debug 构造检查通过；项目没有 Release 单元测试 task，改用实际 Release 编译类执行 HTTPS 成功、Loopback HTTP 拒绝检查，未把不存在的 task 记为通过。
-
-第 10、11 章网页已检查桌面、390px 手机与深浅主题，无整页横向溢出。PR #20 的完整 Linux Android CI 和 main CI/Pages 均通过；线上页面的全部实际截图已解码，并与对应源码图片逐字节 SHA256 核对。注释 tag 与源码 Release 已发布，仅提供完整源码归档和校验值。
+设备验收冻结源码与App/Test SHA，使用自有或授权演示设备、合法endpoint与非敏感演示数据。mock、HTTP401、编译或JVM通过不写成真实工具闭环；不发布调试签名APK。
 
 </details>
 
-## 本章没有增加模型的权限
+<details>
+<summary>实际任务批次与原失败记录</summary>
 
-本章增加的是“模型提出下一步 → 获准工具产生结果 → 下一回合”的真实 transport 与受控循环。工具权限、目标重检和资源所有权仍属于原宿主；完成文字仍需要来源结果支持。
+2026-11-20：源码检查点 `749199f`；Debug APK SHA256 `58b62dda2ffb74f413164c152cfb01cd3b5da07e92d17ab71bd8fe9fcfe98b76`，Test APK `6b96dbb4742acc58a6a36fec139e8f51815d905a6488b8cb2f2144fbfd52754f`。本机Ferry/Seed2.1Turbo三回合、累计201输出token，两条来源成功且清理确认。
 
-下一章才讨论跨任务记忆。本章只保留当前有界任务，不加入长期记忆、产品框架、MCP、subagent 或多任务并发。
+2026-11-23：合入已发布章节历史的正常包完成 `task-1`，三回合、520输出token、3157字节上下文；CSV读取143ms、3行、五阶段0，设备与CSV同账本。Debug APK `134329e82f2a2abda257b9fd7da78305baae8ab37a3137625e795f164377502b`，Test APK `924cd2b1e36c4bdd10b2c2124f727650b34c361f3b3ecc5c4679cc159bd304b3`；90taskhost JVM零失败/跳过，三种构建通过，同包Keystore/runtime/首轮/三回合回放/context共5项Android通过。
+
+原两次审批过期、两次第三回合 `MODEL_TRANSPORT_ERROR` 保留。独立Android三回合协议检查通过；临时错误类型诊断运行完成两回合，未产生错误类型。恢复原production transport并确认正常包无诊断logger后，取得章首三回合成功。成功不证明此前网络错误根因已查明，不给旧失败补写成功。
+
+项目没有Release单元测试task；改用实际Release编译类验证HTTPS允许、Loopback HTTP拒绝，不把不存在的task记为通过。PR#20完整Linux Android CI与main CI/Pages通过；历史页面的实际图片已解码并与源码SHA核对，源码归档已匿名下载/全文件核对。
+
+</details>
 
 ## 本章源码
 
-- [PR #18：原生模型循环与加密配置，已合并](https://github.com/kkkhs/pocketrun/pull/18)
-- [PR #20：固定 Debug 策略、三回合真实模型与手机批准工具验收](https://github.com/kkkhs/pocketrun/pull/20)
-- [固定实现与修复提交 `15cabc4`](https://github.com/kkkhs/pocketrun/commit/15cabc461d407591140877c0bb20f202325eb6bb)
-- [官方模型标识与能力](https://platform.claude.com/docs/en/about-claude/models/overview)
-
-[本章源码 Release](https://github.com/kkkhs/pocketrun/releases/tag/chapter-11)已发布，包含完整源码归档与 SHA256 校验值。注释 tag `chapter-11` 固定于验收 PR #20 的合并提交 `8f95aa7`；匿名下载与完整文件核对已通过。
+- [PR #18：原生模型循环与加密配置](https://github.com/kkkhs/pocketrun/pull/18)
+- [PR #20：固定Debug策略与真实模型/工具验收](https://github.com/kkkhs/pocketrun/pull/20)
+- [chapter-11 源码 Release](https://github.com/kkkhs/pocketrun/releases/tag/chapter-11)：注释tag固定验收合并 `8f95aa7`，完整源码和SHA256已核对。
+- [AgentLoopPanel.tsx](https://github.com/kkkhs/pocketrun/blob/chapter-11/app/AgentLoopPanel.tsx) → [TaskHostModule.kt](https://github.com/kkkhs/pocketrun/blob/chapter-11/app/android/app/src/main/java/io/github/kkkhs/pocketrun/TaskHostModule.kt) → [AgentLoop.kt](https://github.com/kkkhs/pocketrun/blob/chapter-11/app/android/app/src/main/java/io/github/kkkhs/pocketrun/taskhost/AgentLoop.kt)：从开始按钮沿一回合阅读。
