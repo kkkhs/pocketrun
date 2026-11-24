@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 560 570" role="img" aria-labelledby="pr-linux-path-title pr-linux-path-desc" class="pr-linux-path-diagram">
+  <title id="pr-linux-path-title">同一份文件，两套路径</title>
+  <desc id="pr-linux-path-desc">PRoot 将 Linux 程序使用的 workspace items.csv 路径转换为 App 私有 workspaces/demo/items.csv；Linux 的 bin busybox 路径对应 Android 安装的只读 nativeLibraryDir 中的 BusyBox 文件。转换路径不复制 CSV，不改变 App UID，也不取得内核挂载权限。</desc>
+  <style>
+    .pr-linux-path-diagram .card { fill: var(--panel, #fff); stroke: var(--border, #dadde1); stroke-width: 1.5; }
+    .pr-linux-path-diagram .heading { fill: var(--ink, #1c1e21); font-size: 26px; font-weight: 650; }
+    .pr-linux-path-diagram .body { fill: var(--ink, #1c1e21); font-size: 22px; }
+    .pr-linux-path-diagram .label { fill: var(--muted, #606770); font-size: 19px; }
+    .pr-linux-path-diagram .edge { fill: none; stroke: var(--muted, #606770); stroke-width: 2; }
+  </style>
+  <defs><marker id="pr-linux-path-arrow" markerWidth="9" markerHeight="8" refX="8" refY="4" orient="auto"><path d="M0 0 9 4 0 8Z" fill="var(--muted, #606770)"/></marker></defs>
+  <text x="280" y="34" text-anchor="middle" class="heading">同一份文件，两套路径</text>
+  <rect x="20" y="60" width="520" height="215" rx="10" class="card"/>
+  <text x="42" y="94" class="label">Linux 程序使用</text>
+  <text x="42" y="125" class="body">/workspace/items.csv</text>
+  <path d="M280 142 V175" class="edge" marker-end="url(#pr-linux-path-arrow)"/>
+  <text x="300" y="164" class="label">PRoot 转换路径</text>
+  <text x="42" y="205" class="label">实际 App 私有文件</text>
+  <text x="42" y="239" class="body">filesDir/workspaces/demo/items.csv</text>
+  <rect x="20" y="300" width="520" height="220" rx="10" class="card"/>
+  <text x="42" y="334" class="label">Linux 程序使用</text>
+  <text x="42" y="365" class="body">/bin/busybox</text>
+  <path d="M280 381 V414" class="edge" marker-end="url(#pr-linux-path-arrow)"/>
+  <text x="300" y="403" class="label">固定程序绑定</text>
+  <text x="42" y="448" class="label">Android 安装的只读程序</text>
+  <text x="42" y="479" class="body">nativeLibraryDir/</text>
+  <text x="230" y="503" class="body">libalpine_bin_busybox.so</text>
+  <text x="280" y="552" text-anchor="middle" class="label">不复制工作文件，不改变 App UID</text>
+</svg>

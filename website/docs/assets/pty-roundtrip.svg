@@ -1,0 +1,34 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 560 640" role="img" aria-labelledby="pr-pty-roundtrip-title pr-pty-roundtrip-desc" class="pr-pty-roundtrip-diagram">
+  <title id="pr-pty-roundtrip-title">同一 PTY 会话里的输入和输出</title>
+  <desc id="pr-pty-roundtrip-desc">React 把用户文字交给 App Kotlin，native 写入 PTY master，经 slave 到达固定 BusyBox shell。shell 的标准输出和标准错误都写到 slave，App 从 master 读取合流文字，Kotlin 保存快照，React 轮询显示。启动 Promise 等待会话最终退出，快照查询在运行中反复发生。</desc>
+  <style>
+    .pr-pty-roundtrip-diagram .card { fill: var(--panel, #fff); stroke: var(--border, #dadde1); stroke-width: 1.5; }
+    .pr-pty-roundtrip-diagram .heading { fill: var(--ink, #1c1e21); font-size: 25px; font-weight: 650; }
+    .pr-pty-roundtrip-diagram .body { fill: var(--ink, #1c1e21); font-size: 21px; }
+    .pr-pty-roundtrip-diagram .label { fill: var(--muted, #606770); font-size: 19px; }
+    .pr-pty-roundtrip-diagram .edge { fill: none; stroke: var(--muted, #606770); stroke-width: 2; }
+  </style>
+  <defs><marker id="pr-pty-roundtrip-arrow" markerWidth="9" markerHeight="8" refX="8" refY="4" orient="auto"><path d="M0 0 9 4 0 8Z" fill="var(--muted, #606770)"/></marker></defs>
+  <text x="280" y="35" text-anchor="middle" class="heading">一份会话，多次输入和观察</text>
+  <rect x="30" y="72" width="500" height="114" rx="10" class="card"/>
+  <text x="54" y="106" class="heading">React / TypeScript</text>
+  <text x="54" y="138" class="body">输入框、发送按钮、输出预览</text>
+  <text x="54" y="165" class="label">运行中查询 getPtyOutput</text>
+  <path d="M145 186 V253" class="edge" marker-end="url(#pr-pty-roundtrip-arrow)"/>
+  <path d="M405 253 V186" class="edge" marker-end="url(#pr-pty-roundtrip-arrow)"/>
+  <text x="55" y="225" class="label">输入文字</text>
+  <text x="424" y="225" class="label">输出快照</text>
+  <rect x="30" y="253" width="500" height="126" rx="10" class="card"/>
+  <text x="54" y="288" class="heading">App Kotlin / JNI</text>
+  <text x="54" y="320" class="body">持有 PTY master，读写终端字节</text>
+  <text x="54" y="350" class="label">同一普通 App 进程</text>
+  <path d="M145 379 V451" class="edge" marker-end="url(#pr-pty-roundtrip-arrow)"/>
+  <path d="M405 451 V379" class="edge" marker-end="url(#pr-pty-roundtrip-arrow)"/>
+  <text x="49" y="420" class="label">写入 master</text>
+  <text x="415" y="420" class="label">读取 master</text>
+  <rect x="30" y="451" width="500" height="126" rx="10" class="card"/>
+  <text x="54" y="486" class="heading">PRoot / BusyBox shell</text>
+  <text x="54" y="518" class="body">slave 连接 stdin / stdout / stderr</text>
+  <text x="54" y="548" class="label">普通 App UID 的子进程</text>
+  <text x="280" y="613" text-anchor="middle" class="label">会话结束后，startPty Promise 返回最终结果</text>
+</svg>

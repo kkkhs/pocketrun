@@ -1,0 +1,35 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 560 775" role="img" aria-labelledby="pr-tool-approval-title pr-tool-approval-desc" class="pr-tool-approval-diagram">
+  <title id="pr-tool-approval-title">一次 CSV 请求先批准，后执行</title>
+  <desc id="pr-tool-approval-desc">React 申请固定 CSV 工具，App Kotlin 校验参数、绑定目标和当前 nonce，然后等待手机 UI。手机批准后，宿主重新检查目标与期限，才启动真实 Linux 读取；结果返回后还要确认资源清理。拒绝、过期和失效停止当前请求，不启动这一轮读取。</desc>
+  <style>
+    .pr-tool-approval-diagram .card { fill: var(--panel, #fff); stroke: var(--border, #dadde1); stroke-width: 1.5; }
+    .pr-tool-approval-diagram .heading { fill: var(--ink, #1c1e21); font-size: 25px; font-weight: 650; }
+    .pr-tool-approval-diagram .body { fill: var(--ink, #1c1e21); font-size: 21px; }
+    .pr-tool-approval-diagram .label { fill: var(--muted, #606770); font-size: 19px; }
+    .pr-tool-approval-diagram .edge { fill: none; stroke: var(--muted, #606770); stroke-width: 2; }
+  </style>
+  <defs><marker id="pr-tool-approval-arrow" markerWidth="9" markerHeight="8" refX="8" refY="4" orient="auto"><path d="M0 0 9 4 0 8Z" fill="var(--muted, #606770)"/></marker></defs>
+  <text x="280" y="35" text-anchor="middle" class="heading">一次请求：先批准，后执行</text>
+  <rect x="30" y="64" width="500" height="90" rx="10" class="card"/>
+  <text x="54" y="99" class="heading">1 · 申请固定 CSV 工具</text>
+  <text x="54" y="131" class="label">React 传工具名和空参数</text>
+  <path d="M280 154 V194" class="edge" marker-end="url(#pr-tool-approval-arrow)"/>
+  <rect x="30" y="194" width="500" height="90" rx="10" class="card"/>
+  <text x="54" y="229" class="heading">2 · 宿主校验并绑定目标</text>
+  <text x="54" y="261" class="label">保存当前 nonce、文件和环境版本</text>
+  <path d="M280 284 V324" class="edge" marker-end="url(#pr-tool-approval-arrow)"/>
+  <rect x="30" y="324" width="500" height="117" rx="10" class="card"/>
+  <text x="54" y="359" class="heading">3 · 等待手机决定</text>
+  <text x="54" y="391" class="body">同意这一条请求，或拒绝 / 取消</text>
+  <text x="54" y="420" class="label">尚未启动本轮读取</text>
+  <path d="M280 441 V495" class="edge" marker-end="url(#pr-tool-approval-arrow)"/>
+  <text x="300" y="474" class="label">有效同意</text>
+  <rect x="30" y="495" width="500" height="90" rx="10" class="card"/>
+  <text x="54" y="530" class="heading">4 · 真实 Linux 读取</text>
+  <text x="54" y="562" class="label">已有 LinuxSession 产生来源结果</text>
+  <path d="M280 585 V625" class="edge" marker-end="url(#pr-tool-approval-arrow)"/>
+  <rect x="30" y="625" width="500" height="90" rx="10" class="card"/>
+  <text x="54" y="660" class="heading">5 · 返回结果，确认清理</text>
+  <text x="54" y="692" class="label">宿主更新状态，React 查询并展示</text>
+  <text x="280" y="752" text-anchor="middle" class="label">拒绝、过期或目标失效：停止当前请求</text>
+</svg>

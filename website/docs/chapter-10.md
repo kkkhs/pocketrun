@@ -2,93 +2,189 @@
 sidebar_position: 11
 sidebar_label: 第 10 章 · 单任务上下文
 title: 把两次工具调用放进同一个任务
-description: 在原有工具宿主上维护一个目标、有界步骤账本、手机审批与失败停止边界。
+description: 沿读取设备信息和演示 CSV 的两步任务，理解 taskId、步骤账本、手机批准和返回页面的结果。
 ---
 
-[上一章](chapter-9.md)可以申请一个固定工具、在手机批准它、查看来源结果和清理。现在我们把两个动作连起来：**读取设备信息，再读取固定演示 CSV，最后一起核对。**
+import TaskLedgerFlow from './assets/task-ledger-flow.svg';
+import taskResult from './assets/chapter-10-task-result.png';
+import figureStyles from '@site/src/css/tutorial-figures.module.css';
 
-读者应看到同一个任务编号、一个目标，以及两条各自带有审批和结果的步骤。第一条的 Android API 信息不会被第二条 CSV 行数覆盖；第二条失败也不会把整个任务显示为完成。
+[上一章](chapter-9.md)，我们能请求一个固定工具，在手机批准后查看来源结果。现在提出一个稍长的目标：**先读取设备信息，再数出固定演示 CSV 的行数，最后把两条结果放在一起核对。**
 
-> **本机 App 已完成实际两步任务。** 任务专用 API 36 / ARM64 模拟器上的实际界面保留设备与 CSV 两条来源，CSV 经手机按钮批准后返回 3 行，两条均清理确认，任务显示 `completed`。2026-11-23 的独立章节包再次完成这条流程；[PR #17](https://github.com/kkkhs/pocketrun/pull/17) 与[验收 PR #20](https://github.com/kkkhs/pocketrun/pull/20) 已合并，main CI、Pages 与[源码快照](https://github.com/kkkhs/pocketrun/releases/tag/chapter-10)已完成。
+单个工具只负责一次动作。我们还需要记住“这两次调用属于同一个目标”，并保留第一步的结果，而不是让第二步把它覆盖。
 
-下面是账本的结构示例，不是设备截图；实际 API 和行数由工具返回：
+这就是本章的单任务上下文：**一个目标、一份步骤账本、一个当前运行的工具**。下一步仍由用户选择；模型选择留到第 11 章。
 
-```text
-一个任务目标：读取设备信息与演示 CSV
-  步骤 1：设备信息 → 保留 Android / API / ABI 结果
-  步骤 2：固定 CSV → 等手机批准 → 保留行数和清理结果
-两步一起核对 → 结束这个任务
+## 1. 先跑一次两步任务
+
+在自有或明确获授权的演示设备上，先到第 9 章点“准备固定 Linux 工具”，再打开“第 10 章 · 一个目标，多个工具步骤”。
+
+1. 点“开始两步演示任务”，看到目标、新的 `taskId` 和 `ready`。
+2. 点“步骤 1：读取设备信息”，看到 Android 版本、API、ABI 和工具成功状态。
+3. 点“步骤 2：申请读取演示 CSV”，它停在 `pending_approval`；第一条结果仍在页面上。
+4. 在手机点“同意任务当前步骤”，看到 CSV 行数、来源和清理结果。
+5. 核对两条结果后，点“核对两步结果并结束任务”，任务变成 `completed`。
+
+<figure style={{margin: '1.25rem 0', maxWidth: 400}}>
+  <img src={taskResult} alt="同一 task-1 已完成，账本保留设备步骤和手机批准的 CSV 步骤" style={{display: 'block', width: '100%', height: 'auto'}} />
+  <figcaption>实际独立章节包：设备为 Android 16/API 36，CSV 为 3 行；两条结果属于同一个 task-1。</figcaption>
+</figure>
+
+这条流程已实际完成。**一条工具成功不等于整个目标完成**；第二条失败时，第一条结果可以保留，但任务不能显示为完成。
+
+## 2. 谁执行，任务怎样推进
+
+上下文并不是又启动一个后端。下面几个 Kotlin 对象都在**同一个普通 App 进程**里：
+
+| 执行者 | 本章分工 |
+| --- | --- |
+| React / TypeScript | 目标、步骤列表、手机按钮 |
+| App Kotlin 的 `SingleTaskContext` | 记住目标、顺序、结果和当前步骤 |
+| 同一 App 的 `TaskHost`、Android adapters | 复用第 9 章校验、批准、执行与清理 |
+| PRoot / BusyBox 子进程 | 执行固定 CSV 读取，仍是 App UID |
+
+设备信息直接来自 Android API；CSV 才需要启动 Linux 程序。本例不需要 UID 2000 的显示后端，也不走 Binder 或电脑 ADB。
+
+**时间顺序**则是另一张地图：
+
+<figure style={{margin: '1.25rem 0', maxWidth: 560}}>
+  <TaskLedgerFlow className={`pr-ledger-diagram ${figureStyles.diagram}`} role="img" aria-labelledby="pr-ledger-title" aria-describedby="pr-ledger-desc" style={{display: 'block', width: '100%', height: 'auto'}} />
+  <figcaption>两步复用同一个宿主。图表示任务顺序，不是多出几个执行进程。</figcaption>
+</figure>
+
+## 3. 开始目标：得到一个 taskId
+
+先从 React 按钮看起。[SingleTaskPanel.tsx](https://github.com/kkkhs/pocketrun/blob/chapter-10/app/SingleTaskPanel.tsx) 固定了本例目标：
+
+```ts
+const DEMO_GOAL = '读取设备信息和固定演示 CSV 行数，核对两步结果';
 ```
 
-## 先跑两步演示
+开始按钮的实际代码是：
 
-只用本 App 私有演示数据。在第 9 章面板先点“准备固定 Linux 工具”，看到已校验的安装 generation，再打开“第 10 章 · 一个目标，多个工具步骤”。
+```tsx
+{button('开始两步演示任务', busy || active || !NativeTaskHost,
+  () => perform(() => NativeTaskHost!.beginTask(DEMO_GOAL)))}
+```
 
-1. 点“开始两步演示任务”。应看到目标“读取设备信息和固定演示 CSV 行数，核对两步结果”、新的 `taskId` 和 `ready`（可开始下一步）。对应 `SingleTaskPanel.tsx` 开始按钮 → `TaskHostModule.beginTask()`。
-2. 点“步骤 1：读取设备信息”。等它变成 `succeeded`（工具成功），清理为 `proven`（清理确认）；Android 版本、API 和 App UID 应来自当前设备。对应 `SingleTaskContext.submit()` → `TaskHost.submit()` → `AndroidTaskCapabilities.prepareDeviceInfo()`。
-3. 点“步骤 2：申请读取演示 CSV”。第一步仍在页面中，第二步停在 `pending_approval`（待批准），显示固定路径、安装代际与本次 request hash。对应 `SingleTaskPanel.tsx` CSV 按钮 → `submitTaskStep()`。
-4. 在手机点“同意任务当前步骤”。结果应由真实 Linux 来源返回；未修改的初始 CSV 行数应为 `3`，来源与清理也必须满足成功条件。对应 `TaskHostModule.decideFromAppUi()` → `TaskHost.onAppUiDecision()` → `AndroidTaskCapabilities.prepareCountDemoCsv()`。
-5. 核对两步数据后点“核对两步结果并结束任务”。只有这时任务变成 `completed`（任务完成）。对应 `TaskHostModule.finishTask()` → `SingleTaskContext.finish()`。
-
-这次实际运行里，两条步骤都保留在同一个 `task-1`：设备是 Android 16/API 36，CSV 为 3 行；点最后的核对按钮后，任务才显示 `completed`。
-
-![实际同一任务的设备步骤、CSV 步骤和完成状态](assets/chapter-10-task-result.png)
-
-拒绝第二步会停止这整个任务，而不是悄悄跳过它。点“取消整个任务”也会停止当前工作；如果清理显示 `unproven`，只重试当前资源清理，不用一个新任务覆盖它。
-
-对应代码：`app/SingleTaskPanel.tsx` 的 `perform()` 和两个步骤按钮调用同一个 `NativePocketRunTaskHost` 模块；`TaskHostModule.beginTask()`、`submitTaskStep()` 和 `finishTask()` 把动作交给 `taskhost/SingleTaskContext.kt`。
-
-<details>
-<summary>源码位置与发布状态</summary>
-
-本章新增源码在 [SingleTaskPanel.tsx](https://github.com/kkkhs/pocketrun/blob/chapter-10/app/SingleTaskPanel.tsx) 和 [SingleTaskContext.kt](https://github.com/kkkhs/pocketrun/blob/chapter-10/app/android/app/src/main/java/io/github/kkkhs/pocketrun/taskhost/SingleTaskContext.kt)；原生桥接在该包上一级的 `TaskHostModule.kt`。[chapter-10 源码快照](https://github.com/kkkhs/pocketrun/releases/tag/chapter-10)固定于 PR #17 的合并提交 `a2e3679`，实际验收与截图见 PR #20。
-
-</details>
-
-## 目标不是批准
-
-“帮我读 CSV”是任务目标，不是对读取动作的授权。任务只把连续步骤归到一起；每个工具仍经过第 9 章的参数校验、目标绑定和手机审批。
-
-`SingleTaskContext.submit()` 调用原有 `TaskHost.submit()`。CSV 仍只有空参数 `{}`，不能附带命令、路径、`approved: true` 或审批角色。模型、网页内容和任务描述都没有同意入口。
+这里的 `button()` 是页面自己的按钮辅助方法，底层仍是 React Native `Pressable`。点击后经 TurboModule 到 [TaskHostModule.kt](https://github.com/kkkhs/pocketrun/blob/chapter-10/app/android/app/src/main/java/io/github/kkkhs/pocketrun/TaskHostModule.kt)：
 
 ```kotlin
-val status = host.submit(copied, taskDeadlineNanos = deadline)
+override fun beginTask(goal: String, promise: Promise) = execute(promise) {
+    contextMap(task.begin(goal))
+}
+```
+
+真正记住目标的是 [SingleTaskContext.begin()](https://github.com/kkkhs/pocketrun/blob/chapter-10/app/android/app/src/main/java/io/github/kkkhs/pocketrun/taskhost/SingleTaskContext.kt)。下面摘取它创建本次任务的部分：
+
+```kotlin
+taskId = "task-${Math.addExact(sequence, 1L).also { sequence = it }}"
+goal = nextGoal
+steps.clear()
+```
+
+`taskId` 用来识别**这一次任务**，不是批准凭据；`steps.clear()` 只在开始新目标时清空旧账本，提交下一步时不会清空。
+
+原生返回任务状态，页面随后用 `getSingleTaskState()` 读取它。这样 React 展示的是 Kotlin 实际保存的目标和编号，不是自己猜出来的“已开始”。
+
+## 4. 读取设备：把第一条结果记下来
+
+设备按钮传入刚才保存的任务编号、固定工具名和空参数：
+
+```ts
+() => perform(() => NativeTaskHost!.submitTaskStep(state!.taskId!, 'android.device_info', '{}'))
+```
+
+`SingleTaskContext.submit()` 先确认 `taskId` 仍是当前任务、当前没有未结束的步骤，再把调用交给原有 `TaskHost`。**账本不会自己读取 Android 信息，也不会跳过工具校验。**
+
+设备 adapter 使用真实 Android API。例如 [AndroidTaskCapabilities.kt](https://github.com/kkkhs/pocketrun/blob/chapter-10/app/android/app/src/main/java/io/github/kkkhs/pocketrun/taskhost/AndroidTaskCapabilities.kt) 的设备结果包含：
+
+```kotlin
+"androidVersion" to Build.VERSION.RELEASE,
+"apiLevel" to Build.VERSION.SDK_INT.toString(),
+"supportedAbis" to Build.SUPPORTED_ABIS.joinToString(","),
+```
+
+这些值来自当前设备，不是页面固定的示例文字。设备观察无需审批，宿主执行、确认清理后，把实际结果返回。
+
+上下文为每次调用新增一个记录。`submit()` 中的实际摘录是：
+
+```kotlin
 steps += ContextStep(number, copied, status)
 pendingNumber = number
 phase = ContextPhase.RUNNING
 ```
 
-一条步骤记录自己的工具名、参数、请求 nonce/hash、backend epoch、审批、结果和清理。账本记录的是发生了什么，不是新的权限系统。
+`ContextStep` 保存步骤号、工具调用和宿主状态；`pendingNumber` 表示现在跟踪的是哪一条。后续结果只更新这条记录，不会覆盖整个列表。
 
-## 谁执行，先做什么
+## 5. 请求 CSV：同一个目标，仍要单独批准
 
-**执行层级**仍沿用上一章，没有多出一个 Node 服务或执行后端：
+第二个按钮还是提交到同一个任务：
 
-| 层级 | 本章分工 |
-| --- | --- |
-| React / TypeScript，普通 App 进程 | 展示目标、步骤结果与手机按钮 |
-| App Kotlin，同一 App UID | 单任务账本 → 原有 TaskHost → 校验、审批和资源所有权 |
-| PRoot / BusyBox，普通 App UID 子进程 | 读取固定私有 CSV |
-| typed Binder → 独立 UID 2000 后端 | 已有目标虚拟屏能力；本例不需要调用 |
-
-**执行阶段**则是这条顺序，不是另外几个进程：
-
-```text
-开始目标 → 读取设备 → 查看结果 → 请求 CSV
-       → 手机批准 → 查看来源和清理 → 核对并结束
+```ts
+() => perform(() => NativeTaskHost!.submitTaskStep(state!.taskId!, 'linux.count_demo_csv', '{}'))
 ```
 
-步骤可以多次经过同样的执行层。手机批准发生在 React 界面，宿主把当前 nonce 与已绑定的目标重新校验；Binder 不承接 CSV 工具，ADB 也不替 App 执行或代批。
+它与第一步的区别不是任务编号，而是工具的授权规则。固定 CSV 仍经过第 9 章的目标绑定、手机审批与真实 Linux 执行；“我的目标是读 CSV”不等于“我已批准这条请求”。
 
-## 下一步必须等上一条结束
+页面只在当前步骤为待批准且有 nonce 时显示批准按钮：
 
-任务阶段与工具阶段分开。`ready` 表示可以请求下一条步骤，`running` 表示当前步骤仍占用宿主；工具自己的阶段可能是待审批或执行中。
+```ts
+const current = steps[steps.length - 1];
+```
 
-`SingleTaskContext.refreshLocked()` 只吸收当前请求 nonce 与工具相匹配的结果。当前工具成功且资源清理为 `proven`，任务才回到 `ready`；拒绝、失效、超时、来源失败和清理未确认都停止推进。
+```ts
+const pending = current?.phase === 'pending_approval' && current.requestNonce;
+```
+
+“同意任务当前步骤”最终调用的仍是原手机入口：
+
+```ts
+NativeTaskHost!.decideFromAppUi(current.requestNonce!, 'approve')
+```
+
+这里带的是**当前请求 nonce**，不是整个任务的 `taskId`。用户只批准这一条已绑定动作；以后加入第三步时，也不能借用这次同意。
+
+拒绝会使整个任务停止推进，不是忽略失败继续下一条。批准后，adapter 复用第 7 章的 `LinuxSession.runDemo()`，核对行数、五个阶段退出码、来源状态和清理；它不从目标描述里提取任意路径或命令。
+
+## 6. 等结果回到页面：为什么要读状态
+
+与第 6 章“等待一条管道的最终 Promise”不同，`submitTaskStep()` 返回的是当前任务状态；CSV 可能还在等待批准或执行。页面因此持续读取账本：
+
+```ts
+const value = await NativeTaskHost.getSingleTaskState();
+if (live.current && request === generation.current) setState(value);
+```
+
+这段来自 `SingleTaskPanel` 的轮询，每 250ms 查询一次。**查询负责显示，不负责授权或执行**；安全检查在原生层，不能依赖页面刚好刷新。
+
+结果的完整返回路径是：
+
+```text
+Android API / LinuxSession 产生结果
+  → TaskHost 保存当前请求结果与清理状态
+  → SingleTaskContext 更新对应步骤
+  → TaskHostModule 把 steps 转成 stepsJson
+  → React 解析列表、渲染每一条结果
+```
+
+页面遍历的是整份 `steps`，而不是只显示最新一个工具。实际渲染摘录：
+
+```tsx
+{Object.entries(step.result).map(([key, value]) =>
+  <Text key={key} selectable style={{ color: colors.text }}>{key}：{value}</Text>)}
+```
+
+所以第一步的 `apiLevel` 与第二步的 `lineCount` 同时存在。你可以对照来源，而不是只能相信“任务完成”的文字。
+
+## 7. 核对后结束：ready 和 completed 不一样
+
+任务有自己的阶段，工具也有自己的阶段。工具执行成功且清理确认后，上下文回到 `ready`：表示**可以提交下一条步骤，或明确结束**。
+
+`SingleTaskContext.refreshLocked()` 的判断是：
 
 ```kotlin
-if (current.phase == HostPhase.SUCCEEDED &&
-    current.cleanupState == CleanupState.PROVEN) {
+if (current.phase == HostPhase.SUCCEEDED && current.cleanupState == CleanupState.PROVEN) {
     phase = ContextPhase.READY
 } else {
     phase = ContextPhase.FAILED
@@ -96,62 +192,77 @@ if (current.phase == HostPhase.SUCCEEDED &&
 }
 ```
 
-第 9 章单工具入口仍能独立使用，但任务进行中不能提交另一条不属于账本的请求。`withoutActiveTask()` 只挡新请求和环境准备，不挡当前请求的手机同意、拒绝、取消、查询和清理重试。
+这段只在当前工具已经结算后运行；待审批、执行中或尚在清理时不会进入这个判断。新步骤必须等前一条成功及清理确认，不并发占用原宿主的执行槽。
 
-## 为上下文设上限
+用户核对两条真实结果后，结束按钮调用：
 
-上下文就是这一个目标与它的步骤账本。它不是聊天消息越积越多的容器，也不是跨任务知识库。
+```ts
+() => perform(() => NativeTaskHost!.finishTask(state!.taskId!))
+```
 
-默认最多 **8 个工具步骤、120 秒、64 KiB 上下文和每条 16 KiB 结果**。目标最多 1024 UTF-8 字节；请求前预留步骤元数据空间，避免已经执行了工具才发现没有空间存账本。
+`finish()` 确认是当前任务、至少有一条成功步骤且没有待完成步骤，然后置为 `completed`。两步演示的页面还要求恰好有两条记录，才启用这个按钮。
 
-结果超过上限时停止任务，明确显示 `RESULT_BUDGET` 或 `CONTEXT_BUDGET`，不把截断后的字符串当完整成功结果。原有 TaskHost 来源结果仍受它自己的边界管理；账本不复制整份图片、UI 树或凭据，只保留工具返回的有限字段和来源引用。
+取消会终止当前工作，保留已经完成的记录；清理 `unproven` 时保留原 owner，只重试资源收尾。清理恢复不把失败任务改成完成，也不重新执行不确定的动作。
 
-达到步骤数量时不能再请求工具，但已成功完成的任务仍可明确结束。时间期限包含等待手机审批；超时会取消当前请求，不能用晚来的同意继续执行。
+## 8. 小结：上下文保存的是什么
+
+对这次任务，“上下文”不是一段聊天历史，而是：**目标 + 任务编号 + 两条带来源的步骤 + 当前进度**。
+
+它把连续动作归到一起，却没有增加权限。默认 8 步、120 秒、64 KiB 账本、每条 16 KiB 结果，使这份记录保持有界；等待手机批准也算在总期限里。
+
+练习：第一步已经成功，第二步被拒绝。页面是否应删掉第一步？整个任务是否应显示完成？分别从“事实记录”和“目标完成”解释。
+
+下一章保留这份账本和原宿主，只把“下一步按钮由用户点击”换成“模型提出下一条工具调用”。
+
+## 附录：预算、并发与实际验证
+
+正文代码固定到 `chapter-10`，不会把第 11 章的模型入口写进本章源码。
 
 <details>
-<summary>预算、取消和晚返回的实现细节</summary>
+<summary>账本预算与晚返回：实现细节</summary>
 
-`ContextBudget` 约束配置本身：最多 16 步、128 KiB 上下文、32 KiB 单结果、300 秒，调用者不能放开无限预算。元数据按每步 768 字节保守预留；小型固定参数及结果字段按 UTF-8 长度计量。这不是模型 tokenizer 的 token 数。
+`ContextBudget` 默认 8 步、120000ms、65536 字节上下文、16384 字节单结果；允许的配置上限是 16 步、300 秒、128 KiB、32 KiB。目标限 1024 UTF-8 字节；每步先预留 768 字节元数据，避免执行后才发现放不下结果。
 
-期限使用与宿主相同的单调时钟与纳秒单位。账本把绝对总期限交给 `TaskHost.submit()`，收紧这一条请求的审批和执行期限；手机批准、实际启动和结果提交都复用同一检查门。即使页面没有先查询状态，过期批准也不能开始工具。
+超限停止并显示 `RESULT_BUDGET`、`CONTEXT_BUDGET` 或对应原因，不把截断结果标为成功。账本只保留工具有限字段和来源引用，不复制整图、UI 树或凭据；这里的 UTF-8 字节数不是模型 token 数。
 
-页面每 250 ms 查询状态用于展示，不是授权安全门。模块失效时关闭账本与宿主；关闭标志不可逆，后续刷新、清理重试或旧回调不能把它变回可开始新目标的状态。它不宣称是进程死亡后还能恢复的后台任务调度器。
+账本把同一单调时钟的绝对 deadline 传给 `TaskHost.submit()`，收紧审批、实际启动和结果提交。晚来的批准不能开始过期工具；状态轮询不是安全门。
 
-整个任务有递增 `taskId`，工具各有原有 nonce/execution epoch。取消后仍保留已完成结果及当前清理状态；底层 TaskHost 拒绝旧回调，旧 taskId 不能提交新步骤。
+`refreshLocked()` 用 nonce 和工具名核对当前结果；旧任务编号不能提交新步骤，旧回调不能接到新记录。第 9 章独立入口仍保留，但 `withoutActiveTask()` 阻止它向活跃任务插入另一条请求；当前同意、拒绝、取消、查询和清理重试不受这个新请求门阻挡。
 
-清理未确认时宿主保留 owner 和请求槽。重试成功只是证明资源收尾，不把已经失败的任务改成完成；未确认动作也不会自动重放。
+模块失效时关闭账本和宿主；closed 不可逆。清理未确认保留 owner/请求槽，恢复清理不恢复任务成功。账本只在本次 App 会话内保存，不是跨进程死亡可恢复的任务调度器或长期记忆。
 
 </details>
 
-## 检查的是哪一层
-
-`SingleTaskContextTest` 是可运行的 JVM 检查：两步关联、等待审批、拒绝与目标换代、旧入口共存、取消后迟到回调、旧任务编号、数量/字节/时间预算、清理失败及恢复。它用测试能力驱动真实 TaskHost 核心，不是实际 Android/Linux 或真实模型成功证据。
-
-`SingleTaskPanel.test.tsx` 检查 RN 按钮提交同一个 taskId、固定工具参数、显式 nonce 决策和组件卸载后的晚返回。它不替手机点击，也不证明 GUI 像素渲染或设备执行正确。
-
 <details>
-<summary>构建与实际验收清单</summary>
+<summary>测试分层与设备批次</summary>
 
-在 App 跑 `npm run typecheck`、`npm run lint`、`npm test -- --runInBand`、`npm run audit:ci`；Android 跑相关 JVM、Debug / Release / AndroidTest 构建，ARM64 参数为 `-PreactNativeArchitectures=arm64-v8a --max-workers=2`。Debug 签名 APK 不公开发布。
+`SingleTaskContextTest` 使用测试能力驱动真实 TaskHost 核心，检查两步关联、等待批准、拒绝、目标换代、旧入口共存、取消/晚返回、旧 taskId、数量/字节/时间预算、清理失败与恢复；不是实际 Android/Linux 成功。
 
-网站另跑 `test:toolchain`、`typecheck`、`build`、`audit:ci`。隔离构建用 `DOCUSAURUS_NO_PERSISTENT_CACHE=1`；正文目录、折叠内容与链接也应检查。2026-11-20 已检查本地正文在桌面、390px 手机与深浅主题下的实际渲染，无整页横向溢出；这不是手机 App 执行验收。
+`SingleTaskPanel.test.tsx` 检查同 taskId、固定参数、显式 nonce 与卸载后的晚返回，不替代手机 GUI 操作。
 
-2026-11-20 已在任务专用 API 36 / ARM64 模拟器实际点击完成两步任务：设备来源是 App UID 10150、Android 16/API 36；CSV 返回 `/workspace`、guest UID 10150、行数 3、五阶段退出码 0、`sourceStatus=completed`、`cleanupStatus=done`。同一账本同时保留两条结果，最后核对按钮将任务置为 `completed`。Android `Chapter10ContextIntegrationTest` 的两次设备请求也已通过；它是另一项检查，不替代本例 CSV 的实际手机批准。
+2026-11-20，在任务专用 API36 ARM64 模拟器实际点击完成两步：App UID10150、Android16/API36；CSV 为 `/workspace`、guest UID10150、3 行、五阶段退出码0、source completed、cleanup done。最后核对按钮使任务 completed。`Chapter10ContextIntegrationTest` 的两次设备请求另有通过记录，不替代 CSV 手机批准。
 
-合入独立第 9 章源码后，第 10 章独立包又执行相同实际界面流程：目标与两步记录同属 `task-1`，任务最终为 `completed`，CSV 来源完成、清理确认、202ms、行数 3。该 Debug APK SHA256 为 `a61950af5b3c7c2bb2dac1355a558d0b386739559520b746973aba03597f87b5`，Test APK SHA256 为 `2fc3f213e2f2cbb02611282e0b7f906ea598f6197a0892c0bbc39375036c6a7a`；82 项相关 JVM 回归零失败、零跳过，Android 上的一项 context 集成也通过。
+2026-11-23 独立第10章包再次完成相同实际界面流程：`task-1`、两条记录、最终 completed，CSV 来源完成、清理确认、202ms、3 行。Debug APK SHA256 `a61950af5b3c7c2bb2dac1355a558d0b386739559520b746973aba03597f87b5`，Test APK SHA256 `2fc3f213e2f2cbb02611282e0b7f906ea598f6197a0892c0bbc39375036c6a7a`；82项相关 JVM 零失败/跳过，一项 Android context 集成通过。
+
+这些批次分别核对，不用源码存在或界面 completed 证明其他设备、模型或所有异常分支通过。
 
 </details>
 
-## 得到的是一个有边界的任务
+<details>
+<summary>实践与发布：可运行检查</summary>
 
-本章把多条工具步骤放进同一个目标，保留结果、审批、失败原因和资源收尾。它没有长期记忆、MCP、产品 subagent、多任务并发或自动恢复。
+按第1章准备已有工具链。在 `app/` 跑 `typecheck`、`lint`、`test -- --runInBand`、`audit:ci`；Android 跑相关 JVM、Debug/Release/AndroidTest 构建，参数 `-PreactNativeArchitectures=arm64-v8a --max-workers=2`。
 
-第 11 章再让真实模型选择下一条受限工具调用；本章手动按钮仅用于先看清任务边界。即使模型选择了一个工具，参数校验与手机审批也不能省掉。
+网站在 `website/` 跑 `test:toolchain`、`typecheck`、`build`、`audit:ci`，隔离构建设置 `DOCUSAURUS_NO_PERSISTENT_CACHE=1`，检查折叠内容、链接与手机/桌面深浅主题。历史网页渲染不替代 App 执行；文档改写也不代表重新做了设备测试。设备实践只用自有或明确授权的演示设备和私有样本，显式选择安装目标，不公开调试签名 APK。
+
+PR #17 和验收 PR #20 已合并，main CI/Pages 通过。注释 tag `chapter-10` 固定 `a2e3679`；源码归档与校验值已匿名下载、按完整文件核对。
+
+</details>
 
 ## 本章源码
 
-- [PR #17：单任务上下文与两步演示，已合并](https://github.com/kkkhs/pocketrun/pull/17)
-- [PR #20：独立任务与最终模型包的实际验收记录](https://github.com/kkkhs/pocketrun/pull/20)
-- [固定实现提交 `56c26ee`](https://github.com/kkkhs/pocketrun/commit/56c26ee290136420812cde1add43ba2dbd3f80ff)
-
-[本章源码 Release](https://github.com/kkkhs/pocketrun/releases/tag/chapter-10)已发布，包含完整源码归档与 SHA256 校验值。注释 tag `chapter-10` 固定于 `a2e3679`；匿名下载与完整文件核对已通过。
+- [PR #17：单任务上下文与两步演示](https://github.com/kkkhs/pocketrun/pull/17)
+- [PR #22：任务主线、原位代码与图解](https://github.com/kkkhs/pocketrun/pull/22)
+- [PR #20：独立任务与最终模型包验收](https://github.com/kkkhs/pocketrun/pull/20)
+- [chapter-10 源码 Release](https://github.com/kkkhs/pocketrun/releases/tag/chapter-10)：完整源码归档与 SHA256。
+- [SingleTaskPanel.tsx](https://github.com/kkkhs/pocketrun/blob/chapter-10/app/SingleTaskPanel.tsx) → [TaskHostModule.kt](https://github.com/kkkhs/pocketrun/blob/chapter-10/app/android/app/src/main/java/io/github/kkkhs/pocketrun/TaskHostModule.kt) → [SingleTaskContext.kt](https://github.com/kkkhs/pocketrun/blob/chapter-10/app/android/app/src/main/java/io/github/kkkhs/pocketrun/taskhost/SingleTaskContext.kt)：从按钮到账本的阅读顺序。

@@ -1,0 +1,45 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 560 780" role="img" aria-labelledby="pr-model-title pr-model-desc" class="pr-model-diagram">
+  <title id="pr-model-title">先读模型回复，再选择执行工具或正常结束</title>
+  <desc id="pr-model-desc">手机请求模型并读取完整回复。tool_use 分支校验整回合，再由原宿主执行获准工具，结果用原调用 ID 追加到消息并发起下一回合。只有收到合法 end_turn，且已有任务步骤成功和清理确认，才能正常结束。工具返回不直接连接完成。拒绝、失败、取消或超预算时停止。</desc>
+  <style>
+    .pr-model-diagram { --ink: var(--ifm-font-color-base, #1c1e21); --muted: var(--ifm-color-emphasis-700, #606770); --border: var(--ifm-color-emphasis-300, #dadde1); --panel: var(--ifm-background-surface-color, #fff); font-family: system-ui, -apple-system, "Segoe UI", sans-serif; }
+    .pr-model-diagram .heading { fill: var(--ink); font-size: 24px; font-weight: 650; }
+    .pr-model-diagram .body { fill: var(--ink); font-size: 20px; }
+    .pr-model-diagram .note { fill: var(--muted); font-size: 19px; }
+    .pr-model-diagram .card { fill: var(--panel); stroke: var(--border); stroke-width: 1.5; }
+    .pr-model-diagram .edge { fill: none; stroke: var(--muted); stroke-width: 2; }
+  </style>
+  <defs><marker id="pr-model-arrow" markerWidth="9" markerHeight="8" refX="8" refY="4" orient="auto"><path d="M0 0 9 4 0 8Z" fill="var(--muted)"/></marker></defs>
+  <text x="280" y="34" text-anchor="middle" class="heading">模型回合：先读回复，再决定下一步</text>
+  <rect x="20" y="64" width="520" height="80" rx="10" class="card"/>
+  <text x="42" y="98" class="heading">1 · 请求模型</text>
+  <text x="42" y="130" class="body">目标 + 消息历史 + 允许的工具</text>
+  <path d="M280 144 V194" class="edge" marker-end="url(#pr-model-arrow)"/>
+  <rect x="20" y="194" width="520" height="80" rx="10" class="card"/>
+  <text x="42" y="228" class="heading">2 · 读取完整回复</text>
+  <text x="42" y="260" class="body">有工具提议，还是正常结束？</text>
+  <path d="M145 274 V350" class="edge" marker-end="url(#pr-model-arrow)"/>
+  <text x="168" y="317" class="note">tool_use</text>
+  <path d="M420 274 V350" class="edge" marker-end="url(#pr-model-arrow)"/>
+  <text x="437" y="317" class="note">end_turn</text>
+  <rect x="20" y="350" width="250" height="86" rx="10" class="card"/>
+  <text x="42" y="384" class="heading">3 · 校验回合</text>
+  <text x="42" y="416" class="body">检查工具、参数和 ID</text>
+  <path d="M145 436 V476" class="edge" marker-end="url(#pr-model-arrow)"/>
+  <rect x="20" y="476" width="250" height="96" rx="10" class="card"/>
+  <text x="42" y="510" class="heading">4 · 实际工具</text>
+  <text x="42" y="540" class="body">CSV 仍等手机批准</text>
+  <text x="42" y="562" class="body">核对来源与清理</text>
+  <path d="M145 572 V612" class="edge" marker-end="url(#pr-model-arrow)"/>
+  <rect x="20" y="612" width="250" height="96" rx="10" class="card"/>
+  <text x="42" y="646" class="heading">5 · 返回结果</text>
+  <text x="42" y="676" class="body">原调用 ID + 安全摘要</text>
+  <text x="42" y="698" class="body">追加消息，再次请求</text>
+  <path d="M20 660 H8 V104 H20" class="edge" marker-end="url(#pr-model-arrow)"/>
+  <rect x="310" y="350" width="230" height="170" rx="10" class="card"/>
+  <text x="332" y="388" class="heading">核对并结束</text>
+  <text x="332" y="424" class="body">成功步骤已结算</text>
+  <text x="332" y="454" class="body">清理确认</text>
+  <text x="332" y="484" class="body">显示模型总结</text>
+  <text x="280" y="752" text-anchor="middle" class="note">拒绝、失败、取消或超预算时停止，不重放动作。</text>
+</svg>

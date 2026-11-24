@@ -1,17 +1,44 @@
 ---
 sidebar_position: 8
 sidebar_label: 第 7 章 · PRoot 与 Alpine
-title: 用 Linux 命令读取同一份工作文件
-description: 在普通 App UID 下启动固定的 Alpine 派生命令环境，核对版本、目录、CSV 行数与命令及清理结果。
+title: 让 Linux 命令读到 App 里的同一份 CSV
+description: 从读取同一份 CSV 出发，理解 PRoot 的路径转换、BusyBox 与 musl，以及结果怎样从 Linux 子进程回到 React。
 ---
 
-> **本章已发布。** [PR #12](https://github.com/kkkhs/pocketrun/pull/12)、main CI、Pages 与 [chapter-7 源码快照](https://github.com/kkkhs/pocketrun/releases/tag/chapter-7)均已完成。任务专用 API 36 / ARM64 模拟器验证了实际 App 界面、正常演示、12 项生命周期和 7 个死亡恢复场景；本章仍是普通 App UID 下的最小 BusyBox/musl 环境。
+import linuxResultScreenshot from './assets/chapter-7-linux-result.png';
+import LinuxPathMapping from './assets/linux-path-mapping.svg';
+import figureStyles from '@site/src/css/tutorial-figures.module.css';
 
-[上一章](chapter-6.md)，我们在 App 私有目录里准备了 `items.csv`，用 Android 自带的 toybox 读取它，得到包含表头的三行。
+[上一章](chapter-6.md)，App 在私有目录里准备了 `items.csv`，用 Android 自带的 toybox 数出了三行。文件已经在手机上，不需要重新导入。
 
-这一章继续读**同一份文件**，但把执行环境换成真正的 Linux 用户态程序：**启动基于 Alpine 的固定小环境，读取版本，检查当前目录和真实 UID，再数出 CSV 的三行。** 不重建工作数据，也不改用 shell UID 2000。
+这一章继续做同一个任务：**让 Linux 的 `cat` 和 `wc` 读到这份 CSV，再把行数显示回 PocketRun。** 我们增加的是 Linux 用户态运行环境，不是新的工作数据，也不是另一台虚拟机。
 
-在本次设备上的正常演示中，真实标准输出为：
+```text
+准备：保留原 CSV，校验固定 Linux 程序和目录
+执行：转换程序看见的路径 → 读取同一文件 → 收集输出
+核对：行数、目录、身份与退出结果
+结束：回收本轮进程和临时目录，保留 CSV
+```
+
+这里有一个值得先想清楚的问题：Linux 命令使用 `/workspace/items.csv`，而 Android 把文件放在 App 私有目录里。**这两个名字怎样指向同一个文件？** 本章就沿着这个问题往下走。
+
+## 1. 先运行，认识结果里的几行文字
+
+在自己拥有或明确获授权的 **Android 14 / API 34 及以上、ARM64 的 64 位 App 进程**中，打开“第 7 章 · PRoot 与 Alpine”：
+
+1. 点“准备 Linux 环境”。首次使用时安装固定环境；已有 CSV 应提示“保留已有工作数据”。
+2. 点“运行 Linux 演示”。未修改的初始文件应得到行数 `3`。
+3. 同时核对 cwd 为 `/workspace`、实际 UID 等于 App UID、五个内部步骤和外层进程的退出码都为 `0`，资源清理为 `done`。
+4. 再次准备和运行。应复用已校验安装，读取同一份工作文件，而不是每次重建样本。
+
+<figure style={{margin: '1.25rem 0', maxWidth: 400}}>
+  <img src={linuxResultScreenshot} alt="独立第 7 章 App 读取同一 CSV，显示目录、身份、三行结果与清理" width="400" style={{display: 'block', width: '100%', height: 'auto'}} />
+  <figcaption>同一 CSV 的真实行数、运行目录、身份与清理结果。</figcaption>
+</figure>
+
+这张实际截图来自 2026-11-23 的独立章节包。原 CSV 被保留，App/guest UID 都是 10150，读取耗时 142ms。这个 UID 是该设备分配的，不是代码要求所有手机输出的常数。
+
+演示的标准输出为：
 
 ```text
 3.22.8
@@ -21,192 +48,234 @@ description: 在普通 App UID 下启动固定的 Alpine 派生命令环境，�
 PR_EXITS:0,0,0,0,0
 ```
 
-前四行分别是 Alpine 版本、命令看见的工作目录、实际 UID 和行数。最后一行记录五个内部步骤的退出码；外层 PRoot 进程也必须退出 `0`。
+第一行是环境版本；第二行是程序认为自己所在的目录；第三行来自真实 `id -u`；第四行才是 CSV 行数。`3` 仍是一行表头加两行商品，且演示文件每行以换行结束，不是商品数量相加。
 
-`10150` 是这台模拟器分配给 PocketRun 的 App UID，不是所有设备都应输出的常数。`3` 仍然是一行表头加两行商品，不是商品数量之和。
+**为什么多读版本、目录和 UID？** 因为只拿到一个 `3`，还无法确认它来自正确的文件和运行环境。下面的实现会把这些观察一起检查，再生成给页面的结果。
 
-## 先在界面跑一遍
+## 2. 谁执行：换了程序，权限没有增加
 
-本章需要自己拥有或明确获授权的 **Android 14 / API 34 及以上、ARM64 设备，并且 App 运行在 64 位进程中**。这比前章的基础设备条件更严格；代码会拒绝不支持的运行环境，不降级成其他执行身份。
-
-使用本地第 7 章源码构建的 App，打开“第 7 章 · PRoot 与 Alpine”：
-
-1. 点“准备 Linux 环境”。应看到 `Alpine 3.22.8`、App UID，以及私有工作目录映射到 `/workspace` 的说明。
-2. 第一次完整安装应提示“首次完整安装”；已有工作文件应提示“保留已有工作数据”，不能把已有 CSV 覆盖成初始样本。
-3. 点“运行 Linux 演示”。检查版本为 `3.22.8`、cwd 为 `/workspace`、实际 UID 与 App UID 一致；未修改的初始 CSV 应得到行数 `3`。
-4. 检查五个阶段退出码都为 `0`、PRoot 退出码为 `0`，且“资源清理”为 `done`。不能只看“命令状态：completed”。
-5. 再次准备，应提示“复用已校验安装”；再次运行，再核对目录、UID、文件结果与清理状态。
-
-下面是这次仅含第 7 章能力的实际 App 结果：安装被复用、原 CSV 保留；App/guest UID 都为 10150、cwd 为 `/workspace`、3 行、五阶段与外层退出码都为 0，142ms 后清理确认。
-
-![实际第 7 章 App 的 Linux 来源、行数、退出码和清理结果](assets/chapter-7-linux-result.png)
-
-操作尚未结束时可以点“取消 Linux 操作”。固定演示可能很快结束，来不及取消；“没有可取消的任务”不能算测到了取消。
-
-初始化失败、校验失败或清理为 `unproven` 时，停止核对错误，不改权限重试、不手工删除仍可能被进程使用的目录，也不把有输出当作完整成功。改过的 CSV 不一定再得到 `3`。
-
-对应代码：`app/LinuxPanel.tsx` 的 `perform()` 调用 `prepareLinux()` 或 `runLinuxDemo()`，`cancel()` 调用 `cancelLinux()`，并分别展示命令状态与清理状态。`app/specs/NativePocketRunLinux.ts` 只接受本次操作的关联 token，**没有命令、环境变量、绑定目录或任意文件路径参数**。
-
-## 谁在执行，权限有没有改变
-
-上一章的普通 App 身份保留下来：
-
-| 代码或进程 | 做什么 | 实际身份 |
+| 负责者 | 在这次任务中做什么 | 进程与身份 |
 | --- | --- | --- |
-| React / TypeScript | 发起固定操作、展示版本与结果 | App 进程 |
-| App Kotlin | 校验安装与工作目录，启动进程，管理取消和清理 | 同一个 App 进程、App UID |
-| PRoot 及 Linux 程序 | 调整程序看见的路径，运行 BusyBox 命令 | 独立进程，仍是普通 App UID |
+| React / TypeScript | 点击准备和运行，显示行数与状态 | 普通 App 进程 |
+| App Kotlin | 校验环境、选择参数、启动并回收进程 | 同一个 App 进程、App UID |
+| PRoot | 跟踪 Linux 程序，把它们使用的路径转换为实际文件路径 | App UID 下的子进程 |
+| BusyBox / musl | 执行命令、提供命令所需的 C 运行库 | 同一 App UID 下的 Linux 用户态程序 |
 
-Linux 程序使用的是 Android 设备的内核，不是另一台虚拟机。**PRoot 做用户态兼容，不提供 Android root，也不是额外的安全沙箱。** 真正的权限边界仍来自 App UID、Android 沙箱与系统策略。
+**这些程序仍使用手机的 Android/Linux 内核。** PRoot 没有启动另一个内核，也没有给 App root 或 shell UID 2000。目录名 `/root`、`HOME=/root` 都只是程序看见的路径，不改变真实 UID。
 
-目录里有 `/root`、环境变量里有 `HOME=/root`，也不会把执行身份变成 root。本章用真实 `id -u` 核对身份，不通过模拟 UID 的选项制造 `0`。
+从 React 视角看，TurboModule 仍是“调用 App 内的 Kotlin 方法”。只有 Kotlin 启动程序时才产生子进程；一个方法、一层语言和一个进程不是同一件事。
 
-前章的 Android 操作通道仍是 App Kotlin → Binder → UID 2000 的 shell 后端。本章文件与 Linux 命令不走那条通道，不需要先启动它或完成无线 ADB 配对。电脑上的 ADB 只用于开发安装和测试，不参与产品的运行数据路径。
+前章的手机操作通道是 App Kotlin → Binder → UID 2000 后端。本章直接使用普通 App 的文件和进程能力，**不需要先配对 ADB 或启动显示后端**。开发时的电脑 ADB 可以安装和测试 App，但不搬运产品运行中的 CSV 数据。
 
-下面的 Kotlin 文件位于 `app/android/app/src/main/java/io/github/kkkhs/pocketrun/`。源码尚未公开发布，文末给出本地阅读入口和待建快照策略，不链接不存在的 `chapter-7` tag。
+## 3. 准备环境：先让程序和数据各就各位
 
-## 准备一个固定的小环境
+点准备按钮时，React 调用的仍是一个普通异步方法。下面摘自固定 [chapter-7 的 LinuxPanel.tsx](https://github.com/kkkhs/pocketrun/blob/chapter-7/app/LinuxPanel.tsx#L38-L43)：
 
-这里的“Alpine 环境”是**从官方 Alpine 3.22.8 / aarch64 派生的最小 BusyBox / musl 环境**，不是完整发行版，也没有 `apk add` 或动态安装程序的能力。
+```ts
+const next = await NativePocketRunLinux.prepareLinux(token);
+if (generation === epoch.current) {
+  if (next.token !== token) { throw new Error('Linux 安装结果不属于当前操作。'); }
+  setInfo(next);
+}
+```
 
-BusyBox 用一个程序提供 `cat`、`wc`、`id` 等命令；musl 提供这些 Linux 程序使用的基础 C 运行库。PRoot 让它们按预期的 Linux 路径查找程序和数据。
+`token` 把返回值和这次操作关联；`setInfo(next)` 才让页面显示安装、UID 和工作目录。它不是执行权限，也不是模型凭据。
 
-可执行文件和可写数据分开放置：
+Kotlin 接到请求后，先沿用第 6 章的文件准备，再准备 Linux 环境：[LinuxSession.prepare()](https://github.com/kkkhs/pocketrun/blob/chapter-7/app/android/app/src/main/java/io/github/kkkhs/pocketrun/LinuxSession.kt#L48-L64)。
 
-| 内容 | 放在哪里 | App 如何使用 |
-| --- | --- | --- |
-| PRoot、PRoot loader、BusyBox、musl 四个可执行文件 | APK 携带，由 Android 安装到 `nativeLibraryDir` | 校验固定 SHA256，再启动或绑定；App 不写这里 |
-| 版本文件、账号数据、目录与相对链接 | App 私有目录中的 data-only rootfs | 校验、解压和检查；普通文件没有执行权限 |
-| `items.csv` | 前章的 `filesDir/workspaces/demo` | 保留内容，映射给本次命令读取 |
+```kotlin
+val sample = WorkspaceSession(filesDirectory).use { it.prepare() }
+val next = installer.prepare({ guard(operation) }) { action ->
+    synchronized(lock) { guard(operation); action() }
+}
+```
 
-**不是把下载的程序放进可写目录再 `chmod +x`。** 安装到 App 私有目录的压缩包只含数据和链接，不含可执行二进制文件；四个程序来自 Android 安装的只读位置。
+第一行的关键是**复用同一个 `WorkspaceSession`**：已有 `workspaces/demo/items.csv` 就保留它，不另外造一份 Linux 专用 CSV。
 
-对应代码：`LinuxModule.createSession()` 读取 `linux/runtime.json`，取得系统提供的 `nativeLibraryDir`；`LinuxRuntimeManifest.read()` 校验固定版本与清单；`RootfsInstaller.prepare()` 校验四个文件和数据包，在独立临时目录完成安装，再发布完整安装。
+接下来要准备的不是完整 Alpine 发行版，而是 Alpine 3.22.8 派生的最小 BusyBox/musl 环境：
 
-<details>
-<summary>安装内容怎样校验，怎样避免半安装与路径逃逸</summary>
+- **BusyBox**：一个可执行程序提供 `cat`、`wc`、`id` 等命令。
+- **musl**：这些 Linux 程序使用的基础 C 运行库。
+- **PRoot / loader**：承接程序启动与路径兼容。
+- **data-only rootfs**：提供版本文件、目录、账号数据与允许的链接。
 
-当前运行清单是 `app/android/app/src/main/assets/linux/runtime.json`，版本为 `alpine-3.22.8-minimal-proot-5.1.107.102-candidate2-prebound`，variant 为 `minimal-busybox-musl`。只包含四个 ELF 可执行文件和两个 guest 代码绑定，不是曾研究的完整 19-ELF 候选。
+四个可执行文件由 APK 携带，Android 安装到只读的 `nativeLibraryDir`；可写 rootfs 和 CSV 在 App 私有目录里。**可执行代码和工作数据分开，是因为 Android 对可写目录中的程序执行有真实限制。** 本例没有把下载的 ELF 放进私有目录再 `chmod +x`，也没有降低 `targetSdk` 绕开限制。
 
-当前数据资产为 `linux/alpine-data.bin`，587 字节、34 个条目，SHA256 为 `8c4ac18ae5babcbd3f692e1c4bed6710eb965967da792fc6ad597def4a1eff06`。它预置普通的 0600、零字节 `dev/null`，供固定 `/dev/null` 绑定使用，不是字符设备。`.bin` 只是打包名称，内容仍是固定的 gzip / ustar 数据归档；清单、实际字节与安装库存都要核对，不能只信文件名。先前正常演示使用的 570 字节资产是另一份历史快照，不能把它的设备结果借给新资产。
+固定校验与完整安装由 [RootfsInstaller](https://github.com/kkkhs/pocketrun/blob/chapter-7/app/android/app/src/main/java/io/github/kkkhs/pocketrun/RootfsInstaller.kt) 负责；归档和许可证细节放在文末。本章环境不提供 `apk add` 或动态包安装。
 
-`RootfsInstaller.verifyArtifacts()` 检查四个只读文件及各自 SHA256；`RootfsTar.extract()` 有界解压，只接受普通数据文件、目录与允许的链接，拒绝 ELF、可执行普通文件、重复路径、截断归档、特殊条目和路径逃逸。归档链接在普通文件写入完成后才创建，最终变为仍落在 rootfs 内的相对链接。
+## 4. 让两个路径指向同一份文件
 
-安装先在本次拥有的 stage 目录完成，写入同步后的安装清单，再通过 `AtomicSamplePublisher.publishDirectory()` 的 no-replace 发布约定变为完整版本。已有版本重新校验后复用，不覆盖另一个安装者的结果，不把目录存在当作安装完成。
+Linux 程序寻找 `items.csv` 时，先需要一个它能理解的工作目录。PRoot 的 `-w /workspace` 设定程序看见的 cwd，固定绑定再把 App 目录转换成 `/workspace`。
 
-本例 App 的 `targetSdk` 保持 36。没有通过降低 target、可写目录执行、显式调用 Android linker、memfd 或 RWX 内存绕开系统执行限制；运行条件不满足时明确失败。这些限制与普通目录需要 owner 的读写/进入权限是两回事。
+<figure style={{margin: '1.25rem 0', maxWidth: 560}}>
+  <LinuxPathMapping className={`pr-linux-path-diagram ${figureStyles.diagram}`} role="img" aria-labelledby="pr-linux-path-title" aria-describedby="pr-linux-path-desc" style={{display: 'block', width: '100%', height: 'auto'}} />
+  <figcaption>这张图回答“路径最后落到哪里”，不是任务的时间顺序。PRoot 转换路径；它没有给 App 内核挂载权限。</figcaption>
+</figure>
 
-</details>
+实际启动参数在 [LinuxSession.demoArgv()](https://github.com/kkkhs/pocketrun/blob/chapter-7/app/android/app/src/main/java/io/github/kkkhs/pocketrun/LinuxSession.kt#L204-L208)：
 
-## 让 Linux 读到原来的 CSV
+```kotlin
+listOf(File(native, "libproot.so").path, "--kill-on-exit", "-r", root.path, "-w", "/workspace") +
+    bindings.flatMap { listOf("-b", "${File(native, it.name).path}:${it.guestPath}") } +
+    listOf("-b", "${workspace.path}:/workspace", "-b", "${tmp.path}:/tmp", "-b", "/proc:/proc",
+        "-b", "/dev/null:/dev/null", "/bin/busybox", "sh", "-c", DEMO_SCRIPT)
+```
 
-`LinuxSession.prepare()` 复用第 6 章的 `WorkspaceSession.prepare()`，所以两个面板使用同一个 `workspaces/demo/items.csv`。第一次没有文件时准备样本，已有文件则保留，不另外复制一份可能过期的 CSV。
+先只看与 CSV 有关的两处：
 
-运行时，`LinuxSession.demoArgv()` 固定把这个私有工作目录映射为 `/workspace`，并把命令的工作目录设成 `/workspace`。因此 Linux 命令中的相对路径 `items.csv` 指向前章的真实工作文件。
+1. `-w /workspace`：相对文件名 `items.csv` 从这个目录解析。
+2. `${workspace.path}:/workspace`：这里的 `workspace.path` 就是 App 的 `filesDir/workspaces/demo`。
 
-这是 PRoot 提供的路径映射，不是获得 Android 内核的 mount 权限，也不是给程序开放任意宿主目录。映射由 Kotlin 选择，JavaScript 不能提交新的绑定路径。
+所以 `cat items.csv` 读到的是第 6 章留下的文件。PRoot 不复制它；文件被合法修改后，下一次读取也会反映新内容。
 
-同理，Linux 看见的 `/bin/busybox` 与 `/lib/ld-musl-aarch64.so.1` 对应 APK 的两个固定只读文件。私有 rootfs 中的空占位文件不是实际执行的程序。
+程序本身同样使用路径绑定：Linux 看见的 `/bin/busybox`、`/lib/ld-musl-aarch64.so.1` 对应 APK 安装的固定程序。PRoot 跟踪程序的系统调用并处理路径转换，让 Linux 程序按自己的目录布局找到程序与数据；真正的访问仍受 App UID 和系统策略约束。
 
-## 执行固定脚本，再核对每一步
+绑定、环境和脚本都由 Kotlin 选择。**React 只能说“运行这个演示”，不能提交新的目录、可执行文件或命令字符串。**
 
-固定演示按下面的顺序观察环境，再读取文件。这是内部脚本的可读形式，不是用户输入框：
+## 5. 运行命令：这次管道由 Linux shell 连接
+
+第 6 章用 Kotlin 把两个 toybox 进程连接起来。本章的外层仍由 `ProcessBuilder` 启动，但里面运行的是 BusyBox shell；`cat` 与 `wc` 之间的管道由这个 shell 安排。
+
+固定脚本的核心读取动作是：
 
 ```sh
-cat /etc/alpine-release
-pwd
-id -u
 cat items.csv | wc -l
 ```
 
-与上一章不同，管道现在由 Linux BusyBox 的 shell 执行；App Kotlin 仍用 `ProcessBuilder` 的参数数组启动外层 PRoot，并用非交互字节管道收集输出。
+这是脚本核心动作的说明，**不是完整生产脚本**。实际 [DEMO_SCRIPT](https://github.com/kkkhs/pocketrun/blob/chapter-7/app/android/app/src/main/java/io/github/kkkhs/pocketrun/LinuxSession.kt#L199-L203) 还读取版本、cwd 和 UID，分别保存版本、pwd、UID、cat、wc 的退出码，最后输出 `PR_EXITS`。这样最后的 `wc` 成功不会隐藏前面的文件读取失败。
 
-`LinuxSession.demoEnvironment()` 提供固定环境，清除不需要的继承环境；`demoArgv()` 固定选择 PRoot、rootfs、映射和脚本。存在内部 `sh -c` 不等于对外开放任意 shell：脚本是 Kotlin 常量，没有拼入 JavaScript 命令文本。
+这次数据传递是：
 
-实际脚本还分别保存版本、pwd、UID、cat、wc 的退出码，再输出 `PR_EXITS` 记录。这样 `wc` 的成功不能隐藏前面的文件读取失败。
+```text
+App 私有 CSV
+  → PRoot 转换后的 /workspace/items.csv
+  → BusyBox cat 的 stdout
+  → shell 建立的管道
+  → BusyBox wc 的 stdin
+  → 外层进程 stdout → App Kotlin
+```
 
-对应代码：`LinuxSession.runDemo()` 校验安装与工作目录，调用前章的 `CommandPipeline.execute()`；`parseDemo()` 检查返回格式，确认版本、实际 UID、目录与五个阶段退出码，再生成给界面的结构化结果。
+`LinuxSession.runDemo()` 复用前章 [CommandPipeline.execute()](https://github.com/kkkhs/pocketrun/blob/chapter-7/app/android/app/src/main/java/io/github/kkkhs/pocketrun/CommandPipeline.kt) 收集外层输出。它使用固定参数数组，并提供固定环境、清除不必要的继承环境；内层的 `sh -c` 只执行 Kotlin 常量，不拼接 JS 输入。
 
-**输出、命令退出和资源清理是三个不同问题。** PRoot 返回 `0` 但内容不符合约定时仍判为失败；即便命令成功，清理未确认也不能作为完整验收通过。
+## 6. 把文字变成页面里的“CSV 行数”
+
+进程输出仍是一段文字。App 不能看到第四行是 `3` 就立即宣告成功，还要检查这段文字属于预期的环境。
+
+[LinuxSession.runDemo()](https://github.com/kkkhs/pocketrun/blob/chapter-7/app/android/app/src/main/java/io/github/kkkhs/pocketrun/LinuxSession.kt#L103-L106) 中的检查是：
+
+```kotlin
+val parsed = parseDemo(result.stdout)
+val valid = parsed != null && parsed.version == RootfsInstaller.ALPINE_VERSION &&
+    parsed.uid == appUid && parsed.cwd == "/workspace" && parsed.exits.all { it == 0 }
+val status = if (result.status == "completed" && !valid) "failed" else result.status
+```
+
+`parseDemo()` 把版本、cwd、UID、行数与内部退出码拆成结构化字段。外层进程成功但这些观察不符合约定，最终状态仍是 `failed`。
+
+[LinuxModule.resultMap()](https://github.com/kkkhs/pocketrun/blob/chapter-7/app/android/app/src/main/java/io/github/kkkhs/pocketrun/LinuxModule.kt#L106-L121) 将字段转成 TurboModule 可以返回的普通数据；React 等待的 Promise 随后得到这个结果。在 [LinuxPanel.tsx](https://github.com/kkkhs/pocketrun/blob/chapter-7/app/LinuxPanel.tsx#L45-L50) 中：
+
+```ts
+const next = await NativePocketRunLinux.runLinuxDemo(token);
+if (generation === epoch.current) {
+  if (next.token !== token || next.installationGeneration !== info?.installationGeneration) {
+    throw new Error('Linux 运行结果已失效。');
+  }
+  setResult(next);
+}
+```
+
+页面不仅匹配当前操作，还匹配准备时的安装版本。迟到的旧结果不能盖住新操作。真正显示行数的地方则很普通：[结果组件](https://github.com/kkkhs/pocketrun/blob/chapter-7/app/LinuxPanel.tsx#L105-L109)读取 `result.lineCount`，和日常 React 渲染业务数据一样。
+
+到这里可以把整条链连起来了：**Linux 的 stdout → Kotlin 解析与校验 → 普通返回对象 → React state → 页面文字。** PRoot 进程、安装器和组件是不同职责，不是三个各自维护一份 CSV 的服务。
+
+## 7. 结束时：收回临时资源，保留工作数据
+
+每次运行有自己的临时 `/tmp` 和 RUN 目录。结束、取消或超时后，App 停止本次进程与 IO，确认没有活跃引用，再回收这一轮临时目录。完整安装和 `items.csv` 不属于本轮垃圾。
+
+页面分开显示 `status` 与 `cleanupStatus`：
+
+- 命令结果正确、退出码成功，说明读取完成。
+- `cleanupStatus=done`，说明该清理路径获得了确认。
+- `unproven`，说明清理不能确认；保留输出与资源，不用删除目录或清空 React state 冒充结束。
+
+固定 CSV 通常很快读完。如果手动取消时提示“没有可取消的任务”，只说明已经结束，不能据此认定命中了取消场景。模块关闭、未知进程引用与死亡恢复的细节在下面另行解释。
+
+## 8. 实践与进一步阅读
+
+先完成章首的两次准备与读取，再回答：
+
+1. `HOME=/root` 与 `id -u` 分别回答什么问题？为什么前者不能证明 root？
+2. 如果 CSV 改成四个以换行结束的文本行，为什么不应再要求结果永远为 `3`？
+3. 返回的行数正确但清理是 `unproven` 时，为什么不能直接删除 RUN 目录？
+
+本章的固定任务仍是“启动 → 等结束 → 得到结果”。[下一章](chapter-8.md)会让同一 Linux shell 保持运行：你发一行输入，它执行并输出，然后还能继续接收下一行。为此需要真正的 PTY，而不是给普通管道换个名字。
 
 <details>
-<summary>内部参数与命令结果的边界</summary>
+<summary>深入：固定环境安装、数据归档与发布原子性</summary>
 
-PRoot 参数包含固定的 `--kill-on-exit`、rootfs 路径、`-w /workspace`、清单里的 BusyBox / musl 绑定、私有 `/workspace` 与本轮 `/tmp`，以及固定的 `/proc`、`/dev/null` 映射。不能把这些示例泛化为任意目录授权。
+运行清单在 `app/android/app/src/main/assets/linux/runtime.json`，版本为 `alpine-3.22.8-minimal-proot-5.1.107.102-candidate2-prebound`，variant 为 `minimal-busybox-musl`。当前环境只有四个 ELF 与两个 guest 代码绑定，不是完整发行版候选的 19-ELF 范围。
 
-`PROOT_LOADER` 指向 APK 安装的 loader；`PROOT_TMP_DIR` 指向本轮临时目录；其余环境由 Kotlin 固定。本章没有下载运行时、交互输入、凭据注入或包管理工具入口。
+当前 `linux/alpine-data.bin` 为 587 字节、34 个条目，SHA256 `8c4ac18ae5babcbd3f692e1c4bed6710eb965967da792fc6ad597def4a1eff06`。它是固定 gzip/ustar 数据归档，预置普通 0600、零字节的 `dev/null` 绑定占位，不是字符设备。历史正常演示的 570 字节资产属于另一快照，结果不能借给新资产。
 
-`LinuxResult.exitCodes` 是外层 PRoot 进程的退出码，`stageExitCodes` 是内部五个步骤的退出码。命令使用共享的 5 秒截止时间与 64 KiB 输出预算，沿用前章对输出超限和 UTF-8 返回文字的处理；准备与运行也各自检查当前操作是否取消或过期。
+`RootfsInstaller.verifyArtifacts()` 校验四个只读程序及 SHA256；`RootfsTar.extract()` 有界解压，只接受允许的数据、目录和链接，拒绝 ELF、可执行普通文件、重复路径、截断归档、特殊条目与路径逃逸。链接在普通文件写完后创建，并保证仍落在 rootfs 内。
 
-`token` 用于关联一次调用与取消，不是授予新权限的凭据。`installationGeneration` 表示经过校验的安装版本；页面拒绝属于旧操作或不同安装版本的迟到结果。`LinuxOperationGate` 在 Promise 返回前释放当前操作槽，关闭时使旧结果失效，不用 UI 按钮禁用代替原生检查。
+安装先在本轮 stage 完成，同步安装清单，再通过 `AtomicSamplePublisher.publishDirectory()` 的 no-replace 发布。已有安装重新校验后复用，不把“目录存在”当成完成。`targetSdk` 保持 36，不通过降低 target、Android linker、memfd 或 RWX 内存绕过执行限制。
+
+PRoot 启动参数还固定绑定本轮 `/tmp`、`/proc` 与 `/dev/null`；`PROOT_LOADER` 指向 APK loader，`PROOT_TMP_DIR` 指向本轮目录。脚本没有外部命令、环境、绑定路径、凭据或包管理入口。
 
 </details>
 
-## 清理临时资源，不删工作数据
-
-每次运行都使用自己持有的临时目录。命令结束、取消或超时之后，先结束本次进程和 IO，再检查是否能安全回收本轮目录；`items.csv` 与完整安装不是本轮临时输出，不因此删除。
-
-`LinuxSession.cleanupResult()` 单独返回 `cleanupStatus`。`done` 表示这条清理路径已获得确认；`unproven` 表示不能确认，保留命令输出与退出码，同时让界面显示警告，不伪装成成功清理。
-
-对应代码：`LinuxDirectoryLease.allocate()` 持有本轮目录的文件锁与所有权记录；`close()` 和 `recover()` 负责有界清理与恢复。`LinuxRecoveryProbe.isUnusedByAppProcesses()` 检查实际进程对目录和运行程序的引用。
-
-**删除目录本身不证明 guest 已经全部退出。** 活跃 PRoot / guest、目录引用、读取错误或观察超时都不能当作不存在；不确定时保留目录，等待可以安全确认的恢复机会。
-
 <details>
-<summary>目录所有权、进程死亡与恢复为什么要一起检查</summary>
+<summary>深入：期限、取消与临时目录恢复</summary>
 
-这里的 directory lease 是本地文件锁，不是云设备租约。记录包含目录名、类型、进程 generation、UID、PID、启动时间和父目录身份；完整记录同步后才创建临时目录。恢复先取得锁、校验记录和所有权，不凭名字像临时文件就删除。
+`LinuxResult.exitCodes` 是外层 PRoot 退出码，`stageExitCodes` 是内部五步退出码。运行沿用共享 5 秒截止时间与 64 KiB 输出预算，准备和每次实际启动也检查当前操作是否取消或过期。`token` 关联调用，`installationGeneration` 标识已校验版本，两者都不赋予新权限。
 
-stage 和 run 的恢复条件不同。run 目录还需检查 App UID 相关进程的 maps、cwd 和 FD，以及仍活跃的 PRoot / loader / guest 程序。只有明确的不存在才当作不存在；权限或 IO 错误、损坏记录、未知属性与预算耗尽都保守保留。
+`LinuxOperationGate` 在 Promise 回调前释放当前操作槽；关闭使旧结果失效。UI 按钮禁用不是原生互斥和取消的替代。
 
-取消按本次 token 绑定已经预留的操作，模块关闭使当前操作失效，并让原生工作队列收尾。App、tracer 或 guest 的硬死亡仍须在专门设备测试中观察 PID、线程、FD、文件锁和目录恢复；不能用启动参数、JVM mock 或一轮正常退出代替这些证明。
+`LinuxDirectoryLease` 是本地文件锁和目录所有权记录，不是云设备租约。记录包括类型、generation、UID、PID、启动时间与父目录身份。恢复先取得锁并校验记录，不能凭临时文件名删除。stage 和 RUN 的恢复条件不同；RUN 还检查 App UID 进程的 maps、cwd、FD 及活跃 PRoot/loader/guest。只有明确不存在才视为消失；权限、IO、损坏记录和超时都保守保留。
+
+`cleanupResult()` 保留输出与退出码，独立标记 `done/unproven`。取消按本次 token 绑定操作，模块关闭后由原生队列收尾；硬死亡可能无法执行 finally，需要后续恢复确认。删除目录本身不能证明 guest、线程、FD 全部结束。
 
 </details>
 
-## 已经验证什么
+<details>
+<summary>验收记录：本机正常流程、生命周期与独立章节包</summary>
 
-2026-11-20，任务专用 `pocketrun-ch1-api36` 模拟器（Android 16 / API 36、ARM64、App UID 10150）执行了当前预置绑定点版本：
+2026-11-20，任务专用 `pocketrun-ch1-api36`（Android 16/API 36、ARM64、App UID 10150）验证了当前预置绑定点版本：
 
 | 检查 | 实际结果 |
 | --- | --- |
-| 正常安装、目录映射、重复演示 | `Chapter7LinuxDemoTest`：`OK (1 test)`；Alpine 3.22.8、`/workspace`、行数 3、五阶段退出码 0 |
-| 取消、关闭、超时、安装/RUN 库存等生命周期 | `Chapter7LifecycleIntegrationTest`：`OK (12 tests)` |
-| App / tracer / guest 硬死亡 | 默认及 fallback 各三场景，共 6 场景通过；host 按 UID/PID/startTicks 选定自有对象，原生断言和显式 procfs 消失观察都通过 |
-| 安装发布前 App 死亡 | fsync 后未发布 stage 保留，生产安装器恢复并保留工作 CSV，重跑成功 |
-| 资源与数据 | 原生检查 FD/读写线程/RUN 收尾；死亡恢复重新运行成功，原工作文件与无关 stage 未被当作垃圾删除 |
+| 正常安装、目录映射与重复演示 | `Chapter7LinuxDemoTest`：`OK (1 test)`；Alpine 3.22.8、`/workspace`、三行与五阶段 0 |
+| 取消、关闭、超时、安装与 RUN 库存 | `Chapter7LifecycleIntegrationTest`：`OK (12 tests)` |
+| App/tracer/guest 硬死亡 | 默认与 fallback 各三场景，共 6 个；按 UID/PID/startTicks 选择自有对象，检查原生断言与 procfs 消失 |
+| 安装发布前 App 死亡 | 同步后未发布 stage 保留，安装器恢复并保留 CSV，重跑成功 |
+| 资源与数据 | 核对 FD、IO 线程、RUN 与原文件；无关 stage 未被当作垃圾删除 |
 
-这批死亡恢复使用 Debug APK SHA256 `58b62dda2ffb74f413164c152cfb01cd3b5da07e92d17ab71bd8fe9fcfe98b76`、Test APK SHA256 `6b96dbb4742acc58a6a36fec139e8f51815d905a6488b8cb2f2144fbfd52754f`。原生结果与 host 进程证据是同一批检查；不以 host ADB 退出码代替 JUnit 成功。
+这一批 Debug APK SHA256 `58b62dda2ffb74f413164c152cfb01cd3b5da07e92d17ab71bd8fe9fcfe98b76`，Test APK SHA256 `6b96dbb4742acc58a6a36fec139e8f51815d905a6488b8cb2f2144fbfd52754f`。通过来自原生断言及对应进程证据，不是 host ADB 退出码。
 
-2026-11-23，合入观察器修复后，仅含第 7 章能力的源码又完整执行了正常演示、12 项生命周期与同样 7 个死亡恢复场景，全部通过。该批 Debug APK SHA256 为 `a1824358b31fa257f7087427465fdb33552198be574c39a146a246585abad674`，Test APK SHA256 为 `0e054a24e8c663c8da4c6cd77e458dc0ced795d6806c2d970610c448bc0ea7fa`；章首产品截图也来自这个包。
+2026-11-23，合入观察器修复后的独立第 7 章包再次完成正常演示、12 项生命周期与同样 7 个死亡恢复场景。Debug APK SHA256 `a1824358b31fa257f7087427465fdb33552198be574c39a146a246585abad674`；Test APK SHA256 `0e054a24e8c663c8da4c6cd77e458dc0ced795d6806c2d970610c448bc0ea7fa`。章首截图来自这份包。
 
-<details>
-<summary>2026-11-19 的历史批次与原失败记录</summary>
-
-2026-11-19，在本任务获授权的 Android 16 / API 36、ARM64 云真机上，`Chapter7LinuxDemoTest.actualInstallationMappingAndRepeatedAlpinePipeline()` 实际执行了安装、复用安装和两次正常演示：
-
-| 检查 | 已记录结果 |
-| --- | --- |
-| 原生正常演示测试 | `OK (1 test)`，0.344 秒；同一测试内重复运行两次 |
-| 实际 Linux 输出 | 两次均为版本 `3.22.8`、cwd `/workspace`、UID `10469`、初始 CSV 行数 `3` |
-| 内部步骤与外层进程 | 五个步骤均为 `0`，PRoot 退出码为 `0`，stderr 空 |
-| 本轮正常清理与工作数据 | 两次断言 `cleanupStatus == done`；关闭会话后工作文件仍保留 |
-| 固定 APK 的静态内容 | 四个 Linux ELF 与清单 SHA256 一致；历史正常批次为 570 字节资产，当前预置绑定点版本为 587 字节且实际 APK entry SHA 一致；包含许可证/版权文本及索引 |
-| 完整生命周期 | 原 10 项／3 失败、11 项／2 失败保留；修复等待夹具重复打开 FIFO FD 后，新 12 项生命周期通过，默认和 fallback 回收均有原生断言。但显式 App 死亡后的 rootfs 重用仍失败于运行后出现的不可读绑定占位；587 字节预置版本尚未取得新真机结果。本章仍未完整验收 |
-| 真实产品界面与网站 | 产品界面仍待本章完整操作验收；此前正文已有手机／桌面深浅主题渲染检查，新增对照内容仍需最终版本统一复核 |
-| 公开发布 | **本章 PR、CI / Pages、注释 tag、源码 Release 与对应源码公开交付均待完成** |
-
-正常演示的 JSON 输出没有单独打印 `cleanupStatus`；这一项由实际通过的测试源码断言。不能把它描述成原始 JSON 已包含的字段。
-
-早期启动探测还真实观察到 PRoot 版本与 Linux `id -u` 返回 App UID，但它只说明基本启动链可用，与正常演示不是同一批证据。上表不把探测、静态检查、界面计划和生命周期计划拼成“一轮全过”，也不冒充 Case Center 原生报告。
+这些结果只证明对应设备和构建的被测行为，不证明所有 Android/OEM、完整 Alpine 或全部异常分支兼容。
 
 </details>
 
 <details>
-<summary>证据对应的构建与可运行检查</summary>
+<summary>历史记录：2026-11-19 的批次与保留的原失败</summary>
 
-上表原正常演示对应 App APK SHA256 前缀 `37ee35e17146`、AndroidTest APK 前缀 `e7cdeb257046`。安装记录均退出 `0`，但通过结论来自原始 runner 的 `OK (1 test)` 和实际断言，不来自“安装成功”。candidate2 另一次真实正常演示也通过，对应 App `b74b47d7950c`、AndroidTest `462c18f18553`；其新生命周期专项为 11 项／2 失败。不同包、不同批次分别保留，不把旧包证据借给新源码。
+在获授权的 Android 16/API 36、ARM64 云真机上，`Chapter7LinuxDemoTest.actualInstallationMappingAndRepeatedAlpinePipeline()` 执行安装、复用与两次演示：`OK (1 test)`、0.344 秒，两次都是版本 3.22.8、cwd `/workspace`、UID 10469、CSV 三行、五阶段及外层退出码 0、stderr 空。清理 `done` 由测试源码断言，原 JSON 没有单独打印这个字段；关闭后文件仍保留。
 
-先按[第 1 章](chapter-1.md)准备已有工具链与依赖。源码检查、ARM64 构建和审计从仓库根目录起算：
+原 10 项/3 失败、11 项/2 失败保留。修复等待夹具重复打开 FIFO FD 后，新 12 项生命周期通过，但该历史包的 App 死亡后 rootfs 重用仍因不可读绑定占位失败；当时 587 字节预置版本、产品界面和公开发布尚待后续核验。之后的本机与公开结果见上一折叠区及文末，不改变这批失败。
+
+原正常批次 App SHA256 前缀 `37ee35e17146`、Test `e7cdeb257046`；candidate2 正常批次 App `b74b47d7950c`、Test `462c18f18553`，其新生命周期为 11 项/2 失败。不同包、批次不拼成“一轮全过”。早期版本探测和 App UID 的 `id -u` 只证明启动链，不替代正常任务或生命周期。
+
+固定 APK 包含四个 ELF 的清单校验和、许可证/版权索引；570 字节与 587 字节资产分别核对。安装退出 0 不是测试通过，也不生成或冒充 Case Center 原生报告。
+
+</details>
+
+<details>
+<summary>实践：构建与运行独立正常演示检查</summary>
+
+按[第 1 章](chapter-1.md)准备已有工具链。在仓库根目录执行：
 
 ```bash
 cd app
@@ -220,7 +289,7 @@ cd android
   -PreactNativeArchitectures=arm64-v8a --max-workers=2
 ```
 
-在已确认的自有或授权演示设备上安装对应 APK。下面仍从 `app/android/` 起算，`AUTHORIZED_SERIAL` 必须是显式核对过的目标：
+仍在 `app/android/`，把 `AUTHORIZED_SERIAL` 设为自己已核对的演示设备。先确认系统、ABI、App/Test APK 校验和，再安装与测试，不使用默认设备：
 
 ```bash
 adb -s "$AUTHORIZED_SERIAL" shell getprop ro.build.version.sdk
@@ -232,65 +301,36 @@ adb -s "$AUTHORIZED_SERIAL" shell am instrument -w \
   io.github.kkkhs.pocketrun.test/androidx.test.runner.AndroidJUnitRunner
 ```
 
-这个命令只运行正常演示，不覆盖全部生命周期。异常死亡测试需要各自的宿主协议与资源观察，不能无驱动地运行或借主机退出码宣布成功。
+这只运行正常演示，不覆盖全部死亡与生命周期。硬死亡测试需要各自宿主协议和资源观察，不能无驱动运行。还需按待交付版本核对 JNI/ELF/16 KiB 对齐、许可证与对应源码；不能复用旧 APK 的设备结果。
 
-最终还需 JNI / ELF / 16 KiB 对齐、实际 APK 范围、许可证与对应源码交付检查。网站在 `website/` 独立运行 `test:toolchain`、`typecheck`、`build` 和 `audit:ci`，再检查手机/桌面渲染与链接。这里列的是应执行的检查，不声称本轮写作重新运行了它们。
-
-</details>
-
-<details>
-<summary>固定来源、许可证与公开分发边界</summary>
-
-PRoot 来源固定为 [termux/proot 的 v5.1.107.102](https://github.com/termux/proot/tree/v5.1.107.102)，原始 ZIP SHA256 为 `30d12a6e2cc4147123756ff58edea262d3083bbc238c12d0ab9b39e3d1c40852`。本例保留针对实际运行边界的修改、构建脚本和完整对应源码记录，不能把上游未修改版本的源码链接当作修改后可执行文件的全部源码。
-
-Alpine 原始来源是[官方 3.22.8 / aarch64 minirootfs](https://dl-cdn.alpinelinux.org/alpine/v3.22/releases/aarch64/alpine-minirootfs-3.22.8-aarch64.tar.gz)，SHA256 为 `36091efacd083c1cf5a8c837272530bff4fc72db1fbfdef559f52de0d890bca4`。实际分发范围是前述最小派生内容，不能把原始 rootfs 的 16 个安装包数据库当作本例已经安装的功能。
-
-匹配范围与许可证记录位于 `app/third_party/linux/notice/MINIMAL-DISTRIBUTION.txt`、`LICENSE-SCOPE.txt`、`source-provenance.json` 以及同级 `licenses/`：
-
-- PRoot 原始源码为 GPLv2-or-later；与 LGPLv3-or-later 的 talloc 组合后，可执行文件采用 GPLv3 分发条件，保留各自版权与修改说明。
-- 原始 Alpine BusyBox 为 GPLv2-only；其静态包含的 utmps / skalibs 也需要匹配的 ISC 版权与源码，不因没有独立 `.so` 就忽略。
-- musl 为 MIT，并保留其第三方许可与版权。Alpine 不是整体一个“MIT 许可证”。
-
-当前最小环境不携带 apk/libapk、ssl_client、OpenSSL 等完整候选中的程序，不提供包安装或完整发行版能力。移除未使用程序不等于所有公开分发义务已完成。
-
-实际 APK 已打入 17 份许可证/版权文本与索引。[chapter-7 源码 Release](https://github.com/kkkhs/pocketrun/releases/tag/chapter-7) 同时提供版本匹配的对应源码、修改、构建与复现说明，公开下载和校验和均已核对；入口在 `app/third_party/linux/matching_sources/`。本教程不提供公开调试签名 APK 下载。
+网站在 `website/` 独立执行 `test:toolchain`、`typecheck`、`build`、`audit:ci`，再检查手机/桌面深浅主题、折叠内容和链接。网站能构建不证明 Linux 在设备上执行成功。
 
 </details>
 
 <details>
-<summary>Ditto 实物对照：原理相近，不等于完整复刻</summary>
+<summary>参考：程序来源、许可证与 Ditto 实物对照</summary>
 
-最初采用的是“Ditto 类似执行核心”的架构意图，不是已经逐项读过 Ditto 原始源码。后来对 Ditto 0.1.14 APK 与可读的重建方法做了实物对照：它也使用 App 的 `nativeLibraryDir` 中的 PRoot / loader 来承接 Linux 命令，并有 Termux 风格的 JNI 子进程、PTY 尺寸与 IO 路径。这能说明实现结构，不能单独证明 Ditto 设备上的实际 UID、所有降级分支或完整取消行为。
+PRoot 固定来源为 [termux/proot v5.1.107.102](https://github.com/termux/proot/tree/v5.1.107.102)，原 ZIP SHA256 `30d12a6e2cc4147123756ff58edea262d3083bbc238c12d0ab9b39e3d1c40852`。对应修改、构建脚本和完整源码记录一并保留，不以上游未修改源码代替实际分发程序的对应源码。
 
-范围有明确差异：Ditto APK 内是 Alpine **3.24.3**、**515 个归档条目**，包含 `apk`；PocketRun 本章是 Alpine **3.22.8 派生的最小 BusyBox / musl**，只有四个 Linux ELF、两个 guest 代码绑定，不支持 `apk add`。路径兼容、程序来源与权限边界可借鉴，但不能称为完整发行版或全部能力已对齐。
+Alpine 来源为[官方 3.22.8/aarch64 minirootfs](https://dl-cdn.alpinelinux.org/alpine/v3.22/releases/aarch64/alpine-minirootfs-3.22.8-aarch64.tar.gz)，SHA256 `36091efacd083c1cf5a8c837272530bff4fc72db1fbfdef559f52de0d890bca4`。本例只分发最小派生内容，不能把原发行版的 16 个安装包数据库当成已经具备的功能。
 
-JADX 1.5.1 的重建结果有 **32 个错误**，属于部分可读的反编译代码，不是原始源码；出错或缺失的方法不能补猜。可访问的[Ditto 包源码候选](https://github.com/WindySha/ditto-termux-packages)尚未核为整个 App 的原始源码或本次 APK 的对应版本，也不替代修改后程序的对应源码与许可证交付。React Native / TurboModule 是 PocketRun 的选择，不能据此反推 Ditto 同样使用它们。
+匹配范围在 `app/third_party/linux/notice/MINIMAL-DISTRIBUTION.txt`、`LICENSE-SCOPE.txt`、`source-provenance.json` 和 `licenses/`：PRoot 为 GPLv2-or-later，与 LGPLv3-or-later 的 talloc 组合后的可执行文件按 GPLv3 条件分发；BusyBox 为 GPLv2-only，静态包含的 utmps/skalibs 另保留 ISC 版权与源码；musl 为 MIT 并保留第三方许可。Alpine 不是整体一个 MIT 许可证。
 
-这份对照不扩大历史批次的结论：candidate1 的正常演示是原批次 `OK (1 test)`、0.344 秒、重复两次，原生命周期失败仍保留；candidate2 的正常路径和生命周期另有独立记录。当前预置绑定点版本的完整本机检查见“已经验证什么”，其中默认/fallback 的 App、tracer、guest 死亡恢复和安装死亡恢复属于 2026-11-20 的新批次。不同批次不拼成一轮结果。
+APK 包含 17 份许可证/版权文本与索引；源码 Release 提供版本匹配的对应源码、修改、构建及复现说明，入口是 `app/third_party/linux/matching_sources/`，公开下载与校验和已核对。最小环境不包含 apk/libapk、ssl_client、OpenSSL 等完整候选程序；范围减小不免除剩余程序的分发义务。
+
+对 Ditto 0.1.14 APK 的部分重建方法所作实物对照表明，它也使用 `nativeLibraryDir` 下的 PRoot/loader 和 Termux 风格 JNI/PTY 路径。这不是对原始 App 源码、设备真实 UID、所有降级或取消行为的完整核验。其 APK 是 Alpine 3.24.3、515 个归档条目并包含 `apk`，与本例最小范围不同。
+
+JADX 1.5.1 重建有 32 个错误，缺失方法不能补猜。[ditto-termux-packages](https://github.com/WindySha/ditto-termux-packages) 尚未核为整个 App 原始源码或该 APK 的对应版本；PocketRun 选择 React Native/TurboModule，也不能反推 Ditto 使用同样框架。实物对照不扩大任何历史设备批次的结论。
 
 </details>
 
-## 下一章再做交互终端
+## 本章源码
 
-本章得到的是一个固定的非交互 Linux 任务：同一份 CSV 在新的用户态环境中可读，版本、目录、实际身份、结果与正常清理可以核对。
+本文小段代码固定对照已发布的 `chapter-7`，不是把当前主树的后续改动倒算进旧快照。
 
-它还不证明完整发行版兼容，不提供任意命令、包管理、交互终端或 Agent。下一章讲真正的 PTY，让输入、输出和终端尺寸变化成为可交互会话；它有独立的实现与验收边界，本章的 `ProcessBuilder` 管道不能冒充它。
+- [PR #12：PRoot 与最小 Alpine 环境](https://github.com/kkkhs/pocketrun/pull/12)
+- [PR #22：任务主线、原位代码与图解](https://github.com/kkkhs/pocketrun/pull/22)
+- [合并提交 `2c49a78`](https://github.com/kkkhs/pocketrun/tree/2c49a78e7e26f5f3edd711ab66f7c1d5e577a91a)
+- [chapter-7 源码 Release](https://github.com/kkkhs/pocketrun/releases/tag/chapter-7)：完整归档、SHA256SUMS、第三方对应源码与复现说明，公开下载已核验。
 
-开发继续依赖已经验证的代码与能力，不依赖前章是否已发布。PR、Pages、tag 和 Release 是独立的发布待办；它们未完成时继续开发，但不把本地验证写成线上已交付。
-
-练习：如果 Linux 命令返回 `completed`，但清理是 `unproven`，为什么不能直接删除临时目录并宣布完成？`/workspace` 与 `/root` 分别说明路径还是权限？
-
-### 本章源码与固定快照
-
-| 本地阅读入口 | 重点 |
-| --- | --- |
-| `app/LinuxPanel.tsx`、`app/specs/NativePocketRunLinux.ts` | 固定入口、token、命令与清理分开展示 |
-| `LinuxModule.kt`、`LinuxOperationGate.kt` | 环境门禁、原生队列、关闭与结果失效 |
-| `LinuxSession.kt` | `prepare()`、`runDemo()`、`demoArgv()`、`parseDemo()`、`cleanupResult()` |
-| `RootfsInstaller.kt`、`RootfsTar.kt`、`LinuxRuntimeManifest.kt` | 固定资产、路径校验、完整安装与复用 |
-| `LinuxDirectoryLease.kt`、`LinuxRecoveryProbe.kt` | 所有权、文件锁、保守恢复与真实引用观察 |
-| `app/android/app/src/androidTest/java/io/github/kkkhs/pocketrun/Chapter7LinuxDemoTest.kt` | 实际安装和重复两次演示断言 |
-
-表中的 Kotlin 生产文件均在前文给出的 `app/android/app/src/main/java/io/github/kkkhs/pocketrun/` 下。固定源码是合并提交 [`2c49a78`](https://github.com/kkkhs/pocketrun/tree/2c49a78e7e26f5f3edd711ab66f7c1d5e577a91a)，对应 [`chapter-7` 注释 tag](https://github.com/kkkhs/pocketrun/tree/chapter-7)。
-
-[源码 Release](https://github.com/kkkhs/pocketrun/releases/tag/chapter-7) 提供完整源码归档与 SHA256SUMS，包含版本匹配的第三方对应源码和复现说明；公开下载已按校验和核验。已发布前章的日期与测试数字保留各自历史快照。
+本章 main CI、Pages、注释 tag 与源码公开交付均已完成；Release 提供源码，不提供公开调试签名 APK。

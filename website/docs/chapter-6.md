@@ -2,16 +2,18 @@
 sidebar_position: 7
 sidebar_label: 第 6 章 · 工作目录与命令管道
 title: 在私有工作目录里数出 CSV 的行数
-description: 准备一份 CSV，用普通 App UID 的两个命令传递数据，再检查输出、退出码和资源回收。
+description: 沿一次读取 CSV 的任务，理解 App 私有文件、子进程、字节管道和返回 React 的结果。
 ---
 
-> **第 6 章已发布。** 已在授权云真机验证命令、文件、生命周期专项，以及实际界面的初始化和运行结果。各批次证据分别记录，不能把编译、原生测试或截图混成一次验收；已发布教程与 `chapter-6` 源码快照见文末。
+import WorkspacePipelineFlow from './assets/workspace-pipeline-flow.svg';
+import workspaceResult from './assets/chapter-6-workspace-result.png';
+import figureStyles from '@site/src/css/tutorial-figures.module.css';
 
-上一章，我们已经能看见虚拟屏里的页面，找到输入框、填入文字，再重新观察结果。
+[上一章](chapter-5.md)，我们通过截图和 UI 树找到输入框，再发送输入、重新观察。那条通道解决的是“操作一个页面”。
 
-这一章开始另一条通道：**在 PocketRun 的私有工作目录里准备 `items.csv`，把文件内容交给第二个命令，得到行数，再确认两个命令都成功结束。** 这里先不把文件内容填进 App，也不接 Agent。
+现在换一个任务：**读取 PocketRun 私有目录里的 `items.csv`，数出包含表头的行数，并把结果显示在页面上。** 文件不需要先显示在屏幕上，App 可以直接启动读取它的程序。
 
-第一次初始化会准备这份文件：
+第一次准备的文件是：
 
 ```csv
 name,quantity
@@ -19,176 +21,275 @@ apple,2
 banana,3
 ```
 
-它有三行：一行表头、两行商品。演示的预期结果是：
+我们沿这条顺序走一遍：
 
 ```text
-状态：completed
-stdout：3
-stderr：(empty)
-退出码：0, 0
+准备文件 → 点击运行 → 启动 cat 和 wc → 传递文件内容
+        → 收集行数与两个退出码 → 把结果交回 React
 ```
 
-**`3` 是文本行数，不是三条商品，也不是商品数量的总和。** 本章的 `wc -l` 数的是换行符；这份演示文件的最后一行也以换行结束。
+本章只增加**文件与命令通道**。选择什么任务仍由用户点按钮决定；下一章才把命令环境换成 Linux 用户态工具。
 
-![授权云真机实际操作：私有目录、completed、stdout 3 和两个成功退出码](./assets/chapter-6-workspace-result.png)
+## 1. 先在界面跑一遍
 
-这张截图来自实际运行的 PocketRun：点初始化，再点运行并重新观察结果。它证明界面和原生桥接这一轮正常工作，不单独证明取消、超时或 App 死亡；那些场景另有设备测试。
+使用[第 6 章源码快照](https://github.com/kkkhs/pocketrun/tree/chapter-6/app)构建 App，在自己拥有或明确获授权的演示设备上打开“第 6 章 · 工作目录与命令管道”。
 
-## 先在界面跑一遍
+1. 点“初始化工作目录”：看到私有目录、`items.csv` 和“首次写入演示 CSV”。
+2. 点“运行演示管道”：看到 `completed`、stdout 为 `3`、stderr 为空、退出码为 `0, 0`。
+3. 再点初始化：应提示“保留已有演示文件，没有覆盖”。
 
-只在自己拥有或明确获授权的演示设备上练习，使用[第 6 章源码快照](https://github.com/kkkhs/pocketrun/tree/chapter-6/app)构建的 App。公开的第 5 章源码快照还没有这个面板。
+<figure style={{margin: '1.25rem 0', maxWidth: 400}}>
+  <img src={workspaceResult} alt="实际 App 的私有目录、行数 3 与两个成功退出码" style={{display: 'block', width: '100%', height: 'auto'}} />
+  <figcaption>先准备私有文件，再运行固定管道，检查两个命令的结果。</figcaption>
+</figure>
 
-1. 打开“第 6 章 · 工作目录与命令管道”，点“初始化工作目录”。应看到 App UID、工作目录、演示文件，以及“首次写入演示 CSV”。
-2. 点“运行演示管道”。第一次使用未修改的演示文件时，应得到上面的 `completed`、`3`、空 stderr 和两个 `0`。
-3. 再次点“初始化工作目录”。应提示“保留已有演示文件，没有覆盖”。随后再次运行，检查结果仍与文件内容一致。
-4. 运行尚未结束时，可以点“取消命令管道”。取消请求发出后，继续等待原运行的最终结果，不把按钮点击本身当作进程已经结束。
+**`3` 是三行文本，不是三条商品，也不是数量之和。** `wc -l` 数的是换行符；本例是一行表头、两行商品，最后一行也有换行。
 
-固定的三行文件通常很快就读完，未必来得及手动取消。若提示“管道已结束，没有可取消的任务”，说明当前已没有运行中的管道，不能据此宣称测到了取消；慢命令的取消由专门测试验证。
+截图来自实际初始化和运行。正常流程已在授权设备上完成；取消、超时和进程死亡有另外的测试记录，不能只凭这张图推断它们都通过。
 
-初始化失败、模块未注册、结果为 `failed`、`timeout` 或 `output_limit` 时，先停止核对错误，不把残留输出当作完成。已有文件不会被重新写回演示内容，所以修改过的文件不一定再输出 `3`。
+## 2. 谁在执行：App 和两个子进程
 
-云设备上的调试 APK 也需要能真正加载 JavaScript。本例在 [`app/android/app/build.gradle`](https://github.com/kkkhs/pocketrun/blob/chapter-6/app/android/app/build.gradle) 的 `react` 配置中为调试包打入 bundle，不要求读者或云设备连到开发机 Metro。只有 App 能启动、按钮可操作并显示结果，才算界面验证；仅 APK 安装成功还不够。
+这次仍有 React 和 Kotlin，但没有调用第 3—5 章的 UID 2000 后端。
 
-对应代码：[`app/WorkspacePanel.tsx`](https://github.com/kkkhs/pocketrun/blob/chapter-6/app/WorkspacePanel.tsx) 的 `perform()` 分别调用 `prepareWorkspace()` 和 `runDemoPipeline()`，`cancel()` 调用 `cancelPipeline()`；页面展示返回的状态、stdout、stderr 和各阶段退出码。调用约定在 [`app/specs/NativePocketRunWorkspace.ts`](https://github.com/kkkhs/pocketrun/blob/chapter-6/app/specs/NativePocketRunWorkspace.ts)，没有命令字符串或任意路径参数。
+| 执行者 | 在这次任务里负责什么 |
+| --- | --- |
+| React / TypeScript，同一 App 进程 | 按钮、等待 Promise、显示结果 |
+| App Kotlin，同一 App 进程 | 准备文件、选定命令、启动进程、搬运和收集字节 |
+| `cat`、`wc` 两个子进程 | 一个读文件，一个数换行；两者仍是普通 App UID |
 
-## 这次由谁执行
+**方法调用和启动进程不同。** `WorkspaceSession.runDemo()` 是 App 内的一次 Kotlin 调用；`ProcessBuilder.start()` 才会创建新的进程。新进程继承 App 的执行身份，不因为程序位于 `/system/bin` 就变成 shell 或 root。
 
-这一章不需要先启动第 3 章的 shell 后端，也不需要无线 ADB 配对。
+从前端经验衔接：你可以把 TurboModule 看成 TypeScript 调用平台能力的接口。它在 App 内跨语言；本章的数据不经过电脑，也不经过 Binder。
 
-| 代码或进程 | 做什么 | 执行身份 |
-| --- | --- | --- |
-| React / TypeScript 页面 | 发起固定演示，展示结果与取消入口 | 普通 App 进程 |
-| App Kotlin | 准备目录、选择命令、持有进程与输出通道 | 同一个 App 进程、App UID |
-| 两个 toybox 子进程 | 一个读文件，一个数行数 | 独立子进程，仍是同一个 App UID |
+## 3. 准备文件：给命令一个明确的工作目录
 
-`ProcessBuilder` 启动子进程，不改变执行身份。它不会因为执行了系统自带的命令，就得到 root 或 shell UID 2000。
+先看按钮如何进入原生层。[WorkspacePanel.tsx](https://github.com/kkkhs/pocketrun/blob/chapter-6/app/WorkspacePanel.tsx) 的 `perform('prepare')` 中，真正的调用是：
 
-**手机操作通道与文件命令通道分开。** 前章的系统操作仍走 App Kotlin → typed Binder → shell 后端；本章直接由普通 App Kotlin 启动命令，不经过那个后端。电脑上的 ADB 可以用于开发安装和测试，但不在本章产品运行的数据路径里。
+```ts
+const next = await NativePocketRunWorkspace.prepareWorkspace();
+if (epoch === generation.current) { setInfo(next); }
+```
 
-下面提到的 Kotlin 文件位于 [`app/android/app/src/main/java/io/github/kkkhs/pocketrun/`](https://github.com/kkkhs/pocketrun/tree/chapter-6/app/android/app/src/main/java/io/github/kkkhs/pocketrun/)。链接固定到 `chapter-6` 源码快照，具体文件与阅读入口见文末。
+`next` 是目录信息，不是文件内容。`setInfo()` 让 React 展示路径和是否首次创建；`epoch` 检查让已经失效的页面操作不能用晚返回覆盖当前状态。
 
-## 准备目录，不覆盖已有文件
-
-`WorkspaceModule.prepareWorkspace()` 把 App 的 `filesDir` 交给 `WorkspaceSession`。`WorkspaceSession.prepare()` 在它下面准备 `workspaces/demo`，文件名固定为 `items.csv`。
-
-这是 App 的私有文件区域，不是主机上的当前目录，也不是外部存储。目录只允许所属 UID 读写和进入，首次创建的文件只允许所属 UID 读写。
-
-首次写文件时，先写到同一目录里的临时文件，完整写入后同步文件内容，再把它作为 `items.csv` 发布。**只有目标尚不存在时才允许发布，不能先检查“没有文件”，随后无条件覆盖。**
-
-对应代码：`WorkspaceSession.publishSample()` 写入并同步临时文件；`AtomicSamplePublisher.publish()` 在 Android 上调用一个很薄的 JNI 方法，完成“不替换已有目标”的原子改名。若另一个操作在这期间创建了 `items.csv`，保留它，再检查它是否是允许的文件。
-
-每次准备与运行都会检查目录和文件是否仍在预期位置，拒绝符号链接逃逸、失效文件和超过 64 KiB 的文件。取消或关闭会话不会删除已经存在的工作数据；重新初始化也不会把用户改过的 CSV 还原。
-
-<details>
-<summary>首次写入中断后怎样恢复，为什么 Android 不用硬链接</summary>
-
-`WorkspaceSession.publishSample()` 使用 `.pocketrun-sample-*.tmp` 临时文件，先设置私有权限，再通过 `FileOutputStream` 写入完整 CSV，调用 `output.fd.sync()`，最后发布目标。
-
-Android 路径是 `AtomicSamplePublisher.publish()` → `renameNoReplace()` → `app/android/app/src/main/cpp/pocketrun_fs.cpp` 中的 JNI 方法。它调用平台 `renameat2`，使用 `RENAME_NOREPLACE` 语义：成功才产生目标；`EEXIST` 表示保留已存在目标；其他错误明确失败，不降级为覆盖式改名，也不改变 UID 或系统保护设置。
-
-最早的 Android 验证曾在普通 App UID 下调用 `Files.createLink()`，真实返回 `AccessDeniedException`。这是旧实现的失败记录，不是现有生产路径。非 Android JVM 分支仍使用硬链接验证相同的 no-replace 约定，但它通过不代表 Android JNI 已通过。
-
-如果 App 在同步临时文件之后、发布目标之前被 `SIGKILL`，`finally` 不会执行。下一次 `prepare()` 只清理演示目录中符合内部临时命名、是普通文件且未经过符号链接的残留，然后重新准备完整样本；已有 `items.csv` 仍不覆盖。这不是“进程死亡时所有清理代码都能运行”，也不等于已经验证设备突然断电后的持久性。
-
-</details>
-
-## 把第一个命令的输出交给第二个
-
-`WorkspaceSession` 在 Kotlin 中固定选择两组参数：
+原生入口 [WorkspaceModule.kt](https://github.com/kkkhs/pocketrun/blob/chapter-6/app/android/app/src/main/java/io/github/kkkhs/pocketrun/WorkspaceModule.kt) 把 Android 提供的私有目录交给会话：
 
 ```kotlin
-listOf("/system/bin/toybox", "cat", "items.csv")
-listOf("/system/bin/toybox", "wc", "-l")
+private val session = WorkspaceSession(context.filesDir)
 ```
 
-`cat` 读取文件，把内容写到自己的标准输出；`wc -l` 从标准输入读取这些内容，再把行数写到自己的标准输出。App Kotlin 负责把前者的输出搬到后者的输入，并给两者设置同一个工作目录。
+[WorkspaceSession.kt](https://github.com/kkkhs/pocketrun/blob/chapter-6/app/android/app/src/main/java/io/github/kkkhs/pocketrun/WorkspaceSession.kt) 在这个目录下选择固定位置：
 
-`items.csv` 是相对文件名，但它不会依赖某个碰巧正确的默认目录。`CommandPipeline.execute()` 明确调用 `ProcessBuilder(command).directory(directory).start()`；`WorkspaceSession.runDemo()` 在启动前再次检查工作文件。
+```kotlin
+private val directory = File(File(filesDirectory.canonicalFile, "workspaces"), "demo")
+private val sample = File(directory, "items.csv")
+```
 
-传完文件后，Kotlin 关闭第二个命令的输入，让它知道不会再有数据。否则 `wc` 可能一直等待，不能得到最终行数。
+所以命令的工作目录是 App 私有区域里的 `workspaces/demo`，不是电脑当前目录，也不是外部存储。它只允许所属 UID 读写和进入。
 
-**这是参数数组，不是 shell 源码。** 产品演示不调用 `sh -c`，JavaScript 不能指定可执行文件、参数、目录或重定向。本章还没有 PRoot、Alpine、交互终端或任意命令工具。
+准备时，已有文件和首次写入分开处理：
 
-## 检查输出，也检查两个退出码
+```kotlin
+val created = if (sample.exists()) false else publishSample()
+validateSample()
+Info(directory.path, sample.path, created)
+```
 
-只看到 stdout 为 `3` 还不够。两个命令都要结束，两个退出码都要是 `0`；前一阶段失败不能被最后一阶段的 `0` 隐藏。
+再次初始化不会把读者改过的 CSV 恢复成三行样本。`validateSample()` 检查它仍是预期位置的普通文件、没有符号链接逃逸且不超过 64 KiB；不能把“路径存在”直接当成可以执行任务。
 
-`CommandPipeline.execute()` 返回 `status`、stdout、合并的 stderr、各阶段退出码和耗时。`WorkspaceModule.runDemoPipeline()` 将它们转成普通数据，再通过 Promise 交回 React。
+首次创建也不能留下半份文件：先写同目录临时文件、同步内容，再以**不替换已有目标**的方式发布。即使另一个操作刚刚创建了 `items.csv`，也保留它。具体原子发布机制放在文末。
 
-stderr 是命令的错误输出通道，本章单独展示它；失败状态、非零退出码和异常仍须分别检查。这个演示的正常结果应当是空 stderr，但不能给所有未来工具规定“只要 stderr 有字就失败”。
+## 4. 点击运行：启动两个固定命令
 
-为避免命令输出塞满通道后互相等待，Kotlin 会及时读取最终 stdout 和每个阶段的 stderr，同时传递中间数据。
+“运行演示管道”进入同一个页面的 `perform('run')`：
+
+```ts
+const next = await NativePocketRunWorkspace.runDemoPipeline();
+if (epoch === generation.current) { setResult(next); }
+```
+
+这次 Promise 返回的是运行结果。React 没有把命令或文件路径传给 Kotlin；[NativePocketRunWorkspace.ts](https://github.com/kkkhs/pocketrun/blob/chapter-6/app/specs/NativePocketRunWorkspace.ts) 只开放固定操作。
+
+为什么要用两个命令？`cat` 负责读取文件，`wc -l` 负责统计输入中的换行。本例不是要选最短的数行命令，而是用一份小文件看清**一个程序的输出怎样成为另一个程序的输入**。
+
+命令由 `WorkspaceSession` 固定选择：
+
+```kotlin
+private val DEMO_COMMANDS = listOf(
+    listOf("/system/bin/toybox", "cat", "items.csv"),
+    listOf("/system/bin/toybox", "wc", "-l"),
+)
+```
+
+toybox 是 Android 提供的一组命令工具。这里启动两次：第一次选择 `cat`，第二次选择 `wc`。这是参数数组，不是交给 `sh -c` 解释的 shell 源码。
+
+运行方法把目录和参数交给 [CommandPipeline.kt](https://github.com/kkkhs/pocketrun/blob/chapter-6/app/android/app/src/main/java/io/github/kkkhs/pocketrun/CommandPipeline.kt)：
+
+```kotlin
+fun runDemo(run: CommandPipeline.Run) =
+    pipeline.execute(run, directory, commands, validate = ::validateSample)
+```
+
+在第 6 章快照中，创建子进程的核心一行是：
+
+```kotlin
+run.processes += ProcessBuilder(command).directory(directory).start()
+```
+
+`.directory(directory)` 很重要：`items.csv` 是相对路径，它从这里解析。两个命令都使用这个目录；不能依赖一个碰巧正确的默认目录。
+
+## 5. 传递内容：字节怎样从 cat 到 wc
+
+先看数据路径。**图里的箭头表示内容流转，不表示创建进程的先后顺序**；两个进程都启动后，App 才把它们连接起来。
+
+<figure style={{margin: '1.25rem 0', maxWidth: 560}}>
+  <WorkspacePipelineFlow className={`pr-pipe-diagram ${figureStyles.diagram}`} role="img" aria-labelledby="pr-pipe-title" aria-describedby="pr-pipe-desc" style={{display: 'block', width: '100%', height: 'auto'}} />
+  <figcaption>CSV 内容经过管道；最后回到页面的只是行数、状态和退出码。</figcaption>
+</figure>
+
+进程通常有三个字节通道：标准输入 stdin、标准输出 stdout、错误输出 stderr。Java 的名字站在 **App 的视角**：
+
+- **给进程输入：** 子进程的 stdin，对应 App 的 `process.outputStream`。App 往这里写字节。
+- **读进程输出：** 子进程的 stdout，对应 App 的 `process.inputStream`。App 从这里读结果。
+- **读进程错误：** 子进程的 stderr，对应 App 的 `process.errorStream`。App 从这里读错误输出。
+
+因此，连接两个进程的实际代码是：
+
+```kotlin
+run.processes[1].outputStream.use { destination ->
+    copyLimited(run.processes[0].inputStream, destination)
+}
+```
+
+`processes[0]` 是 `cat`，`processes[1]` 是 `wc`。`copyLimited()` 分块读取 CSV 字节、写给 `wc`，不需要先把文件变成 React 字符串再传回来。
+
+**传完后必须关闭 wc 的输入。** `use` 在这段搬运结束时关闭 `destination`，`wc` 于是读到 EOF——“不会再有数据了”，才能输出最终行数。只是不再写字节，却保持输入打开，会让它继续等待。
+
+与此同时，Kotlin 读取最后一个进程的 stdout，以及每个进程的 stderr。它不会先阻塞等待进程退出、等结束后才读取：缓冲区如果塞满，程序可能在写输出时等待 App，App 又在等待程序结束，双方都会卡住。
+
+## 6. 接回结果：Promise 返回后页面显示什么
+
+字节传完不等于任务已成功。Kotlin 还要等两个命令结束，检查各自退出码。不能只看最后一个 `wc` 返回 `0`，否则可能漏掉前面的文件读取失败。
+
+原生模块把内部结果转换成 TypeScript 能接收的普通数据。下面摘取 `WorkspaceModule.runDemoPipeline()` 中的结果字段：
+
+```kotlin
+putString("status", result.status)
+putString("stdout", result.stdout)
+putString("stderr", result.stderr)
+putArray("exitCodes", codes)
+```
+
+worker 完成后结算原生 Promise；前面的 `await` 得到 `next`，`setResult(next)` 再触发 React 渲染。[WorkspacePanel.tsx](https://github.com/kkkhs/pocketrun/blob/chapter-6/app/WorkspacePanel.tsx) 的实际结果行是：
+
+```tsx
+<Text style={{ color: colors.text }}>状态：{result.status}</Text>
+<Text selectable style={{ color: colors.text }}>stdout：{result.stdout.trim()}</Text>
+<Text selectable style={{ color: colors.text }}>stderr：{result.stderr || '(empty)'}</Text>
+<Text style={{ color: colors.text }}>退出码：{result.exitCodes.join(', ')}</Text>
+```
+
+到这里，完整返回路径才接上：
+
+```text
+wc 输出字节 → Kotlin 收集字符串与退出码 → Module 结算 Promise
+           → TypeScript 的 await 得到结果 → setResult → 页面重绘
+```
+
+核对本例的三个问题：**是否正常结束、行数是否为 3、两个退出码是否都为 0**。stderr 单独展示；本例正常时为空，但不能给所有未来命令规定“stderr 有文字就一定失败”。
+
+## 7. 结束与取消：进程收回来，文件留下来
+
+这次命令默认共用 5 秒执行期限，中间数据、stdout 和 stderr 各有 64 KiB 预算。取消、超时、输出超限和正常结束都会进入原生收尾，而不是只把 React 的“运行中”文字隐藏。
+
+运行前 `WorkspaceModule.runDemoPipeline()` 就调用 `session.reserve()` 预留本次操作。最终进入 `CommandPipeline.reserve()`：
+
+```kotlin
+fun reserve(): Run = synchronized(lock) {
+    check(!closed) { "命令管道已关闭。" }
+    check(current == null) { "已有命令管道正在运行。" }
+    Run().also { current = it }
+}
+```
+
+`current` 先指向本轮 `Run`，原生 worker 才开始执行。这样即使用户在子进程真正启动前取消，标记仍属于同一次运行，不会在稍后启动时被清除。
+
+页面的取消请求是：
+
+```ts
+const accepted = await NativePocketRunWorkspace.cancelPipeline();
+```
+
+它表示是否找到本次可取消运行，**不是两个进程已经退出的最终结果**。页面继续等待原来的 `runDemoPipeline()` Promise。固定三行文件通常很快读完，来不及取消时应显示已无运行中的任务；这不证明测到了取消效果。
+
+重新初始化保留 `items.csv`；关闭的是本轮进程和流，不是删除工作数据。模块失效时也要关闭原生会话。React 用代际忽略晚返回，只保护页面状态，不能代替原生清理。
+
+## 8. 小结：同一任务的三张地图
+
+- **谁执行：** React 和 Kotlin 在同一个 App 进程；`cat`、`wc` 是同 UID 的两个子进程。
+- **按什么顺序：** 准备文件、点击运行、启动命令、等待数据与退出、展示结果。
+- **数据怎么回来：** 文件字节进 `cat → wc`，行数与退出码经 Kotlin Promise 变成 React state。
+
+现在我们具备了一个固定文件任务。下一章继续读取同一份 CSV，只把 Android toybox 换成 PRoot / Alpine 的 Linux 用户态工具；它仍不会增加 App 的权限。
+
+练习：如果 `wc` 没有输出、两个进程又一直不退出，你会先检查“文件有没有三行”，还是检查 App 有没有在搬运结束后关闭 `wc` 的输入？为什么？
+
+## 附录：深入机制与验证记录
+
+正文代码链接固定到 `chapter-6`。后续章节对共享管道的清理逻辑有改进；这里的历史设备结果只属于对应批次，不借给后来重新构建的 APK。
 
 <details>
-<summary>输出预算与返回文字的边界</summary>
+<summary>首次文件发布：原子改名与中断恢复</summary>
 
-`CommandPipeline` 最多运行两个阶段，每阶段参数数组最多八项。中间传输、最终 stdout 和合并 stderr 各有独立的 64 KiB 预算；不是把它们合成一个无限增长的字符串。
+`WorkspaceSession.publishSample()` 先创建 `.pocketrun-sample-*.tmp`、设置私有权限、写入完整 CSV，再调用 `output.fd.sync()`。Android 路径是 `AtomicSamplePublisher.publish()` → `renameNoReplace()` → `pocketrun_fs.cpp` 中的 JNI；它使用 `renameat2(RENAME_NOREPLACE)`。成功才产生目标，`EEXIST` 保留已有目标，其他错误明确失败，不降级为覆盖式改名。
 
-`copyLimited()` 管中间传输，`readStream()` 与 `LimitedOutput` 管输出收集。超过预算时终止本次进程并返回 `output_limit`，不能把截断结果标为 `completed`。
+早期 Android 实现调用 `Files.createLink()` 曾返回 `AccessDeniedException`；这是旧实现失败记录。非 Android JVM 分支用硬链接检查相同的 no-replace 约定，不替代 Android JNI 验证。
 
-返回值是文字，不是无损二进制接口。无效 UTF-8 字节转成替换字符后，重新编码可能比原字节更长，因此 `LimitedOutput.text()` 还检查最终文字的 UTF-8 字节数，在字符边界内截断并标记 `output_limit`。真机二进制 stdout、stderr 用例均记录返回 65535 UTF-8 字节，没有超过 65536 字节预算。
+App 在同步后、发布前被 `SIGKILL` 时，`finally` 不会执行。下次 `prepare()` 只清理演示目录中符合内部临时命名且没有符号链接的普通残留文件，再准备完整样本，已有 CSV 不覆盖。这不证明突然断电后的持久性。
 
 </details>
 
-## 取消后，等资源真正结束
-
-原生模块一次只接受一个工作目录操作。执行命令前先预留这次运行，再排入 worker；因此在真正启动子进程前发出的取消，也属于这次运行，不会被后续启动重置。
-
-正常结束、取消、超时和输出超限都会走本次进程的清理路径，关闭输入输出流并停止 IO worker。模块关闭时也会关闭会话。工作文件与临时进程是两种不同资源：**回收进程，不等于删除工作数据。**
-
-对应代码：`WorkspaceModule.runDemoPipeline()` 先调用 `WorkspaceSession.reserve()`；`CommandPipeline.cancel()` 标记当前运行并调用 `terminate()`；`WorkspaceModule.invalidate()` 关闭会话和原生 worker。
-
-执行使用共享的 5 秒截止时间，不是每个命令各等 5 秒。原生截止时间不依赖 React 页面是否还存在；UI 则继续等待最终状态，并用本次操作序号忽略卸载后的旧结果。
-
 <details>
-<summary>启动与取消的竞态、死亡测试的边界</summary>
+<summary>输出、期限、取消与资源观察的细节</summary>
 
-`reserve()` 绑定当前 `Run`，取消标记在它上面。`execute()` 在每次创建进程之前检查会话仍有效、未取消且截止时间未过；目录检查已经耗尽时间时也不能继续创建子进程。正常结果包括 `completed`，受控结束还包括 `failed`、`timeout`、`cancelled` 和 `output_limit`；模块忙碌或关闭也可能直接拒绝 Promise。
+第 6 章的 `CommandPipeline` 最多两个阶段，每阶段参数最多八项；中间传输、stdout 和合并 stderr 各限 64 KiB。超限返回 `output_limit`，不能把截断结果写成 `completed`。
 
-最终清理会强制结束本次持有的进程、关闭三个标准流，并有界等待进程和 IO worker。执行截止时间与后续清理等待不是同一个“严格总耗时 5 秒”的保证；测试需要独立观察 PID、文件描述符和线程，而不是只数 `close()` 调用。
+返回的是文字，不是无损二进制。无效 UTF-8 转成替换字符后可能膨胀，因此 `LimitedOutput.text()` 再检查编码后的长度，在字符边界截断；实际二进制 stdout/stderr 用例均返回 65535 UTF-8 字节，没有超过 65536 字节预算。
 
-`Chapter6HostDeathTest` 需要宿主驱动按单个方法执行。驱动先核对本次设备、App UID、APK 校验和、PID 与进程启动时间，再在专门 fixture 的就绪阶段对所选进程发 `SIGKILL`，观察后启动恢复测试。不能直接运行整个测试类，不能把自然退出、读取 `/proc` 失败或 `force-stop` 替代为预期的硬死亡。
+执行期限共享 5 秒，不是每命令五秒。每次启动前检查当前运行、取消与期限；清理的有界等待是另外一段时间，不承诺所有资源在第 5 秒瞬间消失。状态包括 `completed`、`failed`、`timeout`、`cancelled`、`output_limit`；忙碌、关闭或初始化失败也可能直接拒绝 Promise。
 
-子进程死亡用例检查 `failed`、非零退出码、子进程消失、已有文件保留，以及同一管道可再次运行。最后一次宿主驱动只观察了被杀子进程，没有观察父进程的 FD / IO 线程；不能把这批结果写成“父进程 FD 清零”。重复运行的 FD / IO 观察来自另一项生命周期测试，也不能跨批拼成同一个结论。
+清理会结束本轮持有进程、关闭标准流、停止 IO worker。真实回收须观察 PID、FD 和线程，不能由 `close()` 调用次数推断。第 6 章返回接口没有独立的清理确认字段，不把后续章节的 `cleanupStatus` 写进本章快照。
 
-测试为重定向 stderr、记录 PID 使用固定的 `sh -c` fixture，仍在普通 App UID 下运行。这是测试内部的控制手段，不是产品向 JavaScript 开放的 shell 接口。
+`Chapter6HostDeathTest` 依赖按方法执行的宿主协议：核对设备、UID、APK、PID/启动时间，在 fixture 就绪阶段对自有目标发 `SIGKILL`，然后独立恢复。自然退出、`force-stop` 或 `/proc` 读取失败不替代硬死亡证据。固定 `sh -c` 只用于测试重定向与 PID 记录，不是产品对 JS 开放的命令接口。
 
 </details>
 
-## 已验证什么，还缺什么
+<details>
+<summary>实际设备与发布记录：批次分别核对</summary>
 
-2026-11-18—19，在本任务获授权的 Android 16 / API 36、ARM64 云真机上留下了以下记录。原生专项来自 AndroidJUnit instrumentation 与宿主的实际进程观察；正常界面演示另有实际点击、结果观察与上文截图。它们不是 Case Center 原生验收报告。
+2026-11-18—19，在获授权的 Android 16 / API 36、ARM64 云真机留下以下记录。界面截图与原生专项分别记录，不是 Case Center 原生报告。
 
 | 验证范围 | 已记录结果 |
 | --- | --- |
-| 私有目录、真实子进程 UID、固定管道、退出码、路径拒绝、取消、超时、输出上限与重跑 | 生命周期批次 `OK (11 tests)`，5.63 秒 |
-| 无效 UTF-8 的 stdout / stderr 输出 | 均为 `output_limit`，返回文字各 65535 UTF-8 字节 |
-| 重复运行后的资源观察 | 同一测试进程 FD 数 105 → 105，`PocketRun-PipeIO` 存活线程为 0；不是 FD 总数为 0 |
-| App 进程被 `SIGKILL` 后恢复 | 原 App 与所持子进程消失；恢复测试 `OK (1 test)`，保留已有文件并再次运行成功 |
-| 首次文件同步完成、尚未发布时 App 被 `SIGKILL` | 恢复测试 `OK (1 test)`，检查完整临时文件、无已发布目标，再初始化后清理临时文件并运行成功 |
-| 宿主杀死本次子进程 | 独立批次原生 `OK (1 test)`，宿主驱动退出 0；检查失败结果、子进程消失与重跑，不声称观察到父进程 FD 清零 |
-| 真实产品界面 | 已实际初始化、运行并观察 `completed / 3 / empty / 0,0`，重复初始化保留原文件；上文提供真实结果截图。取消、超时与死亡的专项证据仍分别来自原生测试，不冒称界面每个分支都已命中 |
-| 第 6 章发布 | [PR #11](https://github.com/kkkhs/pocketrun/pull/11) 已合并；main 的 [Android CI](https://github.com/kkkhs/pocketrun/actions/runs/44534812395) 与 [Pages](https://github.com/kkkhs/pocketrun/actions/runs/44534812843) 均成功；[线上教程](https://kkkhs.github.io/pocketrun/chapter-6/)、`chapter-6` 注释 tag 与[源码 Release](https://github.com/kkkhs/pocketrun/releases/tag/chapter-6) 已发布，不附调试 APK |
+| 私有目录、真实 UID、固定管道、退出码、路径拒绝、取消、超时、输出上限与重跑 | 生命周期 `OK (11 tests)`，5.63 秒 |
+| 无效 UTF-8 的 stdout / stderr | 均为 `output_limit`，返回文字各 65535 UTF-8 字节 |
+| 重复运行后的资源 | 同一测试进程 FD 105 → 105，`PocketRun-PipeIO` 存活线程 0；不是总 FD 为 0 |
+| App 被 `SIGKILL` 后恢复 | 原 App/子进程消失；独立恢复 `OK (1 test)`，文件保留并重跑成功 |
+| 同步文件后、发布前 App 被杀 | 恢复 `OK (1 test)`，确认完整临时文件和无目标，再初始化并运行 |
+| 宿主杀死本轮子进程 | 独立原生 `OK (1 test)`，检查失败、子进程消失与重跑；未观察父进程 FD/IO，不能称父进程 FD 清零 |
+| 实际界面 | 初始化、运行、`completed / 3 / empty / 0,0`，再次初始化保留文件；不覆盖所有界面异常分支 |
+| 发布 | [PR #11](https://github.com/kkkhs/pocketrun/pull/11) 合并；[main Android CI](https://github.com/kkkhs/pocketrun/actions/runs/44534812395)、[Pages](https://github.com/kkkhs/pocketrun/actions/runs/44534812843)、线上教程、注释 tag 与源码 Release 完成 |
 
-**这些记录只证明各自设备与构建上的被测行为。** 不代表所有 Android / OEM 都已支持；正常界面演示通过也不覆盖所有异常分支，更不自动证明之后重新构建的 APK 已验收。
+这批 App APK SHA256 前缀为 `b3cad89d3347`。生命周期及最后宿主子进程死亡测试的 Test APK 前缀为 `ce4ed7cd3c6f`；App/首次发布死亡恢复使用较早的 `350106fb0f50`。两组测试包不描述为“一轮全过”；arm 阶段按设计被杀，结论来自真实死亡观察及随后独立恢复，不来自 ADB 退出 0。旧硬链接失败保留为失败。
 
-<details>
-<summary>不同构建与验证记录怎样对应</summary>
-
-上述批次记录的 App APK SHA256 前缀均为 `b3cad89d3347`。生命周期 11 项和最后一次宿主子进程死亡测试使用的 AndroidTest APK SHA256 前缀为 `ce4ed7cd3c6f`；App 死亡与首次文件发布死亡的两次恢复使用较早的 AndroidTest APK，前缀为 `350106fb0f50`。
-
-两组 AndroidTest 不是同一个测试构建，不能合并描述为“一轮全部通过”。App / 首次发布死亡时，arm 阶段预期进程被杀，不会正常完成整个 JUnit 测试；通过结论来自所选 PID 的真实死亡观察以及随后独立的恢复测试，不能只凭 ADB 退出 0 宣布成功。旧硬链接失败批次也保留为失败，不用新结果改写旧记录。
-
-测试留下的设备绑定、原始 runner 输出、PID 观察和文件核对记录保留在私有验收目录，不把设备连接信息、协议 token、完整私有日志或它们的临时路径放进教程。这里仅摘要已核实结果，不生成或冒充 Case Center 原生报告。
-
-JVM 测试调用开发机上的真实进程，Jest 检查 UI / Bridge 状态和迟到结果；它们适合回归逻辑，但不能替代 Android 的 UID、文件系统、JNI 与进程死亡观察。本章静态门禁、正常界面演示和网站手机／桌面深浅主题检查已分别执行；发布前仍须对待交付提交核对这些结果，不能复用旧包证明新包。
+原始设备绑定、runner、PID 与文件记录保留在私有验收目录，不公开连接信息、token 或完整日志。JVM 与 Jest 检查逻辑和状态，不替代 Android UID、文件系统、JNI、死亡观察，也不证明所有 OEM 支持。
 
 </details>
 
 <details>
-<summary>在自己的演示设备上构建并运行生命周期测试</summary>
+<summary>实践：构建与运行生命周期检查</summary>
 
-先按[第 1 章](chapter-1.md)准备工具链，使用完整 JDK 17、仓库指定的 Node 版本和已有依赖。下面从仓库根目录开始：
+按[第 1 章](chapter-1.md)准备完整 JDK 17、仓库指定 Node 与已有依赖，从仓库根目录执行：
 
 ```bash
 cd app
@@ -202,10 +303,9 @@ cd android
   -PreactNativeArchitectures=arm64-v8a --max-workers=2
 ```
 
-显式选择自己拥有或明确获授权的设备，把 `AUTHORIZED_SERIAL` 设为已核对的序列号。确认系统、ABI、安装目标与本次 APK 版本后再安装；不使用默认设备，不对未选择的设备执行命令。
+`AUTHORIZED_SERIAL` 必须是自己拥有或明确授权且已核对的设备。仍在 `app/android/`：
 
 ```bash
-# 仍在 app/android/
 adb -s "$AUTHORIZED_SERIAL" shell getprop ro.build.version.sdk
 adb -s "$AUTHORIZED_SERIAL" shell getprop ro.product.cpu.abilist
 adb -s "$AUTHORIZED_SERIAL" install -r app/build/outputs/apk/debug/app-debug.apk
@@ -215,45 +315,20 @@ adb -s "$AUTHORIZED_SERIAL" shell am instrument -w \
   io.github.kkkhs.pocketrun.test/androidx.test.runner.AndroidJUnitRunner
 ```
 
-这组测试在 App 私有目录创建独立 fixture，检查真实 toybox 与资源回收；只删除自己的测试数据，不删除产品工作目录。需检查 runner 的最终 `OK`、测试数量、无失败 / 跳过，而不是只检查主机命令退出码。
+先核对系统、ABI、App/Test SHA 与安装目标；不用默认设备。fixture 只管理自己创建的数据，不删除产品工作目录。检查 runner 的 `OK`、数量、无失败/跳过，而非只检查宿主退出码；死亡测试另需宿主协议，不直接运行整个类。
 
-App / 首次发布死亡与宿主子进程死亡测试另需上述宿主协议，不包含在这个命令里。它们不能作为无驱动的普通测试类直接运行。
+调试包配置在 `app/android/app/build.gradle` 中打入 JS bundle，云设备不用连开发机 Metro。安装成功不等于 App 可运行，仍需实际按钮与结果观察。
 
-网站门禁在 `website/` 独立运行，不能把本次只读过旧结果写成重新执行成功：
-
-```bash
-# 从仓库根目录开始
-cd website
-npm run test:toolchain
-npm run typecheck
-npm run build
-npm run audit:ci
-```
+网站在 `website/` 独立运行 `test:toolchain`、`typecheck`、`build`、`audit:ci` 并检查手机/桌面深浅主题；文档改写不代表重新做了设备验收。
 
 </details>
 
-## 这次得到什么，下一章接什么
+## 本章源码
 
-我们做出了一个固定的小任务：准备私有 CSV，让两个普通 App UID 子进程传递数据，并把输出、退出码和结束状态交回界面。文件保留与进程回收分开处理，失败也有明确结果。
+- [PR #11：私有工作目录与命令管道](https://github.com/kkkhs/pocketrun/pull/11)
+- [PR #22：任务主线、原位代码与图解](https://github.com/kkkhs/pocketrun/pull/22)
+- [chapter-6 源码 Release](https://github.com/kkkhs/pocketrun/releases/tag/chapter-6)：完整源码归档与 SHA256 附件，不发布调试签名 APK。
+- [固定提交 `90d9d4f`](https://github.com/kkkhs/pocketrun/commit/90d9d4f009066cd5de22f20c87fa963530d681c6)：正文链接对应的本章快照。
+- [AtomicSamplePublisher.kt](https://github.com/kkkhs/pocketrun/blob/chapter-6/app/android/app/src/main/java/io/github/kkkhs/pocketrun/AtomicSamplePublisher.kt) 与 [pocketrun_fs.cpp](https://github.com/kkkhs/pocketrun/blob/chapter-6/app/android/app/src/main/cpp/pocketrun_fs.cpp)：首次文件原子发布。
 
-这还不是任意命令工具，不是交互终端，也不是完整 Agent。下一章再在普通 App UID 下接入固定来源的 PRoot / Alpine，让命令环境从 Android 自带 toybox 扩展到 Linux 用户态工具；PTY 留给第 8 章。
-
-练习：为什么 `wc` 返回 `0` 不能隐藏 `cat` 的失败？如果 App 在首次写入同步完成后被杀，重新打开时应检查已发布文件、临时文件，还是只检查页面按钮状态？
-
-### 源码与已发布快照
-
-本章源码随 [PR #11](https://github.com/kkkhs/pocketrun/pull/11) 合并，下面的路径从仓库根目录起算，链接固定到已发布的 `chapter-6` 快照：
-
-| 源码文件 | 阅读入口 |
-| --- | --- |
-| [`app/WorkspacePanel.tsx`](https://github.com/kkkhs/pocketrun/blob/chapter-6/app/WorkspacePanel.tsx) | `perform()`、`cancel()`、结果展示 |
-| [`app/specs/NativePocketRunWorkspace.ts`](https://github.com/kkkhs/pocketrun/blob/chapter-6/app/specs/NativePocketRunWorkspace.ts) | 三个固定调用与普通返回数据 |
-| [`app/android/app/src/main/java/io/github/kkkhs/pocketrun/WorkspaceModule.kt`](https://github.com/kkkhs/pocketrun/blob/chapter-6/app/android/app/src/main/java/io/github/kkkhs/pocketrun/WorkspaceModule.kt) | `prepareWorkspace()`、`runDemoPipeline()`、`invalidate()` |
-| [`app/android/app/src/main/java/io/github/kkkhs/pocketrun/WorkspaceSession.kt`](https://github.com/kkkhs/pocketrun/blob/chapter-6/app/android/app/src/main/java/io/github/kkkhs/pocketrun/WorkspaceSession.kt) | `prepare()`、`publishSample()`、`runDemo()` |
-| [`app/android/app/src/main/java/io/github/kkkhs/pocketrun/CommandPipeline.kt`](https://github.com/kkkhs/pocketrun/blob/chapter-6/app/android/app/src/main/java/io/github/kkkhs/pocketrun/CommandPipeline.kt) | `reserve()`、`execute()`、`cancel()`、`terminate()` |
-| [`app/android/app/src/main/java/io/github/kkkhs/pocketrun/AtomicSamplePublisher.kt`](https://github.com/kkkhs/pocketrun/blob/chapter-6/app/android/app/src/main/java/io/github/kkkhs/pocketrun/AtomicSamplePublisher.kt) 与 [`app/android/app/src/main/cpp/pocketrun_fs.cpp`](https://github.com/kkkhs/pocketrun/blob/chapter-6/app/android/app/src/main/cpp/pocketrun_fs.cpp) | Android no-replace 发布入口 |
-| [`app/android/app/src/androidTest/java/io/github/kkkhs/pocketrun/Chapter6WorkspaceIntegrationTest.kt`](https://github.com/kkkhs/pocketrun/blob/chapter-6/app/android/app/src/androidTest/java/io/github/kkkhs/pocketrun/Chapter6WorkspaceIntegrationTest.kt)、[`Chapter6HostDeathTest.kt`](https://github.com/kkkhs/pocketrun/blob/chapter-6/app/android/app/src/androidTest/java/io/github/kkkhs/pocketrun/Chapter6HostDeathTest.kt)（同目录） | 真实生命周期与宿主死亡 / 恢复断言 |
-
-[第 6 章源码 Release](https://github.com/kkkhs/pocketrun/releases/tag/chapter-6) 已公开发布，提供源码归档及 SHA256 校验附件，不附公开调试签名 APK。`chapter-6` 注释 tag 固定到提交 [`90d9d4f009066cd5de22f20c87fa963530d681c6`](https://github.com/kkkhs/pocketrun/commit/90d9d4f009066cd5de22f20c87fa963530d681c6)，便于对照本章代码。[第 5 章 Release](https://github.com/kkkhs/pocketrun/releases/tag/chapter-5)仍是前章快照，不包含本章能力。
-
-[线上第 6 章](https://kkkhs.github.io/pocketrun/chapter-6/)已发布，设备验证范围仍以上述各批次记录为准；源码与网站发布不代表所有设备、界面异常分支或显示模式均已验收。
+[线上第 6 章](https://kkkhs.github.io/pocketrun/chapter-6/)已发布。代码与设备记录均以本章固定版本及各自批次为准。

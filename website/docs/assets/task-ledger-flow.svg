@@ -1,0 +1,30 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 560 570" role="img" aria-labelledby="pr-ledger-title pr-ledger-desc" class="pr-ledger-diagram">
+  <title id="pr-ledger-title">同一目标下，两条步骤怎样留在一个账本里</title>
+  <desc id="pr-ledger-desc">开始目标得到 taskId，两次请求都携带它，依次交给原有 TaskHost。设备信息保留为第一条结果，CSV 经手机批准得到第二条结果。两条都成功且清理确认后，用户核对并结束。账本在同一个 App 内，不是新执行进程。</desc>
+  <style>
+    .pr-ledger-diagram { --ink: var(--ifm-font-color-base, #1c1e21); --muted: var(--ifm-color-emphasis-700, #606770); --border: var(--ifm-color-emphasis-300, #dadde1); --panel: var(--ifm-background-surface-color, #fff); font-family: system-ui, -apple-system, "Segoe UI", sans-serif; }
+    .pr-ledger-diagram .heading { fill: var(--ink); font-size: 24px; font-weight: 650; }
+    .pr-ledger-diagram .body { fill: var(--ink); font-size: 21px; }
+    .pr-ledger-diagram .note { fill: var(--muted); font-size: 19px; }
+    .pr-ledger-diagram .card { fill: var(--panel); stroke: var(--border); stroke-width: 1.5; }
+    .pr-ledger-diagram .edge { fill: none; stroke: var(--muted); stroke-width: 2; }
+  </style>
+  <defs><marker id="pr-ledger-arrow" markerWidth="9" markerHeight="8" refX="8" refY="4" orient="auto"><path d="M0 0 9 4 0 8Z" fill="var(--muted)"/></marker></defs>
+  <text x="280" y="34" text-anchor="middle" class="heading">一个目标，两条保留的结果</text>
+  <rect x="30" y="64" width="500" height="80" rx="10" class="card"/>
+  <text x="52" y="98" class="heading">开始任务</text>
+  <text x="52" y="130" class="body">读设备信息，再数演示 CSV 行数</text>
+  <path d="M280 144 V184" class="edge" marker-end="url(#pr-ledger-arrow)"/>
+  <rect x="30" y="184" width="500" height="80" rx="10" class="card"/>
+  <text x="52" y="218" class="heading">步骤 1 · 设备信息</text>
+  <text x="52" y="250" class="body">读取 Android API → 保留第一条结果</text>
+  <path d="M280 264 V304" class="edge" marker-end="url(#pr-ledger-arrow)"/>
+  <rect x="30" y="304" width="500" height="80" rx="10" class="card"/>
+  <text x="52" y="338" class="heading">步骤 2 · 固定 CSV</text>
+  <text x="52" y="370" class="body">同一宿主等手机批准 → 保留第二条结果</text>
+  <path d="M280 384 V424" class="edge" marker-end="url(#pr-ledger-arrow)"/>
+  <rect x="30" y="424" width="500" height="88" rx="10" class="card"/>
+  <text x="52" y="460" class="heading">核对并结束</text>
+  <text x="52" y="492" class="body">两条结果、来源与清理 → 完成这个目标</text>
+  <text x="280" y="548" text-anchor="middle" class="note">同一个 taskId；CSV 仍需独立批准。</text>
+</svg>

@@ -1,0 +1,35 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 560 700" role="img" aria-labelledby="pr-pipe-title pr-pipe-desc" class="pr-pipe-diagram">
+  <title id="pr-pipe-title">CSV 的内容怎样变成页面上的行数</title>
+  <desc id="pr-pipe-desc">私有 CSV 由 cat 读取，App Kotlin 把它的标准输出写给 wc 的标准输入，并在传完后关闭输入。wc 读到 EOF 后输出行数，Kotlin 收集结果和两个退出码，再经 Promise 交回 React。两个子进程与 App 使用同一个普通 UID。图表示数据路径，不是启动的时间顺序。</desc>
+  <style>
+    .pr-pipe-diagram { --ink: var(--ifm-font-color-base, #1c1e21); --muted: var(--ifm-color-emphasis-700, #606770); --border: var(--ifm-color-emphasis-300, #dadde1); --panel: var(--ifm-background-surface-color, #fff); font-family: system-ui, -apple-system, "Segoe UI", sans-serif; }
+    .pr-pipe-diagram .heading { fill: var(--ink); font-size: 24px; font-weight: 650; }
+    .pr-pipe-diagram .body { fill: var(--ink); font-size: 21px; }
+    .pr-pipe-diagram .note { fill: var(--muted); font-size: 19px; }
+    .pr-pipe-diagram .card { fill: var(--panel); stroke: var(--border); stroke-width: 1.5; }
+    .pr-pipe-diagram .edge { fill: none; stroke: var(--muted); stroke-width: 2; }
+  </style>
+  <defs><marker id="pr-pipe-arrow" markerWidth="9" markerHeight="8" refX="8" refY="4" orient="auto"><path d="M0 0 9 4 0 8Z" fill="var(--muted)"/></marker></defs>
+  <text x="280" y="34" text-anchor="middle" class="heading">一份文件，两个命令，一个结果</text>
+  <rect x="30" y="64" width="500" height="80" rx="10" class="card"/>
+  <text x="52" y="96" class="heading">私有 items.csv</text>
+  <text x="52" y="128" class="body">一行表头 + 两行商品，末尾都有换行</text>
+  <path d="M280 144 V184" class="edge" marker-end="url(#pr-pipe-arrow)"/>
+  <rect x="30" y="184" width="500" height="80" rx="10" class="card"/>
+  <text x="52" y="216" class="heading">cat 子进程</text>
+  <text x="52" y="248" class="body">读文件 → 标准输出中的 CSV 字节</text>
+  <path d="M280 264 V304" class="edge" marker-end="url(#pr-pipe-arrow)"/>
+  <rect x="30" y="304" width="500" height="108" rx="10" class="card"/>
+  <text x="52" y="336" class="heading">App Kotlin 搬运</text>
+  <text x="52" y="368" class="body">读取 cat 输出，写入 wc 输入</text>
+  <text x="52" y="396" class="body">传完关闭输入，让 wc 读到 EOF</text>
+  <path d="M280 412 V452" class="edge" marker-end="url(#pr-pipe-arrow)"/>
+  <rect x="30" y="452" width="500" height="80" rx="10" class="card"/>
+  <text x="52" y="484" class="heading">wc 子进程</text>
+  <text x="52" y="516" class="body">统计换行 → 标准输出中的 3</text>
+  <path d="M280 532 V572" class="edge" marker-end="url(#pr-pipe-arrow)"/>
+  <rect x="30" y="572" width="500" height="80" rx="10" class="card"/>
+  <text x="52" y="604" class="heading">回到页面</text>
+  <text x="52" y="636" class="body">Kotlin 结果 → Promise → React state</text>
+  <text x="280" y="686" text-anchor="middle" class="note">普通 App UID；不经过 ADB / Binder。</text>
+</svg>
