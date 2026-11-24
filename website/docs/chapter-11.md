@@ -326,6 +326,7 @@ App typecheck/lint/Jest/audit、相关JVM与ARM64 Debug/Release/Test构建分别
 ## 本章源码
 
 - [PR #18：原生模型循环与加密配置](https://github.com/kkkhs/pocketrun/pull/18)
+- [PR #22：任务主线、原位代码与图解](https://github.com/kkkhs/pocketrun/pull/22)
 - [PR #20：固定Debug策略与真实模型/工具验收](https://github.com/kkkhs/pocketrun/pull/20)
 - [chapter-11 源码 Release](https://github.com/kkkhs/pocketrun/releases/tag/chapter-11)：注释tag固定验收合并 `8f95aa7`，完整源码和SHA256已核对。
 - [AgentLoopPanel.tsx](https://github.com/kkkhs/pocketrun/blob/chapter-11/app/AgentLoopPanel.tsx) → [TaskHostModule.kt](https://github.com/kkkhs/pocketrun/blob/chapter-11/app/android/app/src/main/java/io/github/kkkhs/pocketrun/TaskHostModule.kt) → [AgentLoop.kt](https://github.com/kkkhs/pocketrun/blob/chapter-11/app/android/app/src/main/java/io/github/kkkhs/pocketrun/taskhost/AgentLoop.kt)：从开始按钮沿一回合阅读。

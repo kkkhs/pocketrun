@@ -269,4 +269,5 @@ native 持久启动/回收路径处理关闭与读写、退出与 PID 回收的�
 本文代码摘录固定对照已发布 `chapter-8`。本章原实际验收、main CI、Pages 与公开源码交付均已完成；新阅读练习保持上文注明的范围。
 
 - [PR #13：交互式 PTY 与资源回收](https://github.com/kkkhs/pocketrun/pull/13)
+- [PR #22：任务主线、原位代码与图解](https://github.com/kkkhs/pocketrun/pull/22)
 - [chapter-8 源码 Release](https://github.com/kkkhs/pocketrun/releases/tag/chapter-8)：完整源码、对应第三方来源和 SHA256 校验，不发布调试签名 APK。

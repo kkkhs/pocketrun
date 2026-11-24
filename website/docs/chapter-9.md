@@ -276,6 +276,7 @@ CSV 通常很快读完，没来得及取消不能算通过。`Chapter9ProductLin
 本文小段代码固定到 `chapter-9`，与后续任务上下文、模型循环的实现分开对照。
 
 - [PR #14：固定工具、手机审批与宿主](https://github.com/kkkhs/pocketrun/pull/14)
+- [PR #22：任务主线、原位代码与图解](https://github.com/kkkhs/pocketrun/pull/22)
 - [chapter-9 源码 Release](https://github.com/kkkhs/pocketrun/releases/tag/chapter-9)：完整源码和 SHA256，公开下载已核验，不发布调试签名 APK。
 - [下一章：单任务上下文](chapter-10.md)；[第 11 章：真实模型循环](chapter-11.md)。
 

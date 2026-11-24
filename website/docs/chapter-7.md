@@ -329,6 +329,7 @@ JADX 1.5.1 重建有 32 个错误，缺失方法不能补猜。[ditto-termux-pac
 本文小段代码固定对照已发布的 `chapter-7`，不是把当前主树的后续改动倒算进旧快照。
 
 - [PR #12：PRoot 与最小 Alpine 环境](https://github.com/kkkhs/pocketrun/pull/12)
+- [PR #22：任务主线、原位代码与图解](https://github.com/kkkhs/pocketrun/pull/22)
 - [合并提交 `2c49a78`](https://github.com/kkkhs/pocketrun/tree/2c49a78e7e26f5f3edd711ab66f7c1d5e577a91a)
 - [chapter-7 源码 Release](https://github.com/kkkhs/pocketrun/releases/tag/chapter-7)：完整归档、SHA256SUMS、第三方对应源码与复现说明，公开下载已核验。
 

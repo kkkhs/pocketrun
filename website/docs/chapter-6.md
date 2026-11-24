@@ -326,6 +326,7 @@ adb -s "$AUTHORIZED_SERIAL" shell am instrument -w \
 ## 本章源码
 
 - [PR #11：私有工作目录与命令管道](https://github.com/kkkhs/pocketrun/pull/11)
+- [PR #22：任务主线、原位代码与图解](https://github.com/kkkhs/pocketrun/pull/22)
 - [chapter-6 源码 Release](https://github.com/kkkhs/pocketrun/releases/tag/chapter-6)：完整源码归档与 SHA256 附件，不发布调试签名 APK。
 - [固定提交 `90d9d4f`](https://github.com/kkkhs/pocketrun/commit/90d9d4f009066cd5de22f20c87fa963530d681c6)：正文链接对应的本章快照。
 - [AtomicSamplePublisher.kt](https://github.com/kkkhs/pocketrun/blob/chapter-6/app/android/app/src/main/java/io/github/kkkhs/pocketrun/AtomicSamplePublisher.kt) 与 [pocketrun_fs.cpp](https://github.com/kkkhs/pocketrun/blob/chapter-6/app/android/app/src/main/cpp/pocketrun_fs.cpp)：首次文件原子发布。

@@ -262,6 +262,7 @@ PR #17 和验收 PR #20 已合并，main CI/Pages 通过。注释 tag `chapter-1
 ## 本章源码
 
 - [PR #17：单任务上下文与两步演示](https://github.com/kkkhs/pocketrun/pull/17)
+- [PR #22：任务主线、原位代码与图解](https://github.com/kkkhs/pocketrun/pull/22)
 - [PR #20：独立任务与最终模型包验收](https://github.com/kkkhs/pocketrun/pull/20)
 - [chapter-10 源码 Release](https://github.com/kkkhs/pocketrun/releases/tag/chapter-10)：完整源码归档与 SHA256。
 - [SingleTaskPanel.tsx](https://github.com/kkkhs/pocketrun/blob/chapter-10/app/SingleTaskPanel.tsx) → [TaskHostModule.kt](https://github.com/kkkhs/pocketrun/blob/chapter-10/app/android/app/src/main/java/io/github/kkkhs/pocketrun/TaskHostModule.kt) → [SingleTaskContext.kt](https://github.com/kkkhs/pocketrun/blob/chapter-10/app/android/app/src/main/java/io/github/kkkhs/pocketrun/taskhost/SingleTaskContext.kt)：从按钮到账本的阅读顺序。
