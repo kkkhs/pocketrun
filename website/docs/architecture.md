@@ -10,15 +10,15 @@ import figureStyles from '@site/src/css/tutorial-figures.module.css';
 
 ## 一次任务怎么走
 
-沿用导读里的例子：读取 `items.csv`，整理数据，填入演示 App，把结果写到 `result.txt`。
+沿用导读里的完整任务目标：读取 `items.csv`，整理数据，填入演示 App，把结果写到 `result.txt`。当前第 1—11 章先建立分段执行能力，并验证“设备信息 + CSV 行数”的受控模型任务；完整任务与恢复是第 13 章计划。
 
-第 1 章已跑通 React → Kotlin；第 2 章取得本机 ADB 启动入口；第 3 章启动 UID 2000 的 `app_process` 后端并交换 Binder；第 4 章创建 VirtualDisplay 并把固定 Demo 路由到目标 `displayId`；第 5 章从同一显示读取截图和 UI 树，再定向输入并观察结果。Linux 结构仍按后续章节逐步实现。
+第 1—5 章接通 App 原生调用、自有 ADB、UID 2000 后端与目标虚拟屏的观察/输入。第 6—8 章在普通 App UID 下处理文件、运行固定 Linux 环境并连接 PTY；第 9 章加入固定工具与手机审批，第 10 章保留单任务步骤账本，第 11 章让真实模型提出下一步。各章源码与实际验证范围见对应正文和附录。
 
 <figure style={{margin: '1.25rem 0'}}>
   <div style={{overflowX: 'auto'}} tabIndex={0} role="region" aria-label="模块与权限架构图，可横向查看">
     <ExecutionDomains className={`pr-domains-diagram ${figureStyles.diagram}`} role="img" aria-labelledby="pr-domains-title" aria-describedby="pr-domains-desc" style={{display: 'block', width: '100%', minWidth: 640, height: 'auto'}} />
   </div>
-  <figcaption>上面看职责，下面看执行身份。宽图可横向查看；Agent 宿主仍需在对应章节验证。</figcaption>
+  <figcaption>上部是职责，不是三个进程；图中的模型循环运行在 App Kotlin，推理由 endpoint 服务提供。下部区分普通 App UID 与 shell UID 2000，两条执行通道各自返回结果。</figcaption>
 </figure>
 
 把一次任务分成两部分看：**先准备会话，再执行操作。**
@@ -29,16 +29,16 @@ import figureStyles from '@site/src/css/tutorial-figures.module.css';
 演示结束：释放目标显示 → 停止后端
 ```
 
-层级与阶段不同：一轮中的每个请求都会经过 React → App Kotlin → Binder → shell 后端 → Android 系统能力。React 与 App Kotlin 在同一个 App 进程，后端是另一个 UID 2000 进程。[第 5 章](chapter-5.md)用一个填写输入框的例子，分别解释分层、步骤和代码。
+上面是**显示操作的一轮**，不是所有工具的公共路径。显示请求经过 React → App Kotlin → Binder → shell 后端 → Android 系统能力；React 与 App Kotlin 在同一 App 进程，后端是另一个 UID 2000 进程。[第 5 章](chapter-5.md)用填写输入框解释这条链。文件/CSV 工具则由普通 App Kotlin 启动子进程，设备信息直接读取 Android API，都不绕经显示后端。
 
-当前操作顺序由用户点击按钮驱动。后续 Agent 决定下一步做什么，执行层检查请求并执行。**模型提出动作，不授予权限。**
+第 1—10 章用按钮选择动作；第 11 章由模型提出下一条工具调用，再由原宿主校验、执行并返回结果。需要审批的 CSV 仍等手机批准。**模型提出动作，不授予权限。**
 
 ## 三个角色做什么
 
 | 角色 | 在这个任务中做什么 |
 | --- | --- |
 | React Native / TypeScript UI | 展示任务进度、确认提示、结果和取消入口 |
-| Agent | 选择工具，依据文件与界面观察安排下一步 |
+| App 内的模型循环 | 请求模型，根据允许发送的工具结果取得下一步提议 |
 | 执行层 | 校验请求，调用 Android 能力或命令环境，返回结果 |
 
 React 的组件和状态管理经验可以复用。Kotlin 承接原生调用；需要 PTY 等底层能力时，再经 JNI 调用。
@@ -55,10 +55,10 @@ React 的组件和状态管理经验可以复用。Kotlin 承接原生调用；�
 
 ### Linux：处理文件和命令
 
-命令环境在普通应用 UID 下运行，承载 PRoot + Alpine 这类 Linux 用户态工具。工作目录限定在应用可访问的范围。
+第 6 章先使用 Android toybox；第 7 章接入 PRoot 与 Alpine 派生的最小 BusyBox/musl 环境，第 8 章加入 PTY。它们始终使用普通 App UID 和 Android 内核，工作文件来自 App 私有目录，不提供 root 或完整发行版的包安装能力。
 
 - 一次性非交互命令：使用 `ProcessBuilder` 管道，收集输出和退出码。
-- 交互式 shell、编辑器：使用 PTY，提供终端输入输出和尺寸变化。
+- 交互式 shell：使用真实 PTY，提供合流输出、持续输入和尺寸变化；当前 React UI 是文字预览，不是完整终端模拟器。
 
 两条通道使用独立的工具入口。Linux 命令保持应用身份；系统操作交给授权后端。
 
@@ -86,7 +86,7 @@ PRoot / `fakeroot` 只做用户态兼容，不授予 Android root，也不提供
 
 前台服务用于符合平台规则、用户可感知的持续任务，有通知和系统限制。**它不保证进程永生。**
 
-练习：给示例的每一步标出执行身份、成功信号和取消动作。后续设备章节会用这些条件验证真实调用链。
+练习：给一次显示操作或 CSV 请求的每一步标出执行身份、成功信号和取消动作，再对照各章正文的实际操作与附录测试。
 
 <details>
 <summary>命令环境与 Agent 宿主的更多细节</summary>
@@ -96,7 +96,7 @@ PRoot / `fakeroot` 只做用户态兼容，不授予 Android root，也不提供
 - PRoot 使用 Android 内核，不是虚拟机。工具是否可用仍受 ABI、系统调用和用户态库兼容性限制。
 - Termux 是为 Android 适配工具的另一条路线，包和目录假设不能与 Alpine 直接互换；复用方案还要核对支持方式和许可证。
 
-Agent 是否需要独立 Node 进程、应用内 Linux 宿主或远端宿主，当前未定。React Native 的 JS 运行时不能直接当作 Node；后续会结合依赖、启动成本、凭据边界和恢复方式选择。
+第 11 章的循环和官方 Anthropic Java SDK 运行在普通 App Kotlin 中，不新增 Node 进程，也不在 PRoot 中运行模型。推理在所配置的模型服务完成；手机只发送允许的结果摘要，接收结构化提议，再复用同一 TaskHost 的授权与资源规则。React Native 的 JS 运行时仍不能直接当作 Node。
 
 参考：[Android 沙箱](https://source.android.com/docs/security/app-sandbox)、[ADB](https://developer.android.com/tools/adb)、[Binder / AIDL](https://developer.android.com/develop/background-work/services/aidl)、[VirtualDisplay](https://developer.android.com/reference/android/hardware/display/VirtualDisplay)、[ProcessBuilder](https://developer.android.com/reference/java/lang/ProcessBuilder)、[前台服务](https://developer.android.com/develop/background-work/services/fgs)。
 

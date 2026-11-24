@@ -22,7 +22,7 @@ PocketRun 要把 Android 手机变成 Agent 的执行环境：操作 App、处�
 
 <figure style={{margin: '1.25rem 0', maxWidth: 680}}>
   <TaskFlow className={`pr-task-diagram ${figureStyles.diagram}`} role="img" aria-labelledby="pr-task-title" aria-describedby="pr-task-desc" style={{display: 'block', width: '100%', height: 'auto'}} />
-  <figcaption>这是后续章节要串起的完整任务。先分别做出每一段，再交给 Agent 调用。</figcaption>
+  <figcaption>这是完整任务的学习目标。第 1—11 章先建立执行能力，并验证受控的两步模型任务；跨任务记忆与完整任务恢复见第 12—13 章计划。</figcaption>
 </figure>
 
 最后检查三件事：文件是否读对、App 是否填对、结果是否保存。
@@ -51,7 +51,7 @@ PocketRun 要把 Android 手机变成 Agent 的执行环境：操作 App、处�
 7. [第 7 章（已发布）](chapter-7.md)：在普通 App UID 下用最小 Alpine 环境读取同一份 CSV；实际界面、正常演示、12 项生命周期与 7 个死亡恢复场景通过，[源码快照](https://github.com/kkkhs/pocketrun/releases/tag/chapter-7)可下载。
 8. [第 8 章（已发布）](chapter-8.md)：用真正的 PTY 实时输入、改变尺寸、正常退出，并验证 120 秒期限后的自有资源清理；[源码快照](https://github.com/kkkhs/pocketrun/releases/tag/chapter-8)可下载。
 9. [第 9 章（已发布）](chapter-9.md)：固定工具校验、手机逐次审批与来源/资源核对，包含真实执行中取消和原五秒期限；[源码快照](https://github.com/kkkhs/pocketrun/releases/tag/chapter-9)可下载。
-10. [第 10 章（已发布）](chapter-10.md)：同一个目标保留设备和 CSV 两条真实步骤，每步仍独立审批、核对来源与清理；[源码快照](https://github.com/kkkhs/pocketrun/releases/tag/chapter-10)可下载。
+10. [第 10 章（已发布）](chapter-10.md)：同一个目标保留设备和 CSV 两条真实步骤，各步沿用原有授权规则，分别核对来源与清理；[源码快照](https://github.com/kkkhs/pocketrun/releases/tag/chapter-10)可下载。
 11. [第 11 章（已发布）](chapter-11.md)：真实模型选择工具，CSV 经手机批准后执行，再将两条真实结果送回模型总结；[源码快照](https://github.com/kkkhs/pocketrun/releases/tag/chapter-11)可下载。
 
 读图时分开两个问题：**层是“谁执行”，阶段是“先做什么、再做什么”。** React 与 App Kotlin 是同一个 App 中的两层，shell 后端是独立进程；一次任务可以多次经过这些层，并不是每层只对应一个步骤。
@@ -77,9 +77,9 @@ PocketRun 要把 Android 手机变成 Agent 的执行环境：操作 App、处�
 
 **现在运行网站：** Git、Node 24.18.0 / npm、编辑器和浏览器。具体命令见第 0 章；本地构建无需登录 GitHub。
 
-**阅读基础：** React 组件与状态、TypeScript、异步调用。Android 原生和终端知识会随实现讲解，不必先学完整移动端栈。
+**阅读基础：** React 组件与状态、TypeScript、异步调用。Android 原生和终端知识会随实现讲解，不必先学完整移动端栈。第一遍按章读正文和图解即可；折叠中的协议、制品校验和故障专项，在动手或深入源码时再展开，不是开始阅读的前置任务。
 
-**后续设备实践：** 自己拥有或明确获授权的 Android 11 及以上、ARM64 设备，以及可恢复的演示数据。使用 ADB 前要确认设备调试授权；无线调试按系统流程配对，无需 root。
+**设备实践：** 使用自己拥有或明确获授权的演示设备与可恢复数据。无线 ADB 的基础要求是 Android 11+；第 7—11 章的固定 Linux 环境要求 **Android 14 / API 34+、ARM64，且 App 运行在 64 位进程中**。各章设备专项另有版本限制，沿已验证的 API 36 / ARM64 专用模拟器练习最容易对照结果。使用 ADB 前确认调试授权，按系统流程配对，无需 root。
 
 第 1 章列出了已验证的 JDK / SDK / 模拟器版本。无需先安装完整 Android Studio，也不要求操作个人真机。
 
