@@ -110,11 +110,9 @@ CSV 的 `approvalRequired` 固定为 true，所以这里只创建请求，不启
 
 类比一个需要人工审核的异步任务，可以理解它；不过本实现并没有让一条 TypeScript Promise 从申请开始一直悬到执行结束。实际是三个独立入口：
 
-| 前端动作 | 等待哪次原生调用 | 调用返回时意味着什么 |
-| --- | --- | --- |
-| 申请工具 | `await submitTool(...)` | Kotlin 已记录请求，可能正待批准；不是工具已执行 |
-| 手机点击同意 | `await decideFromAppUi(nonce, 'approve')` | 原生已处理这次决定并启动有效请求；不是最终执行结果 |
-| 页面查询 | `await getTaskState()` | 取得这一刻的状态/结果快照 |
+1. **申请工具：** `await submitTool(...)` 等 Kotlin 记录请求，返回时可能正待批准，不表示已经执行。
+2. **手机点击同意：** `await decideFromAppUi(nonce, 'approve')` 等原生处理这次决定；有效请求开始执行，但这里仍不是最终结果。
+3. **页面查询：** `await getTaskState()` 取得这一刻的状态/结果快照。
 
 可以把 Kotlin TaskHost 看成 App 内的“任务服务”，把 React 看成显示和提交决定的一侧；这只是职责类比，**没有因为前端点按钮就新增一个后端进程或远程服务器**。
 

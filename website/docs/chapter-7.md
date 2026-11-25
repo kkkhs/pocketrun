@@ -28,13 +28,13 @@ import figureStyles from '@site/src/css/tutorial-figures.module.css';
 
 但内核不等于一套发行版。Android 自带的是 Android 的系统服务、运行库和命令工具；常见 Linux 发行版还提供自己的运行库、程序和目录布局。Alpine 就是这样一套发行版，主要使用 musl 和 BusyBox，并提供自己的包管理。Android 程序通常使用 Bionic 运行库，本例的 Alpine 程序依赖 musl；只共享 Linux 内核，不等于程序需要的库和目录已经齐全。这里先取 Alpine 的一小部分，建立可运行的用户态环境。
 
-| 已出现的对象 | 它是什么 | 是本章的 Alpine 环境吗 |
-| --- | --- | --- |
-| Android/Linux 内核 | 整台手机共享的进程、文件和设备基础 | 是共同底座，不是发行版 |
-| UID 2000 的 shell 后端 | ADB 启动的 `app_process` 进程，用于调用 Android 显示/输入能力 | 不是；“shell”在这里主要表示执行身份 |
-| VirtualDisplay | Android 系统管理的一块显示和绘制目标 | 不是操作系统、终端或容器 |
-| 第 6 章 toybox 命令 | Android 自带的用户态程序，由普通 App 启动 | 还没使用 Alpine |
-| 第 7 章 PRoot/Alpine 派生环境 | 在同一内核上运行另一组用户态程序，并提供它们需要的路径和库 | 是本章新加入的内容 |
+把前几章的对象放回各自位置：
+
+- **Android/Linux 内核：** 整台手机共享的进程、文件和设备底座，不是一份 Alpine 发行版。
+- **UID 2000 shell 后端：** ADB 启动的 `app_process` 进程，用来调用 Android 显示/输入能力。“shell”在这里主要表示执行身份，不表示运行了 Alpine。
+- **VirtualDisplay：** Android 管理的一块显示和绘制目标，不是操作系统、终端或容器。
+- **第 6 章 toybox：** Android 自带的用户态命令，由普通 App 启动，还没使用 Alpine。
+- **第 7 章 PRoot/Alpine：** 在同一内核上加入另一组用户态程序，并准备它们需要的路径和库；这是本章的新内容。
 
 ### PRoot 在中间做什么
 
