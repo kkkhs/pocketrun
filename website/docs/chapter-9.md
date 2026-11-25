@@ -106,6 +106,24 @@ if (action.approvalRequired) {
 
 CSV 的 `approvalRequired` 固定为 true，所以这里只创建请求，不启动本轮 Linux 读取。提交方法的 Promise 可以返回 `pending_approval`；它不是等待最终工具结果的 Promise。
 
+### 从前端看，像 await，但有两个不同的等待
+
+类比一个需要人工审核的异步任务，可以理解它；不过本实现并没有让一条 TypeScript Promise 从申请开始一直悬到执行结束。实际是三个独立入口：
+
+| 前端动作 | 等待哪次原生调用 | 调用返回时意味着什么 |
+| --- | --- | --- |
+| 申请工具 | `await submitTool(...)` | Kotlin 已记录请求，可能正待批准；不是工具已执行 |
+| 手机点击同意 | `await decideFromAppUi(nonce, 'approve')` | 原生已处理这次决定并启动有效请求；不是最终执行结果 |
+| 页面查询 | `await getTaskState()` | 取得这一刻的状态/结果快照 |
+
+可以把 Kotlin TaskHost 看成 App 内的“任务服务”，把 React 看成显示和提交决定的一侧；这只是职责类比，**没有因为前端点按钮就新增一个后端进程或远程服务器**。
+
+待批准时，宿主保留请求状态，尚未启动本轮 CSV 进程，也没有一个线程为了等点击而一直阻塞。点同意才触发下一状态；拒绝或取消会结束当前请求。30 秒之后批准失效，宿主会在状态查询或处理决定时结算过期，不允许过期动作启动；并不是靠一个阻塞线程等满 30 秒。之后实际执行另有 5 秒期限。
+
+`await` 或 `.then()` 只决定前端后续代码何时处理返回值，不决定原生工具是否继续运行。即使前端不等待某个已发出的调用，已被原生接收的动作也不会因此暂停；关闭页面或不查询状态也不是取消。真正停止要调用明确的取消入口，由宿主管理资源。
+
+因此准确类比是“**原生状态机 + 多次异步调用/状态查询**”，不是“一个永远等不到 resolve 的 Promise”。
+
 <figure style={{margin: '1.25rem 0', maxWidth: 560}}>
   <ToolApprovalFlow className={`pr-tool-approval-diagram ${figureStyles.diagram}`} role="img" aria-labelledby="pr-tool-approval-title" aria-describedby="pr-tool-approval-desc" style={{display: 'block', width: '100%', height: 'auto'}} />
   <figcaption>这张图表示一次请求的阶段。只有手机同意、且本次目标和期限仍有效，才进入实际执行。</figcaption>
