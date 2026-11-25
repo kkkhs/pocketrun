@@ -52,7 +52,7 @@
 | 2026-11-24 | 阅读准备度检查后修正共享参考和前置条件 | [PR #23](https://github.com/kkkhs/pocketrun/pull/23) 同步架构/路线图，明确 Linux 条件、standalone Debug 与模型预检范围 |
 | 2026-11-25 | 明确最终复刻 Ditto 整体背后功能，并记录缺失 | 最小环境不是终局；[PR #24](https://github.com/kkkhs/pocketrun/pull/24) 增加功能对照与待核实项 |
 | 2026-11-25 | 补清第 6/7/9/11 章概念：进程基础、内核/用户态/PRoot、异步批准、Kotlin Agent | 同一 PR #24 把对话解释写回正文；不只在聊天中回答 |
-| 2026-11-25 | 要求项目要求、汇报和开发文档存入仓库，并同步本地 main | 建立本文件与 DEVELOPMENT.md；以后接手不依赖单个会话记忆或临时终端状态 |
+| 2026-11-25 | 要求项目要求、汇报和开发文档存入仓库，并同步本地 main | [PR #25](https://github.com/kkkhs/pocketrun/pull/25) 建立本文件与 DEVELOPMENT.md；以后接手不依赖单个会话记忆或临时终端状态 |
 
 写作参照：[博客入口](https://blog.riba2534.cn/)；[DeepSeek Harness 架构文章](https://blog.riba2534.cn/blog/2026/agent%E7%9A%84%E5%BF%92%E4%BF%AE%E6%96%AF%E4%B9%8B%E8%88%B9-deepseek-harness%E6%9E%B6%E6%9E%84%E8%AE%BE%E8%AE%A1/)。技术配图参考 Feishu CLI 画板的布局、连线与排版；参考图规范不等于获准写入飞书。
 
