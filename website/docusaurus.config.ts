@@ -4,7 +4,7 @@ import type * as Preset from '@docusaurus/preset-classic';
 
 const config: Config = {
   title: 'PocketRun',
-  tagline: 'PocketRun：从零构建 Android AI 助手',
+  tagline: '面向 React / TypeScript 开发者的 Android AI 助手实战教程',
   url: 'https://kkkhs.github.io',
   baseUrl: '/pocketrun/',
   organizationName: 'kkkhs',
@@ -43,8 +43,9 @@ const config: Config = {
       title: 'PocketRun',
       items: [
         {type: 'doc', docId: 'intro', label: '导读', position: 'left'},
-        {type: 'doc', docId: 'architecture', label: '系统概览', position: 'left'},
-        {type: 'doc', docId: 'chapter-0', label: '第 0 章', position: 'left'},
+        {type: 'doc', docId: 'architecture', label: '系统全景', position: 'left'},
+        {type: 'doc', docId: 'ditto-parity', label: '功能路线', position: 'left'},
+        {type: 'doc', docId: 'chapter-0', label: '站点工程', position: 'left'},
         {
           href: 'https://github.com/kkkhs/pocketrun',
           label: 'GitHub',
@@ -53,7 +54,7 @@ const config: Config = {
       ],
     },
     prism: {
-      additionalLanguages: ['java', 'kotlin'],
+      additionalLanguages: ['java', 'kotlin', 'bash', 'cpp', 'json'],
       theme: prismThemes.github,
       darkTheme: prismThemes.dracula,
     },
