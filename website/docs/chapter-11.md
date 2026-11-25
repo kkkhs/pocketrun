@@ -40,6 +40,10 @@ import figureStyles from '@site/src/css/tutorial-figures.module.css';
 
 先分清一个容易混淆的问题：**手机上运行的是 SDK、循环控制器和工具宿主；模型推理在 endpoint 对应的服务里。** 不是把大模型权重装进 App，也不是让模型进入 UID2000 后端执行。
 
+本例的 Agent 控制逻辑确实写在 Kotlin：`AgentLoop.kt` 负责“请求模型 → 检查提议 → 调用工具 → 送回结果 → 再请求”的循环。TypeScript 负责界面、目标和手机决策；`TaskHost` 负责权限与执行资源，三者分工不同。
+
+选择 Kotlin 不表示 Agent 必须用 Kotlin，也不是把“智能”搬到 Android 系统层。这个项目已经由 Kotlin 持有工具、取消和生命周期，而且官方 Java SDK 可以在这层调用；复用它避免为了网络请求再引入 Node 运行时。模型服务、调用它的 SDK、安排回合的 AgentLoop 不是同一个东西。
+
 | 执行者 | 在这次任务里负责什么 |
 | --- | --- |
 | React / TypeScript，同一 App 进程 | 填配置、给目标、显示状态、手机同意/拒绝/取消 |

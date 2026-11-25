@@ -22,6 +22,28 @@ import figureStyles from '@site/src/css/tutorial-figures.module.css';
 
 这里有一个值得先想清楚的问题：Linux 命令使用 `/workspace/items.csv`，而 Android 把文件放在 App 私有目录里。**这两个名字怎样指向同一个文件？** 本章就沿着这个问题往下走。
 
+### Android 已经用了 Linux，为什么还要准备环境
+
+**Android 本来就使用 Linux 内核。** 内核负责进程、内存、文件、网络和设备访问；前几章的 App、shell 后端和命令也都运行在这个内核上。第 7 章不是第一次在手机上“启用 Linux”，也不启动第二个内核。
+
+但内核不等于一套发行版。Android 自带的是 Android 的系统服务、运行库和命令工具；常见 Linux 发行版还提供自己的运行库、程序和目录布局。Alpine 就是这样一套发行版，主要使用 musl 和 BusyBox，并提供自己的包管理。Android 程序通常使用 Bionic 运行库，本例的 Alpine 程序依赖 musl；只共享 Linux 内核，不等于程序需要的库和目录已经齐全。这里先取 Alpine 的一小部分，建立可运行的用户态环境。
+
+把前几章的对象放回各自位置：
+
+- **Android/Linux 内核：** 整台手机共享的进程、文件和设备底座，不是一份 Alpine 发行版。
+- **UID 2000 shell 后端：** ADB 启动的 `app_process` 进程，用来调用 Android 显示/输入能力。“shell”在这里主要表示执行身份，不表示运行了 Alpine。
+- **VirtualDisplay：** Android 管理的一块显示和绘制目标，不是操作系统、终端或容器。
+- **第 6 章 toybox：** Android 自带的用户态命令，由普通 App 启动，还没使用 Alpine。
+- **第 7 章 PRoot/Alpine：** 在同一内核上加入另一组用户态程序，并准备它们需要的路径和库；这是本章的新内容。
+
+### PRoot 在中间做什么
+
+可以先把 PRoot 理解成**无需 root 的用户态运行与路径兼容工具**。它跟踪被运行程序的系统调用，把程序寻找的文件路径转换到指定 rootfs 和绑定目录；程序使用 `/bin/busybox`、`/workspace`，实际对应的却是 APK 程序和 App 私有目录。
+
+它承担的是路径布局和运行兼容，不是 Linux 内核，也不是虚拟机或授予权限的工具。rootfs 指“程序看见的根文件系统目录树”，不是 root 身份；真实访问仍受普通 App UID 和 Android 系统策略约束。
+
+因此这一章的主问题是：**怎样准备、启动和复用这组 Linux 用户态程序，让它们读到原工作数据。** `cat/wc` 是验证环境的探针；完整发行版和包安装能力属于后续功能覆盖，当前最小环境不等于最终复刻范围；具体差距见[Ditto 功能对照](ditto-parity.md)。
+
 ## 1. 先运行，认识结果里的几行文字
 
 在自己拥有或明确获授权的 **Android 14 / API 34 及以上、ARM64 的 64 位 App 进程**中，打开“第 7 章 · PRoot 与 Alpine”：
