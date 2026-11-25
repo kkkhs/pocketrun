@@ -2,85 +2,95 @@
 sidebar_position: 1
 sidebar_label: 课程导读
 slug: /
-title: 从这里开始
-description: 从一个手机任务出发，学习构建 Android AI 助手。
+title: 从零构建一个 Android AI 助手
+description: 面向 React / TypeScript 开发者，从第一行桥接代码走到真机虚拟屏、Linux 环境与大模型工具循环。
 ---
 
 import TaskFlow from './assets/task-flow.svg';
 import CourseRoadmap from './assets/course-roadmap.svg';
 import figureStyles from '@site/src/css/tutorial-figures.module.css';
 
-PocketRun 要把 Android 手机变成 Agent 的执行环境：操作 App、处理文件、执行命令，并把结果交给用户检查。
+如果你平时写 React 和 TypeScript，在电脑上搭一个 AI Agent 其实并不难：写个循环调用大模型 API，挂几个 Node.js 工具，读写本地文件、跑跑 shell 命令，一个原型很快就能跑起来。
 
-这套教程面向熟悉 React / TypeScript 的开发者。我们会从 UI 开始，逐步接上 Android 原生能力和 Linux 命令环境。
+但把战场搬到 **Android 手机** 上，几乎所有习以为常的前提都会瞬间失效：
 
-## 先看一个任务
+- **没有 Node.js 运行时**：React Native 里跑的是 Hermes 引擎，你不能直接 `import fs` 或 `child_process`。
+- **普通 App 摸不到别的 App**：出于沙箱安全，你的 App 既不能截别的页面，也不能给别的输入框发点击和打字事件。
+- **就算手机用的是 Linux 内核，你也跑不了常规 Linux 程序**：Android 用的是 Bionic 运行库，高版本系统还禁止 App 从自己的可写目录直接执行二进制文件。
+- **手机端的操作风险高得多**：电脑上最多改坏个测试目录，手机上一次失控的点击可能会误发消息、误删数据甚至触发支付。
 
-在自己拥有或获授权的设备上，使用演示数据提出任务：
+**PocketRun** 要做的，就是带你**不用 Root 手机**，亲手把这些系统关卡一关一关打通——不只是把功能拼出来，更要让你真正看懂 Android AI 助手（例如 Ditto 这类本机执行路线）背后的进程模型、通信协议、权限边界和工程取舍。
 
-> 读取工作目录里的 `items.csv`，整理数据，填入演示 App，再把处理结果保存到 `result.txt`。
+## 我们的终极目标任务
+
+整套教程围绕一个非常具体的场景展开，你可以一直带着这个画面来读后面的每一章：
+
+> 读取工作目录里的 `items.csv`，整理其中的数据，在手机的一块**虚拟副屏**里填进目标 App，最后把处理结果保存到 `result.txt`。
 
 <figure style={{margin: '1.25rem 0', maxWidth: 680}}>
   <TaskFlow className={`pr-task-diagram ${figureStyles.diagram}`} role="img" aria-labelledby="pr-task-title" aria-describedby="pr-task-desc" style={{display: 'block', width: '100%', height: 'auto'}} />
-  <figcaption>这是完整任务的学习目标。第 1—11 章先建立执行能力，并验证受控的两步模型任务；跨任务记忆与完整任务恢复见第 12—13 章计划。</figcaption>
+  <figcaption>整套教程的北极星任务：把“处理文件”与“操作 App”两条能力汇入同一个受控的 Agent 循环。</figcaption>
 </figure>
 
-最后检查三件事：文件是否读对、App 是否填对、结果是否保存。
+拆开看，完成这样一件事其实需要三块拼图：
 
-**动作要有可观察的结果。** 后续每章都会给出运行步骤、通过条件和失败时的停止方式。
+1. **一双手和一双眼睛**：能看见目标 App 的画面和控件，能在不打扰用户主屏的前提下精准点击和输入。
+2. **一个本地工作台**：能存放文件、跑命令脚本，甚至在需要时打开一个真正的交互式 Linux 终端。
+3. **一个有刹车的大脑**：能把目标和观测结果交给大模型，让它决定下一步调什么工具；但凡涉及高风险动作，必须停下来等用户在手机上点“同意”。
 
-## 先沿一条主线走
+目前发布的**第 1—11 章**已经把这三块核心基础设施全部搭通，并跑通了由真实大模型驱动、经手机人工审批的受控多步任务。跨任务记忆、完整跨能力任务编排以及对标完整产品的能力扩充（详见[功能路线与差距](ditto-parity.md)）会在后续章节继续推进。
 
-前三章只解决一个问题：**普通 App 怎样得到一个可以安全调用的 shell 后端？**
+## 全书路线图
+
+整套教程分成三个递进阶段，每一章只啃透一个核心问题，并且立刻给你可运行、可肉眼核对的代码和界面：
 
 <figure style={{margin: '1.25rem 0'}}>
-  <div style={{overflowX: 'auto'}} tabIndex={0} role="region" aria-label="四阶段课程路线图，可横向查看">
+  <div style={{overflowX: 'auto'}} tabIndex={0} role="region" aria-label="PocketRun 课程路线图">
     <CourseRoadmap className={`pr-roadmap-diagram ${figureStyles.diagram}`} role="img" aria-labelledby="pr-roadmap-title" aria-describedby="pr-roadmap-desc" style={{display: 'block', width: '100%', minWidth: 660, height: 'auto'}} />
   </div>
-  <figcaption>先搭通身份和通信，再增加手机控制、Linux，最后才接 Agent。</figcaption>
+  <figcaption>先打通 Android 原生与特权通道，再搭起本机 Linux 工作台，最后接上工具宿主与大模型循环。</figcaption>
 </figure>
 
-按这个顺序开始：
+### 第一部分：打通 Android 权限与屏幕控制
 
-1. [第 1 章](chapter-1.md)：React 调 Kotlin，先看清普通 App UID。
-2. [第 2 章](chapter-2.md)：App 自己连接本机 ADB，拿到 shell 启动入口。
-3. [第 3 章](chapter-3.md)：用 ADB 启动后端，再改用 Binder 通信。
-4. [第 4 章](chapter-4.md)：让 shell 后端创建虚拟屏，把 Demo 路由到目标 `displayId`。
-5. [第 5 章](chapter-5.md)：看见虚拟屏里的页面，找到输入框、填入文字，再确认结果。
-6. [第 6 章（已发布）](chapter-6.md)：在 App 私有目录准备 CSV、运行固定命令管道，再检查输出和两个退出码；云真机专项与真实界面的正常演示分别记录，[源码快照](https://github.com/kkkhs/pocketrun/releases/tag/chapter-6)已发布。
-7. [第 7 章（已发布）](chapter-7.md)：在普通 App UID 下用最小 Alpine 环境读取同一份 CSV；实际界面、正常演示、12 项生命周期与 7 个死亡恢复场景通过，[源码快照](https://github.com/kkkhs/pocketrun/releases/tag/chapter-7)可下载。
-8. [第 8 章（已发布）](chapter-8.md)：用真正的 PTY 实时输入、改变尺寸、正常退出，并验证 120 秒期限后的自有资源清理；[源码快照](https://github.com/kkkhs/pocketrun/releases/tag/chapter-8)可下载。
-9. [第 9 章（已发布）](chapter-9.md)：固定工具校验、手机逐次审批与来源/资源核对，包含真实执行中取消和原五秒期限；[源码快照](https://github.com/kkkhs/pocketrun/releases/tag/chapter-9)可下载。
-10. [第 10 章（已发布）](chapter-10.md)：同一个目标保留设备和 CSV 两条真实步骤，各步沿用原有授权规则，分别核对来源与清理；[源码快照](https://github.com/kkkhs/pocketrun/releases/tag/chapter-10)可下载。
-11. [第 11 章（已发布）](chapter-11.md)：真实模型选择工具，CSV 经手机批准后执行，再将两条真实结果送回模型总结；[源码快照](https://github.com/kkkhs/pocketrun/releases/tag/chapter-11)可下载。
+| 章节 | 核心问题 | 你会解锁的能力 |
+| --- | --- | --- |
+| [第 1 章：让 React 调用 Kotlin](chapter-1.md) | JS 怎么跨越语言边界调原生 API？ | 用 TurboModule + Codegen 写第一个原生模块，看清普通 App 的 UID 沙箱 |
+| [第 2 章：让 App 自己连接无线 ADB](chapter-2.md) | 没 Root 的手机，App 怎么获得 shell 入口？ | 把无线调试客户端嵌进 App，直连本机 `127.0.0.1` 的 `adbd`，拿到 UID 2000 |
+| [第 3 章：启动独立的 shell 后端与 Binder 通信](chapter-3.md) | 总不能每次点击都敲命令行吧？ | 用 `app_process` 拉起独立 Kotlin 后端，通过 ContentProvider 换回 Binder，断开 ADB 也能调 |
+| [第 4 章：给 Agent 造一块看不见的虚拟屏](chapter-4.md) | 怎么在不抢用户主屏的情况下操作 App？ | 后端创建 720×1280 的 `VirtualDisplay`，把 Demo App 定向启动到指定 `displayId` |
+| [第 5 章：看见界面，再精准操作它](chapter-5.md) | Agent 怎么“看懂”画面并把字填进去？ | 共享内存传输 JPEG 截图、UiAutomation 抓取控件树、计算坐标并定向注入点击与按键 |
 
-读图时分开两个问题：**层是“谁执行”，阶段是“先做什么、再做什么”。** React 与 App Kotlin 是同一个 App 中的两层，shell 后端是独立进程；一次任务可以多次经过这些层，并不是每层只对应一个步骤。
+### 第二部分：在 App 里跑起 Linux 与交互终端
 
-[系统概览](architecture.md)是一张全局参考图，不必先读懂所有模块。[第 0 章](chapter-0.md)只讲教程站工程与发布，也不是 Android 主线的前置。
+| 章节 | 核心问题 | 你会解锁的能力 |
+| --- | --- | --- |
+| [第 6 章：私有工作目录与命令管道](chapter-6.md) | App 怎么安全地管文件和外部子进程？ | 原子写入私有 CSV、用 `ProcessBuilder` 串起 `cat \| wc`，避开管道死锁与输出失控 |
+| [第 7 章：PRoot 与最小 Alpine 环境](chapter-7.md) | Android 用着 Linux 内核，为啥跑不了 Linux 程序？ | 理解 Bionic vs musl 与 W^X 限制，打包 ELF 到 `nativeLibraryDir`，用 PRoot 做无 Root 路径映射 |
+| [第 8 章：通过 JNI 打造真正的交互式 PTY](chapter-8.md) | 管道和真正的终端到底差在哪？ | 在 C++ 中打开 `/dev/ptmx`、管理会话与前景进程组，实现实时输入、resize、Ctrl-C 与严格清理 |
 
-<details>
-<summary>查看第 6—13 章开发状态与计划</summary>
-- 第 6 章：工作目录与命令管道，[教程已发布](chapter-6.md)，[PR #11](https://github.com/kkkhs/pocketrun/pull/11) 已合并，[源码 Release](https://github.com/kkkhs/pocketrun/releases/tag/chapter-6)已发布。
-- 第 7 章：[PR #12](https://github.com/kkkhs/pocketrun/pull/12)、main CI、Pages 与 [源码快照](https://github.com/kkkhs/pocketrun/releases/tag/chapter-7)已完成。
-- 第 8 章：[PR #13](https://github.com/kkkhs/pocketrun/pull/13)、main CI/Pages 和 [源码快照](https://github.com/kkkhs/pocketrun/releases/tag/chapter-8)已完成。
-- 第 9 章：[PR #14](https://github.com/kkkhs/pocketrun/pull/14)、main CI/Pages 与 [源码快照](https://github.com/kkkhs/pocketrun/releases/tag/chapter-9)已完成。
-- 第 10 章：[单任务上下文 PR #17](https://github.com/kkkhs/pocketrun/pull/17)与[验收 PR #20](https://github.com/kkkhs/pocketrun/pull/20)已合并，main CI/Pages 与[源码快照](https://github.com/kkkhs/pocketrun/releases/tag/chapter-10)已完成。
-- 第 11 章：[模型循环 PR #18](https://github.com/kkkhs/pocketrun/pull/18)与[验收 PR #20](https://github.com/kkkhs/pocketrun/pull/20)已合并，最终正常包的三回合真实模型与手机批准 CSV、main CI/Pages 与[源码快照](https://github.com/kkkhs/pocketrun/releases/tag/chapter-11)已完成。
-- 第 12 章：可查看、纠正和删除的记忆。
-- 第 13 章：完整任务与故障恢复。
+### 第三部分：从受控工具到 AI Agent 循环
 
-第 0—11 章教程与源码快照已发布，各章的实际设备、模型和发布记录可独立核对。第 12—13 章是计划；最终目标仍是覆盖 Ditto 整体背后的功能，已知缺口与未核实行为见[功能对照清单](ditto-parity.md)。固定 Demo、最小 Linux 和两步任务是阶段成果，不是最终范围。每次只增加一项能力，并在引入资源的同一章验证取消、死亡和清理。
+| 章节 | 核心问题 | 你会解锁的能力 |
+| --- | --- | --- |
+| [第 9 章：确定性工具宿主与手机端审批](chapter-9.md) | 怎样确保工具调用绝不越界？ | 设计 `TaskHost`：严格 schema 校验、nonce 一次性审批、目标绑定、单调超时与可证明清理 |
+| [第 10 章：把多步调用组织成一份任务账本](chapter-10.md) | 多步操作之间怎么共享状态与证据？ | 用 `SingleTaskContext` 管住任务编号、步骤账本、预算上限与串行状态流转 |
+| [第 11 章：接上大模型，让 Agent 自己选下一步](chapter-11.md) | 手机上的 LLM 循环到底怎么写？ | 在 Kotlin 中接入官方 Anthropic Java SDK，实现流式取消、完整消息回放、白名单摘要与 Keystore 加密 |
 
-</details>
+:::tip 阅读建议
+- **只想先懂原理**：按第 1 章到第 11 章顺着读下来就行。每章都会用你熟悉的 React / TypeScript 概念做类比，再带你走一遍真实源码，**不装环境也能完全读懂**。想先鸟瞰全局，可以先花 5 分钟看看[系统全景](architecture.md)。
+- **想边读边动手跑**：每一章的源码都固定在 GitHub 对应的 `chapter-N` Release 快照里，正文末尾会给出清晰的操作步骤。
+- **想了解本教程站怎么本地启动或部署**：请看[第 0 章：运行与发布教程站](chapter-0.md)，它不是学习 Android 主线的前置条件。
+:::
 
-## 需要准备什么
+## 动手实践的环境要求
 
-**现在运行网站：** Git、Node 24.18.0 / npm、编辑器和浏览器。具体命令见第 0 章；本地构建无需登录 GitHub。
+如果你准备在自己拥有或获授权的演示设备上跟着敲、跟着跑，提前准备好下面这些工具即可（无需一开始就装完整的 Android Studio，也不用拿自己的主力机冒险）：
 
-**阅读基础：** React 组件与状态、TypeScript、异步调用。Android 原生和终端知识会随实现讲解，不必先学完整移动端栈。第一遍按章读正文和图解即可；折叠中的协议、制品校验和故障专项，在动手或深入源码时再展开，不是开始阅读的前置任务。
+- **基础环境**：Git、Node **24.18.0**、完整 **JDK 17**（注意要有 `javac`，不能只有 JRE）。
+- **Android 工具链**：Android SDK（Platform 37、Build Tools 37.0.0 / 36.0.0、NDK 27.1.12297006、CMake 3.22.1）。
+- **演示设备**：推荐创建一个 **Android 16（API 36）ARM64** 专用模拟器。无线 ADB 最低要求 Android 11+，第 7—11 章内置的 Linux 环境要求 **Android 14（API 34+）且为 64 位 ARM64 进程**。
 
-**设备实践：** 使用自己拥有或明确获授权的演示设备与可恢复数据。无线 ADB 的基础要求是 Android 11+；第 7—11 章的固定 Linux 环境要求 **Android 14 / API 34+、ARM64，且 App 运行在 64 位进程中**。各章设备专项另有版本限制，沿已验证的 API 36 / ARM64 专用模拟器练习最容易对照结果。使用 ADB 前确认调试授权，按系统流程配对，无需 root。
+所有工具的安装命令都收在[第 1 章的准备折叠区](chapter-1.md)里，需要时再展开即可。
 
-第 1 章列出了已验证的 JDK / SDK / 模拟器版本。无需先安装完整 Android Studio，也不要求操作个人真机。
-
-带着一个问题继续读：前面的任务里，每一步由谁执行，怎样判断成功，用户取消后该停止什么？
+准备好了吗？我们先去[系统全景](architecture.md)看一眼整台机器的蓝图，或者直接翻开[第 1 章](chapter-1.md)，点下第一个调用 Kotlin 的按钮。

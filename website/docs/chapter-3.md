@@ -1,8 +1,8 @@
 ---
-sidebar_position: 4
-sidebar_label: 第 3 章：shell 后端与 Binder
-title: 第 3 章：启动 shell 后端
-description: 用本机 ADB 启动 UID 2000 的 app_process 后端，交换 Binder，再断开 ADB 并检查同一个进程。
+sidebar_position: 3
+sidebar_label: 第 3 章 · shell 后端与 Binder
+title: 第 3 章：启动独立的 shell 后端，改用 Binder 通信
+description: 用本机 ADB 拉起一个 UID 2000 的独立 app_process 进程，通过一次性 ContentProvider 交换把 Binder 句柄递回 App，之后断开 ADB 也能继续调用。
 ---
 
 import beforeScreenshot from './assets/chapter-3-before.png';
@@ -10,17 +10,14 @@ import binderScreenshot from './assets/chapter-3-binder.png';
 import BackendBootstrapFlow from './assets/backend-bootstrap-flow.svg';
 import figureStyles from '@site/src/css/tutorial-figures.module.css';
 
-上一章，App 已经能连接本机 `adbd`，执行固定探测得到 shell UID 2000。但一条命令结束后，还没有我们自己的后端来持有资源。
+上一章我们拿到了一条能以 UID 2000 跑命令的本机 ADB 连接。听起来好像已经够用了——可一旦开始琢磨后面要做的事，你马上会发现靠“发 shell 命令”根本行不通：
 
-这一章只做一个任务：**通过 ADB 启动独立的 Kotlin 后端，拿到它的 Binder；断开 ADB 后，再检查同一个后端，最后停止它。**
+- **没法常驻对象**：下一章我们要创建一块 `VirtualDisplay` 和一个 `ImageReader`，这些都是活在内存里的 Android Java 对象，一条 `adb shell` 命令跑完进程就退了，对象根本留不住。
+- **没法高效传二进制和结构化数据**：后面每次截图都是几百 KB 的 JPEG，还有复杂的 UI 控件树，靠拼命令行参数、解析 stdout 文本既慢又脆弱。
 
-```text
-准备：已有 ADB 连接，启动后端
-接通：交换 Binder，取得后端客户端
-检查：断开 ADB → Binder ping → 停止后端
-```
+怎么破局？答案是 Android 圈最精妙的架构之一：**只用 ADB 发最后一条命令——让系统的 `app_process` 直接加载我们自己 APK 里的 Kotlin 类，启动一个独立的常驻后台进程（继承 UID 2000）！然后让它把自己的 Binder 接口“递回”给普通 App。**
 
-可见结果是 `pong`、UID 2000 和一个后端 PID。断开 ADB 后 PID 应保持不变；停止后端才会结束这个进程。
+一旦 Binder 握手成功，ADB 的历史使命就结束了。你甚至可以立刻断开 ADB 连接，App 依然能通过 Android 原生的 **typed Binder（AIDL）** 直接调这个 UID 2000 进程里的方法，就像调用本地接口一样快、一样安全。
 
 <div style={{display: 'flex', gap: '1.5rem', flexWrap: 'wrap', margin: '1.25rem 0', alignItems: 'flex-start'}}>
   <figure style={{margin: 0, flex: '0 1 360px', minWidth: 0, maxWidth: '100%'}}>
@@ -28,132 +25,112 @@ import figureStyles from '@site/src/css/tutorial-figures.module.css';
     <img src={beforeScreenshot} alt="PocketRun 的 shell 后端面板，启动按钮可用，Binder 检查和停止按钮尚未启用" width="360" />
   </figure>
   <figure style={{margin: 0, flex: '0 1 360px', minWidth: 0, maxWidth: '100%'}}>
-    <figcaption><strong>断开 ADB 后仍能检查</strong></figcaption>
+    <figcaption><strong>断开 ADB 后，通过 Binder 依然 ping 通同一个 PID</strong></figcaption>
     <img src={binderScreenshot} alt="PocketRun 通过 Binder 收到 pong，并显示后端 UID 2000 与 PID" width="360" />
   </figure>
 </div>
 
-右图来自专用 Android 16 模拟器。PocketRun 已先关闭 ADB 连接，再通过 Binder 得到同一个后端 PID。
+## 先分清两个进程、两条通信链
 
-## 先在界面跑一遍
+到这里，PocketRun 正式从**单进程**演进成了**双进程协作**：
 
-前提是已经按[第 2 章](chapter-2.md)完成配对，并连接无线调试主页的连接端口。
+| 角色 | 所在进程 | UID | 职责 |
+| --- | --- | --- | --- |
+| **React UI**（`BackendPanel.tsx`） | PocketRun 主进程 | 普通 App UID | 按钮交互、显示状态与 PID |
+| **App Kotlin**（`AdbModule` + `PrivilegedBackendController`） | PocketRun 主进程 | 普通 App UID | 通过 ADB 点火、持有 Binder 代理、监听后端死亡 |
+| **shell 后端**（`PrivilegedBackendMain`） | 独立 `app_process` 进程 | **shell UID 2000** | 暴露强类型 Binder 服务，承接系统级操作 |
 
-1. 点“启动 shell 后端”。结果应显示 `Binder pong`、UID 2000 和一个 PID。
-2. 点第 2 章的“取消 / 断开”，关闭 PocketRun 的 ADB transport。
-3. 回到第 3 章点“通过 Binder 检查 shell 后端”。PID 应保持不变。
-4. 点“停止 shell 后端”。按钮回到只能启动的状态。
-
-这四步分别证明：后端真实启动、身份正确、Binder 不依赖 ADB 连接、进程能够主动关闭。仅看到“启动命令已发送”不能算成功。
-
-## 分清谁在执行
-
-**React 和 App Kotlin 是同一个 App 里的两层代码；shell 后端才是另一个进程。**
-
-| 执行层 | 身份与职责 | 代码 |
-| --- | --- | --- |
-| React / TypeScript | 普通 App，按钮、状态、结果展示 | `BackendPanel.tsx` |
-| App Kotlin | 同一 App 进程、App UID，启动客户端与 Binder proxy | `AdbModule.kt`、`PrivilegedBackendController.kt` |
-| shell 后端 Kotlin | 独立 `app_process`、UID 2000，接收受约束的方法调用 | `PrivilegedBackendMain.kt` |
-
-TurboModule 接通前两层。**Binder 是 Android 本机跨进程通信通道，不是后端；ADB 也不是后端。** ADB 负责请求系统 `adbd` 启动 `app_process`，后端建立好后，日常调用只走 Binder。
+记住这两条完全不同的通路：
 
 ```text
-启动时：App Kotlin → 本机 ADB / adbd → app_process 后端
-运行时：App Kotlin ←──── Binder ────→ 同一个后端
+启动时（只用一次）：App Kotlin ──(本机 ADB)──▶ adbd ──▶ 启动 app_process（UID 2000）
+运行时（日常调用）：App Kotlin ◀─────── Typed Binder (AIDL) ───────▶ 同一个后端进程
 ```
 
-普通 App 的 UID 没有改变，独立进程才以 shell 身份运行。shell 也不是 root，仍受系统权限和 SELinux 限制。
-
-## 按顺序接通后端
-
-下面的图按时间顺序回答“先做什么、再做什么”；各步骤由谁执行，见上一节的分工。
+## 四步完成“启动 → 交接 → 脱钩”
 
 <figure style={{margin: '1.25rem 0'}}>
-  <div style={{overflowX: 'auto'}} tabIndex={0} role="region" aria-label="启动后端、交换 Binder、检查与停止的阶段顺序，可横向查看">
+  <div style={{overflowX: 'auto'}} tabIndex={0} role="region" aria-label="启动后端、交换 Binder、检查与停止的阶段顺序">
     <BackendBootstrapFlow className={`pr-backend-diagram ${figureStyles.diagram}`} role="img" aria-labelledby="pr-backend-title" aria-describedby="pr-backend-desc" style={{display: 'block', width: '100%', minWidth: 820, height: 'auto'}} />
   </div>
-  <figcaption>先通过 ADB 启动，再交换 Binder；之后可以断开 ADB，用 Binder 检查和停止同一个进程。</figcaption>
+  <figcaption>先准备好交换窗口，再通过 ADB 拉起进程并收回 Binder 句柄；之后即可断开 ADB，用 Binder 检查和停止后端。</figcaption>
 </figure>
 
-### 先准备交换
+每一步背后都有一个很讲究的设计，我们拆开看：
 
-点击按钮后，[BackendPanel.tsx](https://github.com/kkkhs/pocketrun/blob/main/app/BackendPanel.tsx) 调用 `startBackend()`，经 [AdbModule.startBackend()](https://github.com/kkkhs/pocketrun/blob/main/app/android/app/src/main/java/io/github/kkkhs/pocketrun/AdbModule.kt#L76) 进入 App 侧 [PrivilegedBackendController.start()](https://github.com/kkkhs/pocketrun/blob/main/app/android/app/src/main/java/io/github/kkkhs/pocketrun/PrivilegedBackendController.kt#L54)。
+### 1. 先张网，再放鹰：准备一次性交换窗口
 
-Controller 生成一次性 token，调用 `BinderExchangeRegistry.prepare()` 开始等待，然后才发送启动命令。先准备等待，是为了后端启动得很快时也能接住它送回的 Binder。
+你可能会问：两个完全独立的进程，刚拉起来的 `app_process` 怎么把它的 `IBinder` 对象交给普通 App 呢？写文件？不行，Binder 是内核管理的跨进程对象引用，没法序列化成文本写进磁盘！
 
-token 由 `SecureRandom` 生成，只在 10 秒交换窗口内有效，不写入日志或存储。它约束的是“这次启动的后端”，不是长期凭据。
+Android 里最稳妥的跨进程“递句柄”方式，是在 App 里声明一个用途单一的 `ContentProvider`（[BinderExchangeProvider.kt](https://github.com/kkkhs/pocketrun/blob/chapter-3/app/android/app/src/main/java/io/github/kkkhs/pocketrun/BinderExchangeProvider.kt)），借助它的 `call(method, arg, extras: Bundle)`——因为 Android 的 `Bundle` 支持 `putBinder()`，内核会自动把 Binder 引用跨进程传递过去！
 
-### 用 ADB 启动
+前端类比的话，这就像**主进程先开好一个带一次性临时密钥的本地回调端点，等子进程启动后主动把连接句柄 POST 回来注册**。
 
-[BackendLaunchCommand.build()](https://github.com/kkkhs/pocketrun/blob/main/app/android/app/src/main/java/io/github/kkkhs/pocketrun/BackendLaunchCommand.kt#L7) 构造固定命令；`AdbModule` 通过已有 ADB 连接发送它。
+因此在发 ADB 命令之前，[PrivilegedBackendController.start()](https://github.com/kkkhs/pocketrun/blob/chapter-3/app/android/app/src/main/java/io/github/kkkhs/pocketrun/PrivilegedBackendController.kt) 先生成一把 32 字节随机一次性 token 和一个 `appToken`（用来让后端监听 App 存活），调用 `BinderExchangeRegistry.prepare(token, appToken)` 创建一个 10 秒有效期的 `CompletableFuture`，**先把网张好，再发启动命令**，防止后端启动太快导致回调扑空。
 
-关键是用 `app_process` 从当前 APK 加载 [PrivilegedBackendMain.main()](https://github.com/kkkhs/pocketrun/blob/main/app/android/app/src/main/java/io/github/kkkhs/pocketrun/PrivilegedBackendMain.kt#L21)。后端先检查自身 UID 必须是 2000，再创建 Binder 服务。
+### 2. 用 `app_process` 从 APK 里直接跑起 Kotlin
 
-这不是“ADB 自己变成后端”，也不是启动另一个 React App。它是独立进程里的一段 Java / Kotlin 程序，之后可以持续持有虚拟屏等资源，不必为每个动作拼命令、解析文本。
+接下来，[BackendLaunchCommand.build()](https://github.com/kkkhs/pocketrun/blob/chapter-3/app/android/app/src/main/java/io/github/kkkhs/pocketrun/BackendLaunchCommand.kt) 构造出唯一一条固定的启动命令（所有参数严格 shell 转义，绝不拼接来自 JS 的任意字符串）：
 
-<details>
-<summary>启动细节：CLASSPATH、setsid 与启动标记</summary>
-
-固定命令的启动部分如下（省略后面的存活检查）：
-
-```sh
-export CLASSPATH='<当前 APK>'
+```sh title="BackendLaunchCommand 构造的启动命令（示意）"
+export CLASSPATH='/data/app/.../base.apk'
 (
   exec /system/bin/setsid /system/bin/app_process /system/bin \
     --nice-name=pocketrun:backend \
     io.github.kkkhs.pocketrun.PrivilegedBackendMain \
-    --token '<一次性 token>' \
+    --token '<32字节随机token>' \
     --authority 'io.github.kkkhs.pocketrun.binder_exchange' \
-    --app-uid '<当前 App UID>' --user '<当前 Android 用户 ID>'
+    --app-uid '<当前App UID>' --user '0'
 ) </dev/null >/dev/null 2>&1 &
 ```
 
-- `CLASSPATH` 指向 PocketRun APK，供 `app_process` 加载后端类。
-- `setsid` 和标准流重定向让后端脱离本次 ADB shell stream。
-- APK 路径与参数在 Kotlin 中校验并引用；不接受 JavaScript 或用户命令字符串。
-- 用户 ID 从 App UID 推导；本章专用模拟器使用用户 `0`。
-- 完整命令短暂检查子进程存活，再返回固定 `pocketrun-backend-launched` 标记。这个标记仍不是 Binder 就绪证据。
+这条命令里藏着三个非常经典的 Linux/Android 技巧：
+- **`CLASSPATH` 直接指向自己的 APK**：Android 的 APK 本质上就是打包了 `classes.dex` 的压缩包，`app_process` 可以直接用它启动一个独立的 ART 虚拟机，跑里面的 `main()` 函数——**完全不需要单独编译第二个可执行文件！**
+- **`setsid` + 重定向标准流 + `&`**：让新进程脱离当前的 ADB shell 会话。这样后面我们断开 ADB 连接时，系统不会顺手把后台进程给杀掉。
+- **短暂探活标记**：命令最后会等 1 秒检查 `kill -0 "$backend_pid"` 并输出 `pocketrun-backend-launched`，但这只是初步信号；Controller 只有真正收到 Binder 并调通 `getUid() == 2000`，才认定启动成功。
 
-Controller 必须真正收到 Binder，并调用 `getUid()` 得到 2000，才把启动判为成功。
+### 3. 双向握手与双向死亡监听
+
+新启动的 [PrivilegedBackendMain.main()](https://github.com/kkkhs/pocketrun/blob/chapter-3/app/android/app/src/main/java/io/github/kkkhs/pocketrun/PrivilegedBackendMain.kt) 首先检查 `Process.myUid() == Process.SHELL_UID`（2000），接着初始化主 Looper、实例化 `BackendBinder`，然后通过系统的外部 ContentProvider 接口调用我们 App 里的 `BinderExchangeProvider.call()`，把 `token` 和 `backend.asBinder()` 递过去。
+
+App 这边的 [BinderExchangeRegistry.exchange()](https://github.com/kkkhs/pocketrun/blob/chapter-3/app/android/app/src/main/java/io/github/kkkhs/pocketrun/BinderExchangeProvider.kt) 会同时卡住四道闸门：
+
+```kotlin title="BinderExchangeProvider.kt（交换校验核心）"
+fun exchange(callingUid: Int, token: String, backend: IBinder): IBinder {
+    if (callingUid != Process.SHELL_UID) throw SecurityException("Binder exchange 被拒绝。")
+    // ... 检查 10 秒窗口是否过期 ...
+    if (!MessageDigest.isEqual(current.token, requestToken) ||
+        backend.interfaceDescriptor != IPrivilegedBackend.DESCRIPTOR
+    ) {
+        throw SecurityException("Binder exchange 被拒绝。")
+    }
+    pending = null                 // 一次性消耗，立即作废
+    current.token.fill(0)          // 擦除内存中的 token
+    current.future.complete(backend)
+    return current.client          // 同时把 App 的 client Binder 交回后端
+}
+```
+
+为什么要做“双向交换”？因为交换完成后，**两边各自调用了 `linkToDeath()`**：
+- **App 盯住后端**：如果后端被系统杀掉或崩溃，App 侧的 `DeathRecipient` 立刻触发，自动清空代理并更新状态。
+- **后端盯住 App**：如果用户把 PocketRun App 滑掉杀死了，后端立刻收到死亡回调并主动 `Looper.quitSafely()` 退出，绝不在手机后台留下僵尸孤儿进程！
+
+<details>
+<summary>深入一点：裸 app_process 没有 Context，怎么调 ContentProvider？</summary>
+
+普通 App 进程是系统 `ActivityManager` 启动的，天生自带 `Application` 和 `Context`。但 `app_process` 是 `adbd` 直接拉起的“裸”进程，手头没有 `Context`。
+
+因此 `PrivilegedBackendMain.callProvider()` 通过反射调用系统隐藏接口 `ActivityManager.getService().getContentProviderExternal(authority, userId, externalToken, tag)` 获取 Provider 句柄，再构造一个声明为 `com.android.shell` 的 `AttributionSource`（Android 12+）调用 `call()`，最后在 `finally` 里调 `removeContentProviderExternal` 归还引用。这层反射只用来完成这“临门一脚”的握手，握手之后的所有业务调用全部走标准 AIDL。
 
 </details>
 
-### 把 Binder 交回 App
+### 4. 用强类型 AIDL 守住特权边界
 
-两个进程不能直接共享一个 Kotlin 对象。[PrivilegedBackendMain.exchange()](https://github.com/kkkhs/pocketrun/blob/main/app/android/app/src/main/java/io/github/kkkhs/pocketrun/PrivilegedBackendMain.kt#L56) 带着 token 和后端 Binder 调用用途单一的 [BinderExchangeProvider.call()](https://github.com/kkkhs/pocketrun/blob/main/app/android/app/src/main/java/io/github/kkkhs/pocketrun/BinderExchangeProvider.kt#L20)。
+拿到 `IBinder` 后，Controller 用 `IPrivilegedBackend.Stub.asInterface(binder)` 把它包装成强类型接口。第 3 章结束时的 [IPrivilegedBackend.aidl](https://github.com/kkkhs/pocketrun/blob/chapter-3/app/android/app/src/main/aidl/io/github/kkkhs/pocketrun/IPrivilegedBackend.aidl) 极其克制：
 
-Provider 内的 `BinderExchangeRegistry.exchange()` 检查调用 UID 必须是 2000、token 匹配且未过期、Binder descriptor 正确。成功一次后立即清空 token，把后端 Binder 交给等待的 Controller。
+```java title="IPrivilegedBackend.aidl（第 3 章接口）"
+package io.github.kkkhs.pocketrun;
 
-Provider 同时返回 App client Binder。后端用 `linkToDeath` 观察 App 是否消失；App 侧也监听后端 Binder 死亡。两个方向各有一份观察，不是由 React state 判断进程是否活着。
-
-Provider 必须跨 UID 导出，但不提供 query / insert / update / delete。普通 App UID 冒充 shell 调用 exchange 的真实设备测试会被拒绝。
-
-<details>
-<summary>系统接口：裸 app_process 怎样取得 Provider</summary>
-
-`app_process` 是由 `adbd` 直接启动的 shell 进程，不是 ActivityManager 创建的普通 App 进程，没有已经登记的 `Application` / `ActivityThread` 身份。
-
-后端因此通过 Android 的 external-content-provider Binder API 获取目标 Provider，再使用 `com.android.shell` 的 AttributionSource 调用。Android 11 与 Android 12+ 的隐藏接口参数不同，代码按系统版本选择对应签名；本章设备实测的是 API 36 分支。
-
-这层反射只负责取得本 App 的 exchange Provider；业务 Binder 接口本身仍由 AIDL 生成。不能仅凭编译通过宣称所有 Android / OEM 版本都兼容。
-
-</details>
-
-### 断开 ADB 再检查
-
-取得句柄后，Controller 用 `IPrivilegedBackend.Stub.asInterface()` 得到 typed Binder proxy。`pingBackend()` 经 [PrivilegedBackendController.ping()](https://github.com/kkkhs/pocketrun/blob/main/app/android/app/src/main/java/io/github/kkkhs/pocketrun/PrivilegedBackendController.kt#L113) 查询 UID、PID 和 `ping()`。
-
-后端 [BackendBinder.ping()](https://github.com/kkkhs/pocketrun/blob/main/app/android/app/src/main/java/io/github/kkkhs/pocketrun/PrivilegedBackendMain.kt#L171) 返回 `pong`。结果经过 App Kotlin 转成 `WritableMap`，再由 Promise 回到 React；TypeScript 不直接持有 Android `IBinder`。
-
-先关闭 ADB，再检查得到同一个 PID，才证明此时用的是 Binder，而不是重新发了一条 ADB 命令。
-
-<details>
-<summary>接口边界：第 3 章的四个方法与调用者校验</summary>
-
-AIDL 是两个进程之间的调用约定，不是新的执行阶段。第 3 章结束时，[IPrivilegedBackend.aidl](https://github.com/kkkhs/pocketrun/blob/chapter-3/app/android/app/src/main/aidl/io/github/kkkhs/pocketrun/IPrivilegedBackend.aidl) 只有：
-
-```aidl
 interface IPrivilegedBackend {
     int getUid();
     int getPid();
@@ -162,100 +139,49 @@ interface IPrivilegedBackend {
 }
 ```
 
-这里故意没有 `execute(String command)`。第 4 章再增加参数固定的虚拟屏方法；后续能力都以边界明确的方法加入，不能绕过原生校验变成任意 shell 入口。
+这里故意**没有** `execute(String command)`。哪怕将来扩展虚拟屏、截图、查树、输入，也会把每个能力收口成一个参数受控的强类型方法。
 
-`PrivilegedBackendMain` 在每个方法前检查调用者，规则是：
+而且在后端的每一个 Binder 方法入口，都有一道必不可少的防线——检查调用者是不是当初启动它的那个 App：
 
-```kotlin
-if (Binder.getCallingUid() != appUid) {
-  throw SecurityException("后端调用者 UID 不匹配。")
+```kotlin title="PrivilegedBackendMain.kt（身份校验与权限切换）"
+private fun enforceClient() {
+    val caller = Binder.getCallingUid()
+    if (caller != appUid) {
+        throw SecurityException("后端调用者 UID 不匹配。")
+    }
+}
+
+private inline fun <T> asShell(action: () -> T): T {
+    val identity = Binder.clearCallingIdentity()
+    try {
+        check(Process.myUid() == Process.SHELL_UID) { "后端不是 shell UID 2000。" }
+        return action()
+    } finally {
+        Binder.restoreCallingIdentity(identity)
+    }
 }
 ```
 
-拿到 Binder 句柄仍不等于任何进程都可以使用它。
+:::tip 一个超级经典的 Android Binder 知识点：`clearCallingIdentity()`
+在 Android 的 Binder IPC 机制里，当普通 App 调用后端方法时，系统会把当前线程的“调用者身份”记成 **App 的 UID**。因此：
+1. 第一时间调 `enforceClient()`，用 `Binder.getCallingUid()` 拦截任何其他恶意 App 的越权调用；
+2. 校验通过后，在后续章节调用系统服务（比如创建虚拟屏或注入输入）前，必须用 `Binder.clearCallingIdentity()` 把线程身份临时切回后端自己的 **UID 2000**，用完再在 `finally` 里恢复——否则系统服务还会按普通 App 的低权限来拒绝你！
+:::
 
-</details>
+## 动手跑一遍
 
-### 停止并处理死亡
+先按[第 2 章](chapter-2.md)完成无线 ADB 连接，然后滚动到第 3 章的 **shell 后端** 面板：
 
-“停止 shell 后端”调用 `stopBackend()`，经 [PrivilegedBackendController.stop()](https://github.com/kkkhs/pocketrun/blob/main/app/android/app/src/main/java/io/github/kkkhs/pocketrun/PrivilegedBackendController.kt#L270) 发出 Binder `shutdown()`，等待进程退出。后端让主 Looper 结束，再收回资源；App 侧清空 proxy 和状态。
+1. 点击 **启动 shell 后端**，几秒内会看到返回 `Binder pong`、`UID：2000` 和一个后端 `PID`（记下这个数字）。
+2. 回到第 2 章面板，点击 **取消 / 断开**，把 App 的 ADB 连接彻底关掉。
+3. 回到第 3 章面板，点击 **通过 Binder 检查 shell 后端**——你会看到依然返回 `pong`，而且 **PID 和刚才一模一样**！这就铁证如山地证明：现在走的是纯 Binder 通信，跟 ADB 已经没关系了。
+4. 最后点击 **停止 shell 后端**，后端收到 `shutdown()` 后优雅退出，面板回到初始状态。
 
-意外死亡时，Controller 的 `DeathRecipient` 将状态改回 stopped。启动等待被取消时，pending token 被清除；后端随后 exchange 只会失败并退出。
+## 本章小结与源码
 
-当前规则是：**App 进程死亡，shell 后端也退出。** 持久后端的重附着与升级后旧进程退出，会在故障恢复章节加入；这里不把“进程还在”误当作“任务可以安全恢复”。
+到这里，PocketRun 的“特权底座”已经完全建好了：我们拥有了一个独立常驻、运行在 **UID 2000**、通过强类型 **AIDL Binder** 通信、并且自带双向死亡清理的后台服务。
 
-## 顺着文件找一遍
+从下一章开始，这个后端要真正开始干活了——先为我们的 AI 助手造一块**看不见的 720×1280 虚拟副屏**，把目标页面装进去。
 
-```text
-app/
-├── BackendPanel.tsx                     按钮与 Promise 结果
-├── specs/NativePocketRunAdb.ts          React → App Kotlin 的约定
-└── android/app/src/main/
-    ├── aidl/.../IPrivilegedBackend.aidl App Kotlin → 后端的约定
-    ├── AndroidManifest.xml             导出 exchange Provider
-    └── java/io/github/kkkhs/pocketrun/
-        ├── AdbModule.kt                App 侧原生入口
-        ├── PrivilegedBackendController.kt 启动、ping、stop 与死亡处理
-        ├── BackendLaunchCommand.kt     固定启动命令
-        ├── BinderExchangeProvider.kt   App 侧接收 Binder
-        └── PrivilegedBackendMain.kt    独立后端入口和 Binder Stub
-```
-
-第 3 章继续复用 `PocketRunAdb` TurboModule，因为 ADB 连接和后端启动由同一条原生工作队列串行管理。Binder 句柄从不传给 TypeScript；前端只收到结构化状态。上面的代码链接指向当前文件；历史能力范围以文末 `chapter-3` 快照为准。
-
-## 验证启动与退出
-
-<details>
-<summary>实践命令：构建与专用模拟器真实协议测试</summary>
-
-在 `app/` 运行：
-
-```bash
-npm run typecheck
-npm run lint
-npm test -- --runInBand
-npm run audit:ci
-
-cd android
-./gradlew :adb:testDebugUnitTest :app:testDebugUnitTest \
-  :app:assembleDebug :app:assembleRelease :app:assembleDebugAndroidTest \
-  -PreactNativeArchitectures=arm64-v8a --max-workers=2
-```
-
-本章快照的真实协议测试只能运行在第 1 章创建的专用模拟器上。以下继续在 `app/android/` 执行，先核对目标，再安装：
-
-```bash
-SERIAL=emulator-5556
-adb -s "$SERIAL" emu avd name  # 必须是 pocketrun-ch1-api36
-adb -s "$SERIAL" install -r app/build/outputs/apk/debug/app-debug.apk
-adb -s "$SERIAL" install -r app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk
-adb -s "$SERIAL" shell am instrument -w \
-  -e class io.github.kkkhs.pocketrun.AdbPairingIntegrationTest \
-  io.github.kkkhs.pocketrun.test/androidx.test.runner.AndroidJUnitRunner
-```
-
-设备测试不会把配对码或 token 输出到主机。它真实验证 TLS 配对和连续 ADB stream、`app_process` UID 2000 与不同 PID、App UID 不能冒充 shell 调用 exchange、关闭 ADB 后 Binder ping、kill 后 Binder death、重启和正常 shutdown，以及 pending 启动立即取消。
-
-</details>
-
-2026-11-17 的结果：
-
-- 9 个 React UI 测试、ADB JVM 测试和后端启动命令测试通过。
-- ARM64 Debug、Release、AndroidTest APK 与 AIDL / Codegen 构建通过。
-- 专用 Android 16 / API 36 模拟器设备测试为 `OK (2 tests)`。
-- 真实产品界面完成“ADB 连接 → 启动 UID 2000 后端 → 断开 ADB → Binder ping 同一 PID → shutdown”。
-- App 的 high-severity npm audit 门禁通过；6 个 `minimatch` moderate 传播条目仍按第 1、2 章记录。
-
-源码检查与命令单元测试不能替代真实 Android 上的进程和 Binder 验证。这里记录的是本章快照与这台模拟器的结果，不代表所有设备都已验证；测试数量也不随 `main` 的后续扩展更新。
-
-下一章让这个后端创建一块固定用途的 VirtualDisplay，把 Demo 放进去，再验证释放后旧 `displayId` 失效。
-
-练习：按截图顺序操作一次，然后解释为什么“ADB 已断开”和“shell 后端已停止”是两个不同状态。
-
-参考：[Binder 概览](https://source.android.com/docs/core/architecture/ipc/binder-overview)、[AIDL](https://developer.android.com/develop/background-work/services/aidl)、[ContentProvider.call](https://developer.android.com/reference/android/content/ContentProvider#call(java.lang.String,%20java.lang.String,%20android.os.Bundle))。
-
-## 本章源码
-
-- [PR #6：shell 后端、Binder 通信与第 3 章](https://github.com/kkkhs/pocketrun/pull/6)
-- [PR #10：前序章节的任务主线与图解](https://github.com/kkkhs/pocketrun/pull/10)
-- [Release `chapter-3`：本章结束时的源码快照](https://github.com/kkkhs/pocketrun/releases/tag/chapter-3)
+- **本章源码快照**：[Release `chapter-3`](https://github.com/kkkhs/pocketrun/releases/tag/chapter-3) · [PR #6](https://github.com/kkkhs/pocketrun/pull/6)
+- **延伸参考**：[Android Binder 概览](https://source.android.com/docs/core/architecture/ipc/binder-overview) · [AIDL 官方文档](https://developer.android.com/develop/background-work/services/aidl) · [实机验收与工程档案](verification-records.md)

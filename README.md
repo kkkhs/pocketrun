@@ -1,65 +1,59 @@
 # PocketRun：从零构建 Android AI 助手
 
-面向 React / TypeScript 开发者，学习让 Agent 在 Android 手机上操作 App、处理文件和执行命令。
+面向 **React / TypeScript** 开发者的端到端实战教程与示例工程：在**无需 Root** 的 Android 手机上，从零搭起一个能看见并操作 App、能运行 Linux 工具与交互终端、并由真实大模型驱动（同时受手机端人工审批约束）的 AI Agent。
 
-第 0—11 章教程与源码快照已发布：第 1 章跑通 React → Kotlin，第 2 章取得 App 自有 ADB 启动入口，第 3 章完成 UID 2000 的 `app_process` 后端与 Binder 通信，第 4 章创建演示 VirtualDisplay 并验证 `displayId` 路由，第 5 章从同一显示读取截图和 UI 树、定向输入并重新观察结果。第 6 章在 App 私有目录准备 CSV、运行固定命令管道并检查输出与退出码；云真机专项与真实界面的正常演示分别记录，不代表所有异常分支都已在界面命中。[PR #11](https://github.com/kkkhs/pocketrun/pull/11) 已合并，`chapter-6` 源码快照已发布。后续能力按章节推进。
+在线阅读：[https://kkkhs.github.io/pocketrun/](https://kkkhs.github.io/pocketrun/)
 
-第 7 章已在任务专用本机模拟器完成最小 Alpine 的安装、映射与重复演示、12 项生命周期、7 个 App/tracer/guest/安装死亡恢复场景。仅含第 7 章能力的实际 App 界面也已通过；[PR #12](https://github.com/kkkhs/pocketrun/pull/12)、main CI、Pages 与 [chapter-7 源码快照](https://github.com/kkkhs/pocketrun/releases/tag/chapter-7)均已完成。第 8 章的独立 PTY、120 秒资源验收、main CI/Pages 与 [chapter-8 源码快照](https://github.com/kkkhs/pocketrun/releases/tag/chapter-8)也已完成。第 9 章的独立 App 工具、审批和故障边界、main CI/Pages 与 [chapter-9 源码快照](https://github.com/kkkhs/pocketrun/releases/tag/chapter-9)也已完成。第 10 章独立两步任务与第 11 章最终正常包的三回合真实模型/手机批准 CSV 均已验收；[PR #20](https://github.com/kkkhs/pocketrun/pull/20)、main CI/Pages 与 [chapter-10](https://github.com/kkkhs/pocketrun/releases/tag/chapter-10)、[chapter-11](https://github.com/kkkhs/pocketrun/releases/tag/chapter-11) 源码快照已完成。
+## 你会学到什么、做出什么
 
-## 阅读教程
+在电脑上写一个 AI Agent 很容易——Node.js 调个大模型接口，再 `child_process` 跑几条命令就行了。但在 Android 手机上，普通 App 关在严格的沙箱里，既不能随便看别的 App 的屏幕，也无法直接像 Linux 桌面那样跑现成的命令行工具。
 
-- [课程导读](https://kkkhs.github.io/pocketrun/)
-- [第 1 章：让界面调用 Kotlin](website/docs/chapter-1.md)
-- [第 2 章：让 App 自己连接 ADB](website/docs/chapter-2.md)
-- [第 3 章：启动 shell 后端](website/docs/chapter-3.md)
-- [第 4 章：把 Demo App 放进虚拟屏](website/docs/chapter-4.md)
-- [第 5 章：看见界面，再操作它](website/docs/chapter-5.md)
-- [第 6 章：工作目录与命令管道（已发布）](https://kkkhs.github.io/pocketrun/chapter-6/) · [源码快照](https://github.com/kkkhs/pocketrun/releases/tag/chapter-6)
-- [第 7 章：PRoot 与最小 Alpine 环境](https://kkkhs.github.io/pocketrun/chapter-7/) · [源码快照](https://github.com/kkkhs/pocketrun/releases/tag/chapter-7)
-- [第 8 章：真正的交互式 PTY](https://kkkhs.github.io/pocketrun/chapter-8/) · [源码快照](https://github.com/kkkhs/pocketrun/releases/tag/chapter-8)
-- [第 9 章：工具校验、手机审批与宿主](https://kkkhs.github.io/pocketrun/chapter-9/) · [源码快照](https://github.com/kkkhs/pocketrun/releases/tag/chapter-9)
-- [第 10 章：把两次调用放进同一个任务（已发布）](https://kkkhs.github.io/pocketrun/chapter-10/) · [源码快照](https://github.com/kkkhs/pocketrun/releases/tag/chapter-10)
-- [第 11 章：让模型选下一步，仍由手机批准工具（已发布）](https://kkkhs.github.io/pocketrun/chapter-11/) · [源码快照](https://github.com/kkkhs/pocketrun/releases/tag/chapter-11)
-- [章节源码快照](https://github.com/kkkhs/pocketrun/releases)
-- [参考：系统概览](https://kkkhs.github.io/pocketrun/architecture/)
-- [参考：运行与发布教程站](https://kkkhs.github.io/pocketrun/chapter-0/)
+PocketRun 用 11 章渐进式实战，带你一层层拆开这些系统限制：
 
-Android 示例在 [`app/`](app/README.md)，与下面的教程站使用独立依赖。
+| 部分 | 章节 | 你会亲手搭通的核心机制 |
+| --- | --- | --- |
+| **一、打通 Android 权限与屏幕控制** | 第 1—5 章 | TurboModule 桥接 Kotlin → App 自连本机无线 ADB → 拉起 UID 2000 独立 `app_process` 并交换 Binder → 创建隔离的 VirtualDisplay → 共享内存截图、UiAutomation 控件树与定向输入注入 |
+| **二、在 App 里跑起 Linux 与终端** | 第 6—8 章 | 私有工作目录与 `ProcessBuilder` 管道 → 绕开 Android W^X 限制跑起 PRoot + 最小 Alpine（BusyBox/musl）→ 通过 JNI 与 `/dev/ptmx` 实现真正的交互式 PTY 终端 |
+| **三、从受控工具到 AI Agent 循环** | 第 9—11 章 | 带参数校验、目标绑定与手机端审批的确定性 `TaskHost` → 多步任务账本 `SingleTaskContext` → 基于 Anthropic Java SDK 的真实模型工具调用循环 `AgentLoop` |
 
-## 开发与项目记录
+每一章都对应仓库中真实的源码实现与可检出的 [章节源码快照（GitHub Releases）](https://github.com/kkkhs/pocketrun/releases)。
 
-- [项目总账](PROJECT_RECORD.md)：当前要求、关键决策时间线、阶段汇报、交付证据与剩余工作。
-- [开发与交接说明](DEVELOPMENT.md)：代码入口、工具链、验证/发布流程、教程写作标准和接手检查。
-- [Ditto 功能对照](website/docs/ditto-parity.md)：完整功能目标、阶段能力、缺口与未核实行为。
+## 目录结构
 
-这些记录面向开发和交接；读者按上面的教程顺序阅读即可。
+本仓库包含两个**各自独立管理依赖**的子项目（根目录没有 `package.json`）：
 
-## 本地运行
+- [`website/`](website/)：Docusaurus 3.10.2 教程站（正文位于 [`website/docs/`](website/docs/)）。
+- [`app/`](app/README.md)：React Native 0.88.1 + Kotlin + C++/JNI + AIDL 的完整 Android 工程。
 
-使用 Node **24.18.0** / npm，网站由 Docusaurus **3.10.2** 构建。下面克隆示例仓库，只做本地体验。
+## 本地运行教程站
+
+需要 Node **24.18.0**（见 `.nvmrc`）与 npm：
 
 ```bash
 git clone https://github.com/kkkhs/pocketrun.git
 cd pocketrun
-nvm install
 nvm use
 cd website
 npm ci --registry=https://registry.npmjs.org
+npm start -- --host 127.0.0.1 --port 3000 --no-open
+```
+
+访问 <http://127.0.0.1:3000/pocketrun/> 即可实时预览。完整构建与校验命令：
+
+```bash
 npm run test:toolchain
 npm run typecheck
 npm run build
 npm run audit:ci
-npm run serve -- --host 127.0.0.1 --port 3000 --no-open
 ```
 
-没有 nvm 时，用其他方式安装 `.nvmrc` 指定版本即可。
+Android 工程的构建、安装与测试步骤见 [`app/README.md`](app/README.md) 与 [第 1 章](website/docs/chapter-1.md)。
 
-工具链、类型、构建和审计门禁应退出 `0`。打开 <http://127.0.0.1:3000/pocketrun/>；修改后重新 build，按 `Ctrl+C` 结束预览。
+## 项目维护与开发交接文档
 
-日常写作在 `website/` 运行 `npm start -- --host 127.0.0.1 --port 3000 --no-open`。
+如果你是参与后续章节开发的贡献者或协作者，可以先看以下工程记录（普通读者直接按教程顺序阅读即可）：
 
-## 更新教程
-
-发布练习先 Fork 或使用自己有写入权限的仓库，再按第 0 章的 `OWNER` / `REPO` 流程克隆。修改正文和站点配置后，向自己的仓库提交 PR；合并其 `main` 会部署自己的站点。
-
-完整命令、审计记录与线上验证步骤见[第 0 章](https://kkkhs.github.io/pocketrun/chapter-0/)。设备实践仅使用自己拥有或获授权的设备与演示数据。
+- [项目总账（PROJECT_RECORD.md）](PROJECT_RECORD.md)：项目演进目标、关键决策时间线与阶段交付摘要。
+- [开发与交接说明（DEVELOPMENT.md）](DEVELOPMENT.md)：代码入口、工具链要求、验证门禁与发布流程。
+- [Ditto 功能对照（ditto-parity.md）](website/docs/ditto-parity.md)：完整产品能力目标、当前阶段差距与待核实项。
+- [实机验收与工程档案（verification-records.md）](website/docs/verification-records.md)：各章实机验证记录、产物校验与第三方开源许可汇总。

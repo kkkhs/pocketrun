@@ -1,201 +1,81 @@
 ---
-sidebar_position: 91
-sidebar_label: 参考：工程与发布
-title: 第 0 章：运行与发布教程站
-description: 写一段教程，热更新预览，构建检查，再通过 PR 发布到自己的 GitHub Pages。
+sidebar_position: 1
+sidebar_label: 教程站工程与发布
+title: 第 0 章：运行与发布这套教程站
+description: 在本地启动 Docusaurus 教程站预览、运行构建与链接检查，并通过 GitHub Actions 发布到自己的 GitHub Pages。
 ---
 
-本章是独立的网站工程参考，**不需要 Android SDK、手机或 ADB，也不是第 1 章的前置。**
+本章是独立的网站工程手册——**不需要 Android SDK、模拟器或手机，也不是阅读第 1 章的前置条件。** 如果你想在本地阅读、修改教程，或者把 Fork 出来的版本发布到自己的 GitHub Pages，按下面几步走完即可。
 
-只做一个任务：**给教程补一段有用的说明，先在本地看见，再发布到自己的 GitHub Pages。**
+这套站点使用 **Docusaurus 3.10.2**（classic TypeScript 模板），依赖独立放在 `website/` 目录里，与 `app/` 的 Android 工程互不干扰。
 
-```text
-准备：自己的仓库和分支
-写作：改正文 → 本地预览 → 构建检查
-发布：提交 PR → 合并 → 核对页面
-```
+## 1. 本地启动与热更新预览
 
-网站使用 Docusaurus 3.10.2 默认 Docs 主题。正文是源文件，开发预览帮助写作，构建产物才是 Pages 最后发布的内容；这三者不是同一份状态。
-
-## 准备仓库
-
-准备 Git、Node 24.18.0 和 npm。使用 nvm 时，仓库的 `.nvmrc` 会指定 Node 版本；也可以用其他方式安装同一版本。
-
-本地体验可用示例仓库 `kkkhs/pocketrun`。发布练习先 Fork 到自己的账号，或使用你有写入权限的同内容仓库；已有示例克隆时，在示例仓库之外的目录开始。
+确保本机已安装 Git 和 Node **24.18.0**（根目录 `.nvmrc` 已固定版本）：
 
 ```bash
-OWNER=your-github-name # 换成仓库所属账号；仅本地体验可填 kkkhs
-REPO=pocketrun # 改名时填实际仓库名
-git clone "https://github.com/$OWNER/$REPO.git"
-cd "$REPO"
+git clone https://github.com/kkkhs/pocketrun.git
+cd pocketrun
 nvm install
 nvm use
+
 cd website
 npm ci --registry=https://registry.npmjs.org
-```
-
-`website/` 是 npm 项目。安装成功应以退出码 `0` 结束，实际依赖由 `package-lock.json` 固定。
-
-## 写一段说明
-
-结束安装后，先从 `website/` 回到仓库根目录，创建自己的文档分支：
-
-```bash
-cd ..
-git switch main
-git pull --ff-only
-git switch -c docs/update-chapter-0
-```
-
-在 `website/docs/chapter-0.md` 的“遇到问题”中补一条你实际用过的排错提示。先改正文，不改设备示例或依赖。
-
-Markdown 写文章，MDX 允许正文中的 React 组件。开头的 `title` 是页面标题，`sidebar_label` 是目录里读者看到的名字；相对链接如 `architecture.md` 会由 Docusaurus 转成站点路径。
-
-代码位置：[正文目录](https://github.com/kkkhs/pocketrun/tree/main/website/docs)、[站点配置](https://github.com/kkkhs/pocketrun/blob/main/website/docusaurus.config.ts)、[侧栏配置](https://github.com/kkkhs/pocketrun/blob/main/website/sidebars.ts)。正文解决“写什么”，配置解决“在哪里展示”。
-
-## 本地看修改
-
-在 `website/` 开启热更新预览：
-
-```bash
-cd website
 npm start -- --host 127.0.0.1 --port 3000 --no-open
 ```
 
-打开 `http://127.0.0.1:3000/pocketrun/`，进入工程与发布参考页，确认刚写的说明已经出现。改正文后页面会更新；按 `Ctrl+C` 结束。端口被占用时换一个空闲端口，不停止别人的服务。
+打开浏览器访问 `http://127.0.0.1:3000/pocketrun/`，编辑 `website/docs/` 下的任意 Markdown / MDX 文件，页面都会实时热更新。按 `Ctrl+C` 停止预览。
 
-这是开发预览，尚未生成可部署网站。**“开发页面正常”不等于“构建和链接检查通过”。**
+### 关键文件位置
 
-## 构建并检查
+- [`website/docs/`](https://github.com/kkkhs/pocketrun/tree/main/website/docs)：所有教程正文与 `assets/` 下的配图。正文里写相对链接（例如 `[第 1 章](chapter-1.md)`），Docusaurus 会自动转换成带 `baseUrl` 的站点链接。
+- [`website/sidebars.ts`](https://github.com/kkkhs/pocketrun/blob/main/website/sidebars.ts)：左侧分阶段导航目录。
+- [`website/docusaurus.config.ts`](https://github.com/kkkhs/pocketrun/blob/main/website/docusaurus.config.ts)：站点标题、`url`、`baseUrl`、顶部导航栏与代码高亮主题配置。
 
-继续在 `website/` 运行：
+## 2. 构建与全套静态检查
+
+开发预览正常不等于生产构建无误。提交改动前，在 `website/` 运行完整检查与本地生产预览：
 
 ```bash
 npm run test:toolchain
 npm run typecheck
-npm run build
+DOCUSAURUS_NO_PERSISTENT_CACHE=1 npm run build
 npm run audit:ci
 npm run serve -- --host 127.0.0.1 --port 3000 --no-open
 ```
 
-前四项检查分别覆盖工具链、TypeScript、MDX / 链接和依赖审计策略，都应退出 `0`。`audit:ci` 仍阻止所有未豁免的 high / critical 公告；当前唯一临时例外、截止日期和适用边界见下方折叠说明。任一项失败，先排错再提交。
+这四条检查分别守住不同的关口：
+- `test:toolchain`：验证当前 Node / Docusaurus 工具链兼容性（[`toolchain-compat.cjs`](https://github.com/kkkhs/pocketrun/blob/main/website/toolchain-compat.cjs)）。
+- `typecheck`：检查网站 TypeScript 配置和组件类型。
+- `build`：把正文和静态资源编译到 `website/build/`；配置中已开启 `onBrokenLinks: 'throw'`、`onBrokenAnchors: 'throw'` 与坏图报错，任何断链、错锚点或丢失图片都会直接阻断构建。
+- `audit:ci`：依赖高危安全审计门禁（[`scripts/audit-ci.cjs`](https://github.com/kkkhs/pocketrun/blob/main/scripts/audit-ci.cjs)，当前临时例外详情见[实机验收与工程档案](verification-records.md)）。
 
-构建产物在 `website/build/`。打开 `http://127.0.0.1:3000/pocketrun/`；按 `Ctrl+C` 结束预览。端口被占用时换一个空闲端口。
+:::tip 修改正文后记得重新 `build`
+`npm run serve` 只托管上一次 `npm run build` 生成在 `website/build/` 里的静态文件，不会热更新。日常写作请用 `npm start`，提交前再用 `build` + `serve` 检查深浅色主题、移动端宽度和所有折叠区。
+:::
 
-现在检查页面：
+## 3. 发布到自己的 GitHub Pages
 
-- 首页是导读，侧栏先列第 1—5 章主线，再列系统概览与工程发布参考。
-- 直接打开并刷新 `/pocketrun/chapter-4/`、`/pocketrun/architecture/`、`/pocketrun/chapter-0/`，页面正常。
-- CSS / JS 没有 404；切到手机宽度后，正文和导航可读，代码块不撑开整页。
+如果你想把修改后的教程发布成自己的在线站点：
 
-`build` 把正文、主题和静态资源编译到 `website/build/`，也检查 MDX 和断链；`serve` 只读取这份已有构建，修改后要重新 build。工具链检查的实现见 [toolchain-compat.cjs](https://github.com/kkkhs/pocketrun/blob/main/website/toolchain-compat.cjs)，依赖门禁见 [audit-ci.cjs](https://github.com/kkkhs/pocketrun/blob/main/scripts/audit-ci.cjs)。
+1. 先把仓库 Fork 到你自己的 GitHub 账号下，切一条新分支做修改。
+2. 编辑 `website/docusaurus.config.ts`，将示例账号替换成你的信息：
+   - `url` 改为 `https://<OWNER>.github.io`
+   - `organizationName` 改为 `<OWNER>`
+   - 如果仓库改了名，同步更新 `projectName` 与 `baseUrl: '/<REPO>/'`
+3. 在 GitHub 仓库的 **Settings → Pages** 中，将部署来源设为 **GitHub Actions**，并确认 `github-pages` 环境允许 `main` 分支部署。
+4. 向你自己的 `main` 分支提交 PR：PR 阶段工作流（[`.github/workflows/pages.yml`](https://github.com/kkkhs/pocketrun/blob/main/.github/workflows/pages.yml)）只执行检查、不部署；合并到 `main` 后会自动构建并发布到你的 Pages 站点，无需手动配置个人 Token。
 
-## 配好自己的 Pages
+## 常见排错
 
-本地读示例站不需要 GitHub 写权限。发布则必须使用自己的 Fork 或获授权仓库，**不要把示例账号 `kkkhs` 当成发布目标。**
-
-首次发布前，修改 `website/docusaurus.config.ts`（用实际账号和仓库名替换占位值）：
-
-- `url` 改为 `https://OWNER.github.io`，`organizationName` 改为实际 `OWNER`。
-- 仓库改名时，同步 `projectName` 为实际 `REPO`、`baseUrl` 为 `/REPO/`；本地预览和深链也使用新路径。
-
-在自己的仓库启用 Actions 工作流，将 Pages Source 设为 **GitHub Actions**，并把 `github-pages` 环境限定为 `main`。
-
-## 提交自己的 PR
-
-站点配置改完后，结束预览。继续在 `website/` 重新检查完整修改，再回到仓库根目录提交：
-
-```bash
-# 在 website/
-npm run test:toolchain
-npm run typecheck
-npm run build
-npm run audit:ci
-cd ..
-git status
-git diff --check
-git diff -- website/docs/chapter-0.md website/docusaurus.config.ts
-git add website/docs/chapter-0.md website/docusaurus.config.ts
-git commit -m "docs: clarify chapter 0 validation"
-git push -u origin docs/update-chapter-0
-```
-
-确认 diff 只包含本次修改，再创建 PR：base 仓库选择自己的 `OWNER/REPO`，分支选择 `main`。暂存检查配置在根目录 `lint-staged.config.cjs`。
-
-## 确认更新上线
-
-PR 只运行检查，不上传 Pages 产物、不部署。合并到自己的 `main` 后，工作流发布 `website/build/`；手动发布也只允许 `main`。
-
-工作流使用 GitHub 内置凭据，无需另填个人 token 或 SSH 密钥。
-
-更新后在自己的站点 `https://OWNER.github.io/REPO/`（替换为实际账号和仓库名）确认：
-
-1. PR 的检查通过，且没有部署步骤执行。
-2. 合并后的 Actions 完成部署。
-3. 首页、章节和参考页深链能打开，手机宽度可读、静态资源正常。
-4. 页面上确实出现本次新文案，再记录提交和 Actions 运行。
-
-**绿色状态不能代替页面验证。** 以自己的站点上出现新文案为准。
-
-## 遇到问题
-
-| 现象 | 先检查 |
+| 遇到什么问题 | 先查哪里 |
 | --- | --- |
-| 安装失败 | Node 版本、公共 registry、package.json 与 lockfile 是否一致 |
-| MDX / 断链报错 | 报错行、文档文件名、代码块是否闭合；尖括号示例放进代码 |
-| 预览仍是旧文案 | 修改后是否重新 build，serve 是否指向当前构建 |
-| 页面或资源 404 | 访问路径与 `url` / `baseUrl` 是否对应 |
-| Pages 拒绝发布 | 是否在 main，Pages 来源与环境分支规则是否正确 |
+| `npm ci` 报错 | 检查 `node -v` 是否为 `24.18.0`，以及是否使用了公共 npm registry |
+| MDX 编译或断链报错 | 检查报错行号：代码块有没有闭合、尖括号 `<foo>` 在正文里是否漏了反引号、图片/链接相对路径是否拼错 |
+| 预览里看到的还是旧内容 | 如果跑的是 `npm run serve`，需要先重新执行 `npm run build` |
+| 页面样式或图片 404 | 核对访问 URL 路径是否包含 `docusaurus.config.ts` 里设置的 `baseUrl`（默认 `/pocketrun/`） |
+| GitHub Pages 部署被拒 | 确认是从 `main` 分支触发，且仓库已将 Pages Source 设为 GitHub Actions |
 
-练习：在练习分支写错一个文档相对链接，确认 build 失败；修复并重新构建。然后补充一条有用的说明，走完更新流程。
+## 本章源码
 
-<details>
-<summary>工程位置与发布配置</summary>
-
-- 正文：`website/docs/`；配置：`website/docusaurus.config.ts`、`sidebars.ts`。
-- 版本：根目录 `.nvmrc` 和 `website/package-lock.json`。
-- 工作流：`.github/workflows/pages.yml`；工具链检查：`website/toolchain-compat.cjs`。
-- `node_modules/`、`.docusaurus/` 和 `build/` 是本地产物，不提交。
-
-项目型 Pages 的关键字段：
-
-| 字段 | 示例仓库当前值 |
-| --- | --- |
-| url | `https://kkkhs.github.io` |
-| baseUrl | `/pocketrun/` |
-| trailingSlash | `true` |
-| organizationName / projectName | `kkkhs` / `pocketrun` |
-| Docs routeBasePath / 导读 slug | `/` / `/` |
-
-正文用 `architecture.md` 这类相对链接，Docusaurus 会生成项目路径。
-
-本工作流不自动启用 Pages。
-
-构建权限为 `contents: read`，部署另需 `pages: write`、`id-token: write`。固定 Action 版本和完整规则见[工作流源码](https://github.com/kkkhs/pocketrun/blob/main/.github/workflows/pages.yml)。
-
-`pages` 并发组不会取消运行中的任务，但只保留一个待运行任务，不是逐提交发布的 FIFO 队列。
-
-</details>
-
-<details>
-<summary>审计记录与安装警告</summary>
-
-2026-11-13 的基线中，原始 `npm audit` 退出 `1`，报告 5 个 low 节点（1 条 GHSA）；`--audit-level=high` 退出 `0`。
-
-对应的[官方 CVE 记录](https://www.cve.org/CVERecord?id=CVE-2026-93753)已于 2026-11-02 将 CVE-2026-93753 标记为 `REJECTED`，理由是“不描述安全漏洞”。npm 审计源仍保留条目，不能把门禁通过说成审计无条目。
-
-npm 11 可能提示 `@swc/core`、`core-js`、`fsevents` 的 `allow-scripts` 警告。默认情况下，未审查脚本仍可运行；警告不表示已阻止执行。需要调整策略时，逐项核对脚本用途。
-
-2026-11-18，npm 新增 [GHSA-fc5q-39xc-vjpf](https://github.com/advisories/GHSA-fc5q-39xc-vjpf)：所有已发布 picomatch 版本（截至 4.0.7）都被标为 high，且暂无修复版本。触发条件是把攻击者控制的 repeated-extglob **pattern** 交给 picomatch；PocketRun 只在构建 / 测试工具中使用仓库固定的 glob pattern，不接受远程 pattern 输入。
-
-`scripts/audit-ci.cjs` 因此只临时排除这一条精确 source / URL / range，仍会阻止任何其他 high / critical 根公告；公告字段变化也会失败。例外在 **2026-12-18** 自动过期，届时必须重新检查修复版本，不能永久静默忽略。原始 `npm audit` 仍可用于查看全部传播节点。
-
-</details>
-
-从空目录搭同类网站可参考[Docusaurus 官方安装指南](https://docusaurus.io/docs/installation)；本项目使用 classic TypeScript 模板。另见[TypeScript 支持](https://docusaurus.io/docs/typescript-support)、[部署与 baseUrl](https://docusaurus.io/docs/deployment)、[GitHub Pages 工作流](https://docs.github.com/en/pages/getting-started-with-github-pages/using-custom-workflows-with-github-pages)。
-
-## 本章代码
-
-- [PR #1：教程阅读与发布流程](https://github.com/kkkhs/pocketrun/pull/1)
-- [PR #10：前序章节的任务主线与图解](https://github.com/kkkhs/pocketrun/pull/10)
-- [Release `chapter-0`：本章结束时的源码快照](https://github.com/kkkhs/pocketrun/releases/tag/chapter-0)
+- [Release `chapter-0`](https://github.com/kkkhs/pocketrun/releases/tag/chapter-0) · [PR #1](https://github.com/kkkhs/pocketrun/pull/1) · [实机验收与工程档案](verification-records.md)
