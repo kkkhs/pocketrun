@@ -1,9 +1,21 @@
 package io.github.kkkhs.pocketrun
 
+import android.os.Process
+import android.system.Os
+import android.system.OsConstants
+import io.github.kkkhs.pocketrun.taskhost.CanonicalChildPath
+import io.github.kkkhs.pocketrun.taskhost.DemoCsvReport
 import java.io.Closeable
 import java.io.File
+import java.io.FileInputStream
 import java.io.FileOutputStream
+import java.io.InputStream
+import java.nio.channels.FileChannel
 import java.nio.file.Files
+import java.nio.file.LinkOption
+import java.nio.file.NoSuchFileException
+import java.nio.file.StandardOpenOption
+import java.nio.file.attribute.BasicFileAttributes
 import java.nio.file.attribute.PosixFilePermission
 
 class WorkspaceSession(
@@ -46,6 +58,114 @@ class WorkspaceSession(
 
     fun runDemo(run: CommandPipeline.Run) =
         pipeline.execute(run, directory, commands, validate = ::validateSample)
+
+    internal data class Publication(val status: String, val outputDigest: String)
+
+    internal fun demoRoot(): File = synchronized(lock) {
+        check(!closed && directory.isDirectory && directory.canonicalFile == directory.absoluteFile) {
+            "私有演示工作目录不可用。"
+        }
+        directory
+    }
+
+    internal fun readDemoCsvBytes(): ByteArray {
+        val root = demoRoot().toPath()
+        val path = CanonicalChildPath.existingRegularFile(root, "items.csv")
+        return readRegular(path.toFile(), DemoCsvReport.MAX_BYTES)
+    }
+
+    internal fun readDemoResultBytes(): ByteArray? {
+        val root = demoRoot().toPath()
+        val path = root.resolve("result.txt")
+        try {
+            Files.readAttributes(path, BasicFileAttributes::class.java, LinkOption.NOFOLLOW_LINKS)
+        } catch (_: NoSuchFileException) { return null }
+        return readRegular(CanonicalChildPath.existingRegularFile(root, "result.txt").toFile(), 65)
+    }
+
+    internal fun publishDemoResult(text: String, guard: () -> Unit,
+        onTemporary: (File) -> Unit = {},
+        commit: (File, File) -> Boolean = AtomicSamplePublisher::publish): Publication {
+        require(text.length in 1..64 && text.all { it in ' '..'~' }) { "INVALID_DEMO_RESULT_TEXT" }
+        val root = demoRoot()
+        val target = File(root, "result.txt")
+        val expected = (text + "\n").toByteArray(Charsets.UTF_8)
+        guard()
+        val present = readDemoResultBytes()
+        if (present != null) {
+            require(present.contentEquals(expected)) { "EXISTING_RESULT_MISMATCH" }
+            return Publication("already_present", DemoCsvReport.digest(present))
+        }
+        val temporary = File.createTempFile(".pocketrun-result-", ".tmp", root)
+        try {
+            onTemporary(temporary)
+            Files.setPosixFilePermissions(temporary.toPath(), setOf(PosixFilePermission.OWNER_READ, PosixFilePermission.OWNER_WRITE))
+            FileOutputStream(temporary).use { output -> output.write(expected); output.fd.sync() }
+            guard()
+            val created = commit(temporary, target)
+            if (created) syncDirectory(root)
+            val actual = checkNotNull(readDemoResultBytes()) { "RESULT_PUBLICATION_UNCONFIRMED" }
+            require(actual.contentEquals(expected)) { "RESULT_PUBLICATION_UNCONFIRMED" }
+            guard()
+            return Publication(if (created) "published" else "already_present", DemoCsvReport.digest(actual))
+        } finally {
+            temporary.delete()
+            check(LinuxDirectoryLease.readAttributes(temporary) == null) { "OWNED_RESULT_TEMP_CLEANUP_UNPROVEN" }
+        }
+    }
+
+    private fun syncDirectory(root: File) {
+        if (System.getProperty("java.vm.name") == "Dalvik") {
+            val fd = Os.open(root.path, OsConstants.O_RDONLY or OsConstants.O_NOFOLLOW or OsConstants.O_CLOEXEC, 0)
+            try {
+                val info = Os.fstat(fd)
+                require(OsConstants.S_ISDIR(info.st_mode) && info.st_uid == Process.myUid()) { "INVALID_WORKSPACE_DIRECTORY" }
+                Os.fsync(fd)
+            } finally { Os.close(fd) }
+        } else FileChannel.open(root.toPath(), StandardOpenOption.READ, LinkOption.NOFOLLOW_LINKS).use { it.force(true) }
+    }
+
+    private fun readRegular(file: File, limit: Int): ByteArray {
+        if (System.getProperty("java.vm.name") == "Dalvik") {
+            val fd = Os.open(file.path, OsConstants.O_RDONLY or OsConstants.O_NOFOLLOW or OsConstants.O_CLOEXEC, 0)
+            return FileInputStream(fd).use { input ->
+                val before = Os.fstat(input.fd)
+                require(OsConstants.S_ISREG(before.st_mode) && before.st_uid == Process.myUid()) { "INVALID_WORKSPACE_FILE" }
+                val bytes = readBounded(input, limit)
+                val after = Os.fstat(input.fd)
+                require(before.st_dev == after.st_dev && before.st_ino == after.st_ino &&
+                    before.st_mtim.tv_sec == after.st_mtim.tv_sec && before.st_mtim.tv_nsec == after.st_mtim.tv_nsec &&
+                    before.st_ctim.tv_sec == after.st_ctim.tv_sec && before.st_ctim.tv_nsec == after.st_ctim.tv_nsec &&
+                    after.st_size == bytes.size.toLong()) {
+                    "WORKSPACE_FILE_CHANGED"
+                }
+                bytes
+            }
+        }
+        val before = Files.readAttributes(file.toPath(), BasicFileAttributes::class.java, LinkOption.NOFOLLOW_LINKS)
+        require(before.isRegularFile) { "INVALID_WORKSPACE_FILE" }
+        val bytes = Files.newInputStream(file.toPath(), StandardOpenOption.READ, LinkOption.NOFOLLOW_LINKS).use {
+            readBounded(it, limit)
+        }
+        val after = Files.readAttributes(file.toPath(), BasicFileAttributes::class.java, LinkOption.NOFOLLOW_LINKS)
+        require(after.isRegularFile && before.fileKey() == after.fileKey() &&
+            before.lastModifiedTime() == after.lastModifiedTime() && after.size() == bytes.size.toLong()) {
+            "WORKSPACE_FILE_CHANGED"
+        }
+        return bytes
+    }
+
+    private fun readBounded(input: InputStream, limit: Int): ByteArray {
+        val bytes = ByteArray(limit + 1)
+        var size = 0
+        while (size < bytes.size) {
+            val count = input.read(bytes, size, bytes.size - size)
+            if (count < 0) break
+            size += count
+        }
+        require(size <= limit) { "WORKSPACE_FILE_BUDGET" }
+        return bytes.copyOf(size)
+    }
 
     fun cancel() = pipeline.cancel()
     override fun close() {

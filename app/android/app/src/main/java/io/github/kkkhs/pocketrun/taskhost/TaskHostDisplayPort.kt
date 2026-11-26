@@ -6,6 +6,7 @@ internal interface TaskHostDisplayPort {
     fun snapshot(): DisplayTarget
     fun lastKnownTarget(): DisplayTarget?
     fun observe(expected: DisplayTarget): ToolResult
+    fun observeDemo(expected: DisplayTarget): DemoObservation = throw UnsupportedOperationException("Demo observation unavailable.")
     fun demoTap(expected: DisplayTarget, x: Int, y: Int): ToolResult
     fun demoText(expected: DisplayTarget, text: String): ToolResult
     fun invalidate(expected: DisplayTarget)

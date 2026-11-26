@@ -205,12 +205,21 @@ class PrivilegedBackendController(private val context: Context) : Closeable {
         }
     }
 
-    fun dumpUiTree(expectedDisplayId: Int, expectedGeneration: Long = queryGeneration()): UiTreeInfo {
-        val snapshot = querySession(expectedDisplayId, expectedGeneration)
+    private fun readTree(snapshot: QuerySession, expectedDisplayId: Int): UiTreeCodec.Tree {
         val bytes = snapshot.service.dumpUiTree(expectedDisplayId) ?: error("后端没有返回 UI 树。")
         require(bytes.size <= UiTreeCodec.MAX_TREE_BYTES) { "UI 树数据过大。" }
-        val tree = UiTreeCodec.decode(bytes, expectedDisplayId)
-        require(tree.displayId == expectedDisplayId) { "UI 树 displayId 已失效。" }
+        return UiTreeCodec.decode(bytes, expectedDisplayId)
+    }
+
+    internal fun dumpTypedUiTree(expectedDisplayId: Int, expectedGeneration: Long): UiTreeCodec.Tree {
+        val snapshot = querySession(expectedDisplayId, expectedGeneration)
+        val tree = readTree(snapshot, expectedDisplayId)
+        return synchronized(lock) { checkSessionLocked(snapshot); tree }
+    }
+
+    fun dumpUiTree(expectedDisplayId: Int, expectedGeneration: Long = queryGeneration()): UiTreeInfo {
+        val snapshot = querySession(expectedDisplayId, expectedGeneration)
+        val tree = readTree(snapshot, expectedDisplayId)
         val nodes = JSONArray()
         for (node in tree.nodes) {
             nodes.put(JSONObject().apply {

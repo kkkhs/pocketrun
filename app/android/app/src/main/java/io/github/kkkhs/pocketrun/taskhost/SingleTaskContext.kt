@@ -47,13 +47,22 @@ class SingleTaskContext(
     private var deadline = 0L
     private val steps = mutableListOf<ContextStep>()
     private var pendingNumber: Int? = null
+    private var complete: CompleteTaskContract? = null
 
-    fun begin(value: String): ContextStatus = synchronized(lock) {
+    fun begin(value: String): ContextStatus = synchronized(lock) { beginLocked(value, null) }
+
+    internal fun beginComplete(value: String, contract: CompleteTaskContract): ContextStatus = synchronized(lock) {
+        beginLocked(value, contract)
+    }
+
+    private fun beginLocked(value: String, contract: CompleteTaskContract?): ContextStatus {
         refreshLocked()
         check(!closed) { "Task context is closed." }
         if (isActive() || hostOwnsSlot()) throw HostBusyException()
         val nextGoal = value.trim()
         require(bytes(nextGoal) in 1..1024) { "Task goal must be 1..1024 UTF-8 bytes." }
+        host.installCompleteContract(contract)
+        complete = contract
         taskId = "task-${Math.addExact(sequence, 1L).also { sequence = it }}"
         goal = nextGoal
         steps.clear()
@@ -61,7 +70,7 @@ class SingleTaskContext(
         code = null
         phase = ContextPhase.READY
         deadline = clock.nowNanos() + TimeUnit.MILLISECONDS.toNanos(budget.maxDurationMillis)
-        snapshot()
+        return snapshot()
     }
 
     fun submit(expectedTaskId: String, call: RawToolCall): ContextStatus = synchronized(lock) {
@@ -100,6 +109,11 @@ class SingleTaskContext(
         check(phase == ContextPhase.READY && pendingNumber == null && steps.isNotEmpty()) {
             "Only a task with settled successful steps may complete."
         }
+        try { complete?.finish { check(clock.nowNanos() - deadline < 0) { "TIME_BUDGET" } } }
+        catch (_: Exception) {
+            return@synchronized if (clock.nowNanos() - deadline >= 0) stopLocked(ContextPhase.BUDGET_EXHAUSTED, "TIME_BUDGET")
+                else stopLocked(ContextPhase.FAILED, "NATIVE_GOAL_UNVERIFIED")
+        }
         phase = ContextPhase.COMPLETED
         code = "COMPLETED"
         snapshot()
@@ -117,6 +131,8 @@ class SingleTaskContext(
         if (isActive()) stopLocked(ContextPhase.FAILED, reason) else snapshot()
     }
 
+    internal fun completeRunId(): String? = synchronized(lock) { complete?.snapshot()?.runId }
+
     fun state(): ContextStatus = synchronized(lock) {
         refreshLocked()
         snapshot()
@@ -125,7 +141,7 @@ class SingleTaskContext(
     /** Chapter 9 remains usable, but can never interleave its requests into an active task. */
     fun <T> withoutActiveTask(action: () -> T): T = synchronized(lock) {
         refreshLocked()
-        if (isActive() || pendingNumber != null) throw HostBusyException()
+        if (isActive() || pendingNumber != null || hostOwnsSlot()) throw HostBusyException()
         action()
     }
 
@@ -140,6 +156,10 @@ class SingleTaskContext(
     }
 
     private fun refreshLocked() {
+        try { refreshHostLocked() } finally { recordCompleteTerminal() }
+    }
+
+    private fun refreshHostLocked() {
         if (isActive() && clock.nowNanos() - deadline >= 0) {
             stopLocked(ContextPhase.BUDGET_EXHAUSTED, "TIME_BUDGET")
         }
@@ -196,8 +216,19 @@ class SingleTaskContext(
             val nonce = steps[number - 1].status.requestNonce
             if (nonce != null) host.cancelFromAppUi(nonce)
         }
+        recordCompleteTerminal()
         // Keep the host owner visible even when its cleanup has not yet been proven.
         return snapshot()
+    }
+
+    private fun recordCompleteTerminal() {
+        if (isActive()) return
+        complete?.let { contract ->
+            if (contract.snapshot().phase in setOf("ready", "running")) {
+                try { contract.terminal(code ?: "CONTEXT_STOPPED", phase == ContextPhase.CANCELLED || phase == ContextPhase.CLOSED) }
+                catch (_: Exception) { phase = ContextPhase.FAILED; code = "JOURNAL_TERMINAL_UNCONFIRMED" }
+            }
+        }
     }
 
     private fun requireCurrent(expected: String) {

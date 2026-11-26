@@ -91,6 +91,18 @@ adb -s "$SERIAL" shell am instrument -w \
 
 [第12章教程](chapter-12.md)保留任务主线和实际截图；源码Release在最终CI/Pages核验后建立。共享的credential/memory密文机制保持独立schema/文件/别名/AAD，无新增provider凭据导入。
 
+## 第 13 章：CSV、Demo 与结果文件
+
+源码检查点 [`427c31c`](https://github.com/kkkhs/pocketrun/commit/427c31c4e1112fbfb99b79eb652ea3fd49040838)。冻结 Debug APK `70450378fb8e0ae5d66b303ddbab88d1f6809b28d76529440d81c207953d53d7`，Test APK `df270f8d01d13b3e404dd28ada166ca35dc123e42220d050b8ced3bdebd62625`，本地 Release 构建 `efc88f2a48990b1d3933ce12de2e8a2aefd7fc86241b2909ec2aee1176294f61`。Release仅为本地构建检查，不公开APK。
+
+- **源码/工具：** 133项选定taskhost/本章workspace JVM、100项Jest、App typecheck/lint/audit与ARM64三种APK构建通过；全量Linux专项仍由对应环境/CI核对。独审指出最终观察期间输入可能改变，已增加最终摘要复查及延迟观察回归。
+- **隔离Android：** 初始 `955f77a` 的冻结包通过4项加密journal和3项真实App UID文件/JNI无覆盖发布、staging阻断检查。最终源码 `5d7208e` 的重建批次再次通过同7项（0.441s）：App `5d7e355fe44a1c01c46589f505012f762a85fcc7a7ab10a5dc1b8a2f8289a4bc`，Test `da0fe8956a606e218ffae73bbbd7ef89aa563024e7928890ff6ccba77d58cf5d`，本地Release `ecc4b27902fde3edfef0d95c6ab842e69d59e51aa65453732c55aa2b7bdd9885`。最后App与前一批生产DEX/JS/库相同、资源表重建后APK字节不同，所以各批SHA分别保留，不借旧APK通过代替新包验证。
+- **真实闭环：** 同一上述Debug包，任务专用API36 ARM64模拟器、本机Ferry/Seed2.1Turbo，6次实际逐条审批完成CSV读取、Demo观察、真实点击/输入、再观察和文件发布。运行 `run_6a6f0e0b58ac4916acadaac13feeddc8` / `task-2`，display27/epoch21，普通App UID10150、后端UID2000；原生`completed / output_verified`，意图none，报告`items=2;quantity=5`，文件实际读回相同加LF。输入SHA256 `03a284b2a2b67203633c4574af106e9c9adbf6f314d8cac5547f90a834245d79`，输出 `ca121741655dc1fab8d71525276a1302d27dd51357646d36487c11b90cc7c6d9`。
+- **中断：** 首个请求仍待手机批准时，以及真实输入后再观察尚未批准时停App，重启分别保留interrupted/none与interrupted/text_accepted，旧批准按钮和模型总结不恢复。发布窗口通过仅AndroidTest包含的FileObserver/pidfd观察助手命中：固定App UID/PID/startTicks与APK SHA核验后，结果文件MOVED_TO时暂停内核句柄绑定的原App，再停App；真实文件已存在，重启journal仍为`interrupted / demo_verified / publish`、输出摘要未确认。助手报告`CLEANUP state=gone unproven=false`。新上下文重新绑定display31/epoch129、6次新批准后，`run_774f2d8469d244e49c592a16fdecd466`完成并报告`OUTPUT_ALREADY_PRESENT`，原文件inode/大小/修改时间与字节不变。随后同一准确Demo上的新任务只用了读取/观察/核对已有文件3个获准步骤，没有再次点击或输入。
+- **原失败：** 新增JVM夹具的原工具wire名/SDK caller错误与Android公开常量编译错误保留；首次UI未严查完成字段、解析失败保留旧批准按钮的问题已修正。实际预检曾返回`DEMO_OBSERVATION_UNAVAILABLE`；接入第二个uiautomator观察器的驱动失败和后来未及时批准而`APPROVAL_EXPIRED`各自保留。切换截图驱动并校准滚动后，新运行成功，不补称原运行成功。仅测试助手的首轮把Android管理的filesDir 0771模式误当私有目录错误，未armed也未批准发布；调整为只验证该平台根的身份、严格检查其私有子目录后命中窗口。首次已有Demo任务在两步后实际`MODEL_TRANSPORT_ERROR`，后续独立新任务的3步通过不改写它，也不据此宣称传输根因已修复。
+
+最终App包还在display32/epoch33、6次新批准的真实模型任务中完成Demo再观察与已有文件核对；原生completed/OUTPUT_ALREADY_PRESENT，文件仍不变。[第13章教程](chapter-13.md)与项目/开发总账同步维护；实现、测试与正文见[PR #28](https://github.com/kkkhs/pocketrun/pull/28)。
+
 ## 第三方源码来源与开源许可
 
 PocketRun 严格保留所有嵌入第三方组件的固定上游来源、修改记录与对应源码（随章节源码 Release 一并分发）：

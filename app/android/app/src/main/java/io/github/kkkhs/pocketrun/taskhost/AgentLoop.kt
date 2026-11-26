@@ -44,14 +44,16 @@ internal class AgentLoop(
     private var memoryRevision: String? = null
     private var memoryIds = emptyList<String>()
     private var memoryBytes = 0
+    private var completeTask = false
 
     init { worker.scheduleWithFixedDelay(::tickSafely, 100, 100, TimeUnit.MILLISECONDS) }
 
     fun start(goal: String, source: ModelTransport, observations: String,
-        memory: MemorySelection? = null): AgentStatus = synchronized(lock) {
+        memory: MemorySelection? = null, complete: CompleteTaskContract? = null): AgentStatus = synchronized(lock) {
         check(phase != AgentPhase.CLOSED)
         if (active()) throw HostBusyException()
-        val begun = task.begin(goal)
+        val begun = if (complete == null) task.begin(goal) else task.beginComplete(goal, complete)
+        completeTask = complete != null
         generation++
         taskId = begun.taskId
         transport?.close()
@@ -174,7 +176,7 @@ internal class AgentLoop(
             if (reason == "tool_use") {
                 require(calls.isNotEmpty() && calls.size <= 8)
                 // Validate the whole turn before its first action; no partial invalid batch execution.
-                calls.forEach { ModelToolSurface.parse(it) }
+                calls.forEach { ModelToolSurface.parse(it, completeTask) }
                 require(calls.map { it.id() }.distinct().size == calls.size)
                 require(calls.none { it.id() in seenIds })
                 if (task.state().steps.size + calls.size > task.state().budget.maxSteps) {
@@ -190,7 +192,17 @@ internal class AgentLoop(
                 require(calls.isEmpty())
                 val text = message.content().filter { it.isText() }.joinToString("\n") { it.asText().text() }
                 require(text.isNotBlank() && text.toByteArray(Charsets.UTF_8).size <= 8192)
-                task.finish(checkNotNull(taskId))
+                try {
+                    val finished = task.finish(checkNotNull(taskId))
+                    if (finished.phase != ContextPhase.COMPLETED) {
+                        stopLocked(AgentPhase.FAILED, finished.code ?: "NATIVE_GOAL_UNVERIFIED")
+                        return
+                    }
+                } catch (error: Exception) {
+                    if (!completeTask) throw error
+                    stopLocked(AgentPhase.FAILED, "NATIVE_GOAL_UNVERIFIED")
+                    return
+                }
                 history += replay
                 finalText = text
                 phase = AgentPhase.COMPLETED
@@ -207,7 +219,7 @@ internal class AgentLoop(
             val step = context.steps.single { it.number == waiting }
             require(step.status.phase == HostPhase.SUCCEEDED && step.status.cleanupState == CleanupState.PROVEN)
             results += ContentBlockParam.ofToolResult(ToolResultBlockParam.builder()
-                .toolUseId(modelTools[toolIndex].id()).content(ModelToolSurface.summary(step)).build())
+                .toolUseId(modelTools[toolIndex].id()).content(ModelToolSurface.summary(step, completeTask)).build())
             toolIndex++
             waitingStep = null
         }
@@ -220,7 +232,7 @@ internal class AgentLoop(
             history += resultMessage
             requestModelLocked()
         } else {
-            val submitted = task.submit(checkNotNull(taskId), ModelToolSurface.parse(modelTools[toolIndex]))
+            val submitted = task.submit(checkNotNull(taskId), ModelToolSurface.parse(modelTools[toolIndex], completeTask))
             waitingStep = submitted.steps.lastOrNull()?.number
             if (submitted.phase !in setOf(ContextPhase.READY, ContextPhase.RUNNING)) {
                 stopLocked(if (submitted.phase == ContextPhase.BUDGET_EXHAUSTED) AgentPhase.BUDGET_EXHAUSTED

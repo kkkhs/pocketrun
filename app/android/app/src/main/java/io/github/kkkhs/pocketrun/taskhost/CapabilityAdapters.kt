@@ -25,6 +25,22 @@ data class DisplayTarget(
     val backendReady: Boolean,
 )
 
+data class WorkspaceTarget(val packageUid: Int, val root: Path, val inputDigest: String)
+
+data class DemoObservation(
+    val target: DisplayTarget,
+    val value: String,
+    val resultValue: String,
+    val left: Int,
+    val top: Int,
+    val right: Int,
+    val bottom: Int,
+    val focused: Boolean,
+) {
+    val x get() = (left + right) / 2
+    val y get() = (top + bottom) / 2
+}
+
 /**
  * An adapter creates the resource first; TaskHost installs sole ownership before start().
  * close() must cancel the native/process/Binder work it owns. After a successful close it is
@@ -69,10 +85,20 @@ interface TaskCapabilities {
     fun prepareDeviceInfo(expected: DeviceInfoTarget): OwnedExecution
     fun prepareCountDemoCsv(expected: LinuxTarget, canonicalCsv: Path): OwnedExecution
     fun prepareDisplay(expected: DisplayTarget, action: DisplayAction): OwnedExecution
+
+    fun currentWorkspaceTarget(): WorkspaceTarget = throw UnsupportedOperationException("Workspace capability unavailable.")
+    fun currentDemoObservation(expected: DisplayTarget): DemoObservation = throw UnsupportedOperationException("Demo observation unavailable.")
+    fun currentDemoResult(): ByteArray? = throw UnsupportedOperationException("Demo result unavailable.")
+    fun prepareCompleteDisplay(expected: DisplayTarget, action: DisplayAction, skipInput: () -> Boolean): OwnedExecution =
+        throw UnsupportedOperationException("Complete Demo display unavailable.")
+    fun prepareReadDemoCsv(expected: WorkspaceTarget): OwnedExecution = throw UnsupportedOperationException("Demo file read unavailable.")
+    fun preparePublishDemoResult(expected: WorkspaceTarget, text: String, guard: () -> Unit): OwnedExecution =
+        throw UnsupportedOperationException("Demo publication unavailable.")
 }
 
 sealed interface DisplayAction {
     data object Observe : DisplayAction
+    data object ObserveDemo : DisplayAction
     data class DemoTap(val x: Int, val y: Int) : DisplayAction
     data class DemoText(val text: String) : DisplayAction
 }

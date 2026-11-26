@@ -2,6 +2,8 @@ package io.github.kkkhs.pocketrun
 
 import android.os.Process
 import io.github.kkkhs.pocketrun.taskhost.DisplayTarget
+import io.github.kkkhs.pocketrun.taskhost.DemoObservation
+import io.github.kkkhs.pocketrun.taskhost.OwnedDemoObservation
 import io.github.kkkhs.pocketrun.taskhost.TaskHostDisplayPort
 import io.github.kkkhs.pocketrun.taskhost.ToolResult
 import java.io.Closeable
@@ -10,6 +12,7 @@ import org.json.JSONObject
 /** Uses the same App-owned controller as AdbModule, never a host ADB transport. */
 internal class BinderTaskHostDisplayPort(
     private val backend: PrivilegedBackendController,
+    private val packageName: String,
 ) : TaskHostDisplayPort, Closeable {
     private val lock = Any()
     private var deathListener: ((DisplayTarget) -> Unit)? = null
@@ -49,6 +52,14 @@ internal class BinderTaskHostDisplayPort(
             "nodeCount" to tree.nodeCount.toString(),
             "treeTruncated" to tree.truncated.toString(),
         ))
+    }
+
+    override fun observeDemo(expected: DisplayTarget): DemoObservation {
+        requireTarget(expected)
+        val tree = backend.dumpTypedUiTree(expected.displayId, expected.displayEpoch)
+        val value = OwnedDemoObservation.select(tree, expected, packageName)
+        requireTarget(expected)
+        return value
     }
 
     override fun demoTap(expected: DisplayTarget, x: Int, y: Int): ToolResult {
