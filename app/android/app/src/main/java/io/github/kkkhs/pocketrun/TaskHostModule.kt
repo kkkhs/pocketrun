@@ -4,6 +4,8 @@ import android.util.Log
 import com.facebook.react.bridge.Arguments
 import com.facebook.react.bridge.Promise
 import com.facebook.react.bridge.ReactApplicationContext
+import com.facebook.react.bridge.ReadableArray
+import com.facebook.react.bridge.ReadableType
 import com.facebook.react.bridge.WritableMap
 import com.facebook.react.module.annotations.ReactModule
 import io.github.kkkhs.pocketrun.taskhost.AndroidHostReadiness
@@ -17,6 +19,10 @@ import io.github.kkkhs.pocketrun.taskhost.AnthropicModelTransport
 import io.github.kkkhs.pocketrun.taskhost.DisplayTarget
 import io.github.kkkhs.pocketrun.taskhost.ModelCredentialStore
 import io.github.kkkhs.pocketrun.taskhost.ModelSettings
+import io.github.kkkhs.pocketrun.taskhost.MemoryCodec
+import io.github.kkkhs.pocketrun.taskhost.MemorySelection
+import io.github.kkkhs.pocketrun.taskhost.MemorySnapshot
+import io.github.kkkhs.pocketrun.taskhost.MemoryStore
 import io.github.kkkhs.pocketrun.taskhost.SingleTaskContext
 import org.json.JSONArray
 import io.github.kkkhs.pocketrun.taskhost.HostBusyException
@@ -38,6 +44,7 @@ class TaskHostModule(context: ReactApplicationContext) : NativePocketRunTaskHost
     private val task = SingleTaskContext(host)
     private val agent = AgentLoop(task)
     private val modelStore = ModelCredentialStore(context)
+    private val memoryStore = MemoryStore(context)
     private val worker = Executors.newSingleThreadExecutor { runnable ->
         Thread(runnable, "PocketRun-TaskHostModule")
     }
@@ -78,19 +85,87 @@ class TaskHostModule(context: ReactApplicationContext) : NativePocketRunTaskHost
         modelConfigurationMap()
     }
 
-    override fun startAgent(goal: String, promise: Promise) = executeModel(promise) {
+    override fun startAgent(goal: String, promise: Promise) = executeModel(promise) { startModel(goal) }
+
+    override fun getMemorySnapshot(promise: Promise) = executeMemory(promise) { memoryMap(memoryStore.snapshot()) }
+
+    override fun saveMemoryNote(expectedRevision: String, noteId: String, text: String, promise: Promise) =
+        executeMemory(promise) {
+            memoryMap(memoryStore.save(expectedRevision, noteId, text) { agent.discardMemoryContext() })
+        }
+
+    override fun deleteMemoryNote(expectedRevision: String, noteId: String, promise: Promise) = executeMemory(promise) {
+        memoryMap(memoryStore.delete(expectedRevision, noteId) { agent.discardMemoryContext() })
+    }
+
+    override fun clearMemory(expectedRevision: String, promise: Promise) = executeMemory(promise) {
+        memoryMap(memoryStore.clear(expectedRevision) { agent.discardMemoryContext() })
+    }
+
+    override fun resetMemory(promise: Promise) = executeMemory(promise) {
+        memoryMap(memoryStore.resetUnreadable { agent.discardMemoryContext() })
+    }
+
+    override fun startAgentWithMemory(goal: String, noteIds: ReadableArray, expectedRevision: String,
+        expectedEndpoint: String, expectedModel: String, promise: Promise) {
+        val ids = try {
+            require(noteIds.size() <= MemoryCodec.MAX_SELECTED)
+            (0 until noteIds.size()).map { index ->
+                require(noteIds.getType(index) == ReadableType.String)
+                checkNotNull(noteIds.getString(index)).also(MemoryCodec::validateId)
+            }
+        } catch (_: Exception) {
+            promise.reject("E_MEMORY_OPERATION", "Invalid memory selection; refresh and select the notes again.")
+            return
+        }
+        executeMemory(promise) {
+            startModel(goal, memoryStore.select(expectedRevision, ids), expectedEndpoint, expectedModel)
+        }
+    }
+
+    private fun startModel(goal: String, memory: MemorySelection? = null,
+        expectedEndpoint: String? = null, expectedModel: String? = null): WritableMap {
+        check(!disposed)
         check(android.os.Build.VERSION.SDK_INT >= 26) { "MODEL_RUNTIME_REQUIRES_API_26" }
         val credential = checkNotNull(modelStore.load()) { "MODEL_CREDENTIAL_REQUIRED" }
+        if (memory != null) check(credential.settings.endpoint == expectedEndpoint &&
+            credential.settings.model == expectedModel) { "MEMORY_MODEL_TARGET_CHANGED" }
         val source = AnthropicModelTransport(credential)
-        try {
+        return try {
             val ready = adapter.readiness()
             val observation = "linuxReady=${ready.linuxReady}; displayReady=${ready.displayReady}; " +
                 "displayId=${ready.displayId}; displayEpoch=${ready.displayEpoch}"
-            agentMap(agent.start(goal, source, observation))
+            agentMap(agent.start(goal, source, observation, memory))
         } catch (error: Exception) {
             source.close()
             throw error
         }
+    }
+
+    private fun executeMemory(promise: Promise, action: () -> Any?) {
+        try {
+            worker.execute {
+                try {
+                    check(!disposed)
+                    val value = action()
+                    check(!disposed)
+                    promise.resolve(value)
+                } catch (_: Exception) {
+                    promise.reject("E_MEMORY_OPERATION", "Memory operation failed; refresh the revision, check byte limits and model target. An unreadable store requires explicit reset.")
+                }
+            }
+        } catch (_: RejectedExecutionException) { promise.reject("E_MEMORY_CLOSED", "Memory module is closed.") }
+    }
+
+    private fun memoryMap(snapshot: MemorySnapshot): WritableMap = Arguments.createMap().apply {
+        putString("revision", snapshot.revision)
+        putString("notesJson", JSONArray().apply {
+            snapshot.notes.forEach { note -> put(JSONObject().put("id", note.id).put("text", note.text)) }
+        }.toString())
+        putInt("maxNotes", MemoryCodec.MAX_NOTES)
+        putInt("maxNoteBytes", MemoryCodec.MAX_NOTE_BYTES)
+        putInt("maxSelected", MemoryCodec.MAX_SELECTED)
+        putInt("maxSelectedBytes", MemoryCodec.MAX_SELECTED_BYTES)
     }
 
     override fun getAgentState(promise: Promise) { resolve(promise) { agentMap(agent.state()) } }
@@ -123,6 +198,9 @@ class TaskHostModule(context: ReactApplicationContext) : NativePocketRunTaskHost
         putInt("contextBytes", value.contextBytes)
         putNullableString("finalText", value.finalText)
         putNullableString("code", value.code)
+        putNullableString("memoryRevision", value.memoryRevision)
+        putString("memoryIdsJson", JSONArray(value.memoryIds).toString())
+        putInt("memoryBytes", value.memoryBytes)
     }
 
     override fun beginTask(goal: String, promise: Promise) = execute(promise) {
@@ -292,6 +370,7 @@ class TaskHostModule(context: ReactApplicationContext) : NativePocketRunTaskHost
 
     override fun invalidate() {
         disposed = true
+        memoryStore.close()
         displayDeathRegistration.close()
         backendDeathWorker.shutdownNow()
         agent.close()

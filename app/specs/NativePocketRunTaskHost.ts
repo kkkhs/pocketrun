@@ -53,6 +53,18 @@ export type AgentLoopState = {
   contextBytes: number;
   finalText: string | null;
   code: string | null;
+  memoryRevision?: string | null;
+  memoryIdsJson?: string;
+  memoryBytes?: number;
+};
+
+export type MemorySnapshot = {
+  revision: string;
+  notesJson: string;
+  maxNotes: number;
+  maxNoteBytes: number;
+  maxSelected: number;
+  maxSelectedBytes: number;
 };
 
 export interface Spec extends TurboModule {
@@ -60,6 +72,13 @@ export interface Spec extends TurboModule {
   saveModelConfiguration(endpoint: string, model: string, apiKey: string): Promise<ModelConfiguration>;
   clearModelConfiguration(): Promise<ModelConfiguration>;
   startAgent(goal: string): Promise<AgentLoopState>;
+  getMemorySnapshot(): Promise<MemorySnapshot>;
+  saveMemoryNote(expectedRevision: string, noteId: string, text: string): Promise<MemorySnapshot>;
+  deleteMemoryNote(expectedRevision: string, noteId: string): Promise<MemorySnapshot>;
+  clearMemory(expectedRevision: string): Promise<MemorySnapshot>;
+  resetMemory(): Promise<MemorySnapshot>;
+  startAgentWithMemory(goal: string, noteIds: ReadonlyArray<string>, expectedRevision: string,
+    expectedEndpoint: string, expectedModel: string): Promise<AgentLoopState>;
   getAgentState(): Promise<AgentLoopState>;
   cancelAgent(): Promise<AgentLoopState>;
   beginTask(goal: string): Promise<SingleTaskState>;
