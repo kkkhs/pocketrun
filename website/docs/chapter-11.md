@@ -170,15 +170,13 @@ fun summary(step: ContextStep): String {
 哪怕模型在最后一句自信地写着“CSV 共有 3 行”，也要回头核对第 10 章账本里是不是真的有一条 `linux.count_demo_csv` 的成功记录。**模型的总结是语言产出，账本里的来源和退出码才是事实证据。**
 :::
 
-## 全书阶段总结与下一步
+## 本章小结与下一步
 
-从第 1 章点下第一个“检查设备”按钮，到第 11 章看着大模型在手机上自主串联设备查询与受控 Linux 工具、并在关键一步停下来等你批准——你已经亲手把一个 **Android 本机 AI Agent 的完整骨架** 从零建了出来：
+从第 1 章点下第一个“检查设备”按钮，到第 11 章看着大模型在手机上自主串联设备查询与受控 Linux 工具、并在关键一步停下来等你批准——一个**真实可运行的 Android AI Agent 核心闭环**已经站起来了。
 
-- **第一部分（第 1—5 章）**：打通 TurboModule、自有无线 ADB、UID 2000 `app_process` Binder 后端与隔离虚拟屏的看和点。
-- **第二部分（第 6—8 章）**：在普通 App 沙箱内建起私有工作区、防死锁管道、PRoot + Alpine 用户态和真正的 JNI PTY 终端。
-- **第三部分（第 9—11 章）**：用 `TaskHost`、`SingleTaskContext` 和 `AgentLoop` 把底层能力收束成安全、有界、可审批的真实模型闭环。
-
-这 11 章打下了最关键的地基，但离一个完整的日常 Android AI 助手还有不少激动人心的拼图等待补齐——比如跨任务的可编辑记忆、把“读 CSV → 填虚拟屏 App → 写 `result.txt`”全自动串联起来、更完整的 Linux 包管理、给模型看截图/UI 树的观察协议等。欢迎继续查看 [Ditto 功能对照与后续路线](ditto-parity.md)！
+但现在它还有两个明显的遗憾：
+1. 任务一结束，消息历史就清空了，没办法让下次任务记住用户偏好——[下一章（第 12 章）](chapter-12.md)，我们给它加上**用户可查看、纠正和删除的加密跨任务记忆**；
+2. 读文件、填虚拟屏和写结果文件还没真正串成一条完整链路，也没处理中途崩溃——[第 13 章](chapter-13.md) 会把导读里的北极星任务完整跑通，并用预写运行日志搞定中断与幂等恢复。
 
 - **本章源码快照**：[Release `chapter-11`](https://github.com/kkkhs/pocketrun/releases/tag/chapter-11) · [PR #18](https://github.com/kkkhs/pocketrun/pull/18) / [PR #20](https://github.com/kkkhs/pocketrun/pull/20)
 - **延伸参考**：[Anthropic Java SDK](https://github.com/anthropics/anthropic-sdk-java) · [实机验收与工程档案](verification-records.md)

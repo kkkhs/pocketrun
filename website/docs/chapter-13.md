@@ -1,8 +1,8 @@
 ---
-sidebar_position: 14
-sidebar_label: 第 13 章 · 完整任务与恢复
-title: 读一份 CSV，填进 Demo，再保存可核对的报告
-description: 沿私有CSV、模型整理、虚拟屏真实输入和文件读回，理解原生完成门、运行事实与中断后重新核对。
+sidebar_position: 5
+sidebar_label: 第 13 章 · 完整闭环与中断恢复
+title: 第 13 章：串联完整任务，并搞定中途崩溃与恢复
+description: 把读取 CSV、模型计算、虚拟屏真实输入和原子写文件串成端到端闭环，并用原生完成门与预写运行日志（TaskJournal）解决移动端中断恢复难题。
 ---
 
 import CompleteTaskFlow from './assets/complete-task-flow.svg';
@@ -10,187 +10,142 @@ import interruptedPublish from './assets/chapter-13-interrupted-publish.png';
 import recovery from './assets/chapter-13-recovery.png';
 import figureStyles from '@site/src/css/tutorial-figures.module.css';
 
-上一章让下一次任务明确使用一条用户偏好。这一章把已有能力串起来：**读取私有 `items.csv`，整理一行报告，输入自有虚拟屏 Demo，再把同一份报告保存为 `result.txt`。**
+还记得[课程导读](intro.md)开头那张北极星路线图吗？这一章，我们终于要把前面 12 章攒下的所有能力真正拼成一台完整运转的机器：
 
-```text
-CSV 的真实字节 → 模型计算 → Demo 的真实输入与结果 → 文件的真实字节
-```
+> **读取私有目录里的 `items.csv` → 让大模型算出统计报告 `items=2;quantity=5` → 在 UID 2000 虚拟屏里定位 Demo 输入框并把报告敲进去 → 再次观察确认画面更新 → 把同一份报告原子保存为 `result.txt` 并读回核验。**
 
-为什么还要专门做这一章？第 11 章的模型能提出工具、等待手机决定、继续下一回合，但“几个工具都成功了”还不等于这个目标完成。这里需要原生核对三端数据一致，并在中断后分清**做过什么、确认了什么、哪些动作不能再做一遍**。
+<figure style={{margin: '1.25rem 0', maxWidth: 560}}>
+  <CompleteTaskFlow className={`pr-complete-diagram ${figureStyles.diagram}`} role="img" aria-labelledby="pr-complete-title" aria-describedby="pr-complete-desc" style={{display: 'block', width: '100%', height: 'auto'}} />
+  <figcaption>跨越两条执行通道的完整闭环：私有文件读写走普通 App UID，虚拟屏观察与输入走 UID 2000 Binder 后端，大模型只负责决策与计算。</figcaption>
+</figure>
 
-> **本章已完成实际完整任务与中断恢复验收。** 六步任务、三处中断、新run核对和准确现状不重复输入分别验证；[PR #28](https://github.com/kkkhs/pocketrun/pull/28)、main CI/Pages 与 [chapter-13 源码 Release](https://github.com/kkkhs/pocketrun/releases/tag/chapter-13)已核验发布，各批次的证明范围见[工程档案](verification-records.md)。
+你可能会觉得：“工具都有了，大模型循环也有了，这一章不就是多加两个工具定义吗？”
 
-## 1. 先看这次任务的输入和结果
+真做下去，你会立刻碰到所有严肃 Agent 系统最硬核的两道工程题：
 
-默认演示文件是：
+1. **怎么定义“真的做完了”？** 模型完全可能算错数（把 `2 + 3` 算成 `6`），或者发完按键事件还没确认文字填进去就自信地喊“已完成”。我们不能听模型的一面之词，必须有一道**原生完成门（Completion Gate）**，把输入、屏幕和输出文件三端咬死核对一致。
+2. **任务跑到一半 App 被系统杀了怎么办？** 比如刚刚把 `result.txt` 写进磁盘，还没来得及记录“成功”，App 就闪退了。重启之后，绝不能傻傻地把整个任务重跑一遍——那样要么在 Demo 输入框里重复敲出两份 `items=2;quantity=5`，要么把已有文件粗暴覆盖。
 
-```csv
+这一章，我们就围绕 **`CompleteTaskContract`**（原生完成门）和 **`TaskJournal`**（预写运行日志），把这两道题彻彻底底解决掉。
+
+## 一次完整任务的 6 个受控步骤
+
+默认的私有 `items.csv` 还是我们熟悉的那份 3 行文件：
+
+```csv title="workspaces/demo/items.csv"
 name,quantity
 apple,2
 banana,3
 ```
 
-这里有 **2 条数据**，数量之和是 **5**，报告为 `items=2;quantity=5`。第 6/11 章数的是包含表头的 3 行；这次要理解和整理内容，问题已经不同。
-
-预期有两个可见结果：
-
-- 自有虚拟屏 Demo 的编辑框显示 `items=2;quantity=5`，结果控件显示 `input: items=2;quantity=5`。
-- App 私有 `workspaces/demo/result.txt` 的字节是这份报告加一个换行，读回后与预期完全相同。
-
-使用自有或明确获授权的演示设备。先在第 4—5 章打开虚拟屏 Demo，在第 11 章保存合法模型配置，再打开“第 13 章 · CSV → Demo → 文件”：
-
-1. 点“准备完整任务私有目录”。已有 CSV 会保留，不用初始化覆盖工作数据。
-2. 点“核对并开始完整模型任务”，确认当前模型地址、模型名、虚拟屏和上一运行记录。
-3. 按当前步骤逐次批准：CSV 披露、Demo 观察、必要的点击/输入、输入后的观察、文件发布。开始目标不是一次批准全部动作。
-4. 查看“原生核验”“已确认阶段”“尚未确认的意图”和步骤结果，再与模型总结对照。
-
-已有准确报告时只核对；不同输出、部分输入、失效目标或未知清理会停止并保留，不自动清空或覆盖。
-
-<figure style={{margin: '1.25rem 0', maxWidth: 560}}>
-  <CompleteTaskFlow className={`pr-complete-diagram ${figureStyles.diagram}`} role="img" aria-labelledby="pr-complete-title" aria-describedby="pr-complete-desc" style={{display: 'block', width: '100%', height: 'auto'}} />
-  <figcaption>先沿数据读，再沿每个节点的身份读：文件用普通 App UID，显示用原 UID 2000 后端，模型推理仍在 endpoint。</figcaption>
-</figure>
-
-## 2. 先读取文件，让模型根据真实内容整理
-
-CSV 在普通 App 的私有目录，不在独立 shell 后端，也不需要为这次任务启动 Alpine。`WorkspaceSession` 复用第 6 章的目录，再有界读取固定文件；Kotlin 经原工具结果把内容返回给 `AgentLoop`。
-
-新工具 `workspace.read_demo_csv` 没有任意路径参数。它先进入原 `TaskHost` 的手机审批槽，批准绑定本次输入摘要与 App UID；只有成功、清理确认后的内容才进入模型的下一回合。
-
-输入摘要是这些字节的 SHA256，回答的是“现在还是不是刚才那份输入”。它不是批准码，也不是模型计算出的报告。其他面板可能改变文件，所以每次输入或发布前还要重查，不能假定 TaskHost 的锁冻结了整个 App 文件系统。
-
-`CompleteTaskContract.accept()` 收到读取结果后，原生也独立解析这份 CSV：
-
-```kotlin
-val report = DemoCsvReport.parse(checkNotNull(fields["csvText"]).toByteArray(Charsets.UTF_8))
-```
-
-模型根据读取内容整理报告；原生按固定演示 schema 计算预期值，之后核对模型提出的文字。这不是让原生替模型编造一个成功结果，而是给实际执行加一个可检查的条件：`items=2;quantity=6` 即使格式合法也不能输入。
-
-本例只接受精确表头、两列无引号、有限 ASCII 名称与规范非负数量。普通 CSV 还可能有引号、逗号和多行字段；这些不属于本章 parser，遇到不支持的输入会拒绝，不猜着读。
-
-## 3. 再观察目标，点击和输入还不是“填对了”
-
-显示操作仍走原路径：
+第 6、11 章只是粗略数行数（得到 `3`），这一章要真正解析内容：**2 条商品记录、数量之和 5**，整理出的规范报告是 **`items=2;quantity=5`**。整条任务一共会流经 6 个由手机逐次审批的步骤：
 
 ```text
-App Kotlin → typed Binder → UID 2000 后端 → 当前正 displayId
+1. workspace.read_demo_csv        → 读出 CSV 字节并计算输入 SHA-256 摘要
+2. observe_demo（首次观察）         → 定位虚拟屏 Demo 的输入框坐标、焦点与当前值
+3. demo_tap                       → 点击虚拟屏输入框中心，让它获焦
+4. demo_text                      → 敲入模型算出的 items=2;quantity=5
+5. observe_demo（二次复查）         → 确认编辑框与结果框都真实显示 items=2;quantity=5
+6. workspace.publish_demo_result  → 原子无覆盖写入 result.txt 并读回核验字节
 ```
 
-`observe_demo` 与原来的免批准 `observe` 分开。前者经过手机批准，只向当前模型披露自有 Demo 的两个必要节点及输入框位置/焦点；第 11 章的普通模型任务向模型仍只发送原来的小型元数据。原 `observe` 返回 App 的截图 URI 和 UI 树文字不因此进入网络；披露白名单位于 `ModelToolSurface.summary()`。
+每一步都复用第 9 章的 `TaskHost` 审批与清理机制，但外层套上了 [`CompleteTaskContract.kt`](https://github.com/kkkhs/pocketrun/blob/chapter-13/app/android/app/src/main/java/io/github/kkkhs/pocketrun/taskhost/CompleteTaskContract.kt) 的强阶段约束——必须按顺序过关，不能跳步。
 
-`OwnedDemoObservation` 选择 App 自己的包名、稳定 `android:id/edit` 和 `android:id/text1`，要求节点唯一、树可用且未截断、同一窗口和同一显示目标。它不是在整份 UI 文本中搜索“报告出现过”，也不会把其他 App 的内容发给模型。
+## 第一关：三端一致性校验与“原生完成门”
 
-### 确认空值，才能决定是否输入
+### 1. 读文件：锁死 `inputDigest`，独立复算预期值
+模型调用 `workspace.read_demo_csv` 经手机批准后，原生不仅把 CSV 文本返回给模型，还会用 [`DemoCsvReport.kt`](https://github.com/kkkhs/pocketrun/blob/chapter-13/app/android/app/src/main/java/io/github/kkkhs/pocketrun/taskhost/DemoCsvReport.kt) 独立算出两样东西：
+- **`inputDigest`**：原始 CSV 字节的 SHA-256 摘要，用来盯住“中途有没有别的操作把 `items.csv` 改掉了”；
+- **`expectedText`**：根据规则独立算出的预期报告 `items=2;quantity=5`。
 
-空编辑框的 UI 树有时返回 hint `PocketRun_Ditto_5`。**hint 不能单独证明编辑框为空**；这里还要结果节点精确显示 `input: `：
+这样一来，大模型依然要自己读内容、算结果、发起工具调用；但如果模型产生了算术幻觉（比如提出输入 `items=2;quantity=6`），原生前置守卫 `CompleteTaskContract.validate()` 会立刻拒绝，绝不把错误数据写进 App 或文件。
 
-```kotlin
-val value = if (result.text == "input: " && (input.text.isEmpty() || input.text == "PocketRun_Ditto_5")) "" else input.text
+### 2. 看屏幕与敲字：一个经典的 Android 无障碍坑
+在这一章的完整任务里，我们新增了需要手机批准的 `observe_demo` 动作（专门用来向模型披露自有 Demo 页的两个固定控件坐标和值，避免把任意 App 的整棵 UI 树发往网络）。
+
+写 [`OwnedDemoObservation.kt`](https://github.com/kkkhs/pocketrun/blob/chapter-13/app/android/app/src/main/java/io/github/kkkhs/pocketrun/taskhost/OwnedDemoObservation.kt) 时，我们踩到了一个非常真实的 Android 细节：**当一个 `EditText` 为空时，无障碍控件树读出来的 `input.text` 有时候并不是空字符串，而是它的占位提示（hint）`PocketRun_Ditto_5`！**
+
+怎么区分“空框里的 hint”和“用户真的输入了内容”？同时核对页面里同步展示结果的那一行 `android:id/text1`：
+
+```kotlin title="OwnedDemoObservation.kt（双控件联合判断输入框是否为空）"
+// 只有当下方结果框严格显示 "input: " 时，EditText 里的空值或已知 hint 才被认定为空
+val value = if (result.text == "input: " &&
+    (input.text.isEmpty() || input.text == "PocketRun_Ditto_5")
+) "" else input.text
 ```
 
-模型拿到真实 bounds 和中心，提出 `demo_tap`。手机批准后，原生再次检查输入摘要、当前 displayId/epoch、节点位置与值，才发送真实点击事件。
+敲完字后，阶段也只推进到 **`text_accepted`**（“系统接收了按键事件”），**此时依然禁止发布文件**！模型必须再调一次 `observe_demo`，亲眼核实编辑框为 `items=2;quantity=5` 且结果框为 `input: items=2;quantity=5`，阶段才正式晋升为 **`demo_verified`**。
 
-随后 `demo_text` 必须是原生核对的准确报告，而且编辑框确定为空、已经聚焦。已有完整正确报告时只核对，不追加第二份；非空但不同的内容会停止，交给手机处理。
+### 3. 写文件与最终完成门
+到了最后一步 `workspace.publish_demo_result`，模型必须同时带上报告正文和第 1 步的 `inputDigest`。`WorkspaceSession.publishDemoResult()` 先把完整报告加换行写入私有临时文件并 `fsync`，再复用第 6 章的 `renameat2(RENAME_NOREPLACE)` 无覆盖原子发布成 `result.txt`，并**立刻从磁盘把 `result.txt` 读回来比对字节和 SHA-256**：
 
-### 输入被接受，不等于内容已经核对
+- 如果目标文件原本不存在：原子发布成功，返回 `published`；
+- 如果目标文件已经存在、且字节和预期**一字不差**：绝不覆盖，返回 `already_present`；
+- 如果目标文件已经存在、但内容**不同**：立刻报错并完整保留原文件，绝不覆盖用户数据。
 
-真实事件可能被系统接受，但控件还没更新或只输入一部分。因此阶段先到 `text_accepted`，不能直接发布文件。模型必须再提出一次获准 `observe_demo`，确认两个节点同时满足：
+最后，当大模型发回 `end_turn` 总结准备收工时，`SingleTaskContext.finish()` 会把关口交给 **`CompleteTaskContract.finish()`**——在落笔标记 `completed` 之前，把**输入 CSV 摘要、虚拟屏两控件现状、磁盘上 `result.txt` 字节与摘要**三端再全部现场核验一遍！三端全都对得上，任务才算真正完成。
 
-```text
-编辑框 = items=2;quantity=5
-结果框 = input: items=2;quantity=5
+## 第二关：如果中途 App 崩溃了怎么办？预写日志 + 现状核对
+
+移动端和后端分布式系统一样，进程随时可能被系统杀掉。解决崩溃恢复的经典思想叫 **WAL（Write-Ahead Logging，预写日志）+ 幂等核对**，本章由 [`TaskJournal.kt`](https://github.com/kkkhs/pocketrun/blob/chapter-13/app/android/app/src/main/java/io/github/kkkhs/pocketrun/taskhost/TaskJournal.kt) 落地。
+
+它把当前运行的事实与未决意图加密保存在独立文件 `noBackupFilesDir/complete-task.bin` 里（独立 Keystore 别名 `pocketrun.task-journal.v1` 和 AAD，绝不和第 12 章的用户笔记混在一起）。每一步真正动身前，`CompleteTaskContract` 严格按**先写意图、再干活、确认后再销账**的顺序更新日志：
+
+```kotlin title="CompleteTaskContract.kt（每步启动前先落盘记录 pendingEffect）"
+// 1. 动手之前：把正在进行的意图（read / observe / tap / text / publish）写入加密日志
+fun beforeStart(action: ParsedAction) = synchronized(lock) {
+    guard(action)
+    update(record.copy(phase = "running", pendingEffect = effect(action), code = ""))
+}
+
+// 2. 收到真实结果并确认清理后：推进已确认阶段 stage，同时把 pendingEffect 清回 "none"
+update(next.copy(pendingEffect = "none"))
 ```
 
-只有这次观察确认后，阶段才是 `demo_verified`。本章没有增加 `EditText.setText()` 的捷径；输入和再观察复用已有 Binder 路线。
+### 为什么重启后绝不“续跑旧任务”，而是“查清现状、开新任务”？
 
-## 4. 保存文件，再由原生决定整个目标是否完成
+App 被强杀再重启后，旧进程里的 Binder 代理、PID、文件描述符和审批 `nonce` 全都已经灰飞烟灭。因此在重启加载日志时，任何未终结的运行都会被诚实标记为 **`interrupted`**——它只是一份**历史事实清单**（告诉你上次死在了哪个 `stage`、当时正在尝试什么 `pendingEffect`），**绝不是可以跳过审批继续执行的持久授权**！
 
-模型提出 `workspace.publish_demo_result`，参数是准确报告和读取结果的 `inputDigest`。原生先检查已确认的 Demo、同一份输入和参数，再等待手机批准；成功后才发布 `result.txt`。
+当你点击“核对并开始完整模型任务”时，系统会创建一个**全新的 `runId`、新任务上下文、新目标绑定和新一轮审批**，并借助现状检查自动做到**幂等不重复**：
 
-`WorkspaceSession.publishDemoResult()` 的关键顺序是：
-
-```kotlin
-val created = commit(temporary, target)
-if (created) syncDirectory(root)
-val actual = checkNotNull(readDemoResultBytes()) { "RESULT_PUBLICATION_UNCONFIRMED" }
-require(actual.contentEquals(expected)) { "RESULT_PUBLICATION_UNCONFIRMED" }
-guard()
-```
-
-前面已经写入本轮私有临时文件并同步；`commit` 复用已有 no-replace 原子发布。读回确认后，本轮临时文件的清理也必须证明。
-
-- 没有旧文件：发布完整报告，再读回核对。
-- 旧文件准确相同：返回 `already_present`，表示**本轮观察到正确现状**，不是补称旧任务写入成功。
-- 旧文件不同，或并发产生了不同文件：保留并失败，不覆盖用户数据。
-
-文件步骤成功后还没有自动宣布整个目标完成。模型 `end_turn` 和手动 `finishTask()` 都进入同一 `SingleTaskContext.finish()`：
-
-```kotlin
-try { complete?.finish { check(clock.nowNanos() - deadline < 0) { "TIME_BUDGET" } } }
-```
-
-这里要再次核对输入摘要、真实 Demo 两节点、文件字节/摘要、已结算的成功步骤和完成 journal 提交。失败会终止上下文；模型一句“已完成”不能替代它。
-
-## 5. 中断后读事实，开始的是新任务
-
-第 12 章保存的是用户愿意跨任务保留的笔记。这里的 `TaskJournal` 保存的是**某次运行的意图和已确认事实**，文件、schema、密钥别名和 AAD 都与笔记、模型配置分开。
-
-每步启动前，`CompleteTaskContract.beforeStart()` 先写意图：
-
-```kotlin
-update(record.copy(phase = "running", pendingEffect = effect(action), code = ""))
-```
-
-收到真实结果、清理确认并持久提交之后，才更新已确认阶段、清掉这条意图。比如 `text_accepted / pendingEffect=observe` 表示输入事件已被接受，但下一次观察还没有确认；不能把它读成“填对了”。
-
-### 重启不会把旧任务接着跑
-
-App/上下文重新创建时，在途记录显示为 `interrupted`。它不保存模型完整历史、Binder、PID、FD 或可复用 nonce，也不会重建这些句柄。
-
-点“核对并开始完整模型任务”时，原生核对输入、当前自有 Demo、已有输出和工作目录现状，然后创建**新 run ID、新上下文、新目标绑定、新期限和新批准**。模型重新读取获准内容，不盲目重放旧工具。
-
-- Demo 已准确存在：新观察确认现状，跳过输入。
-- 文件已准确存在：读回确认，报告 `already_present`。
-- 部分输入、不同输出、输入改变、遗留临时文件或读取未知：保留并停止，先在手机核对。
-- journal 不可读：不能当作“没有记录”。只有明确放弃不可读记录的重置操作才清除它；这不删除工作数据、知识记忆或模型凭据。
-
-下面是实际发布窗口中断与新任务核对。左图中，文件已经出现在目录，但旧记录仍停在 `demo_verified / publish`；右图是重新创建目标、逐次批准后的新 run，完成核验时报告 `OUTPUT_ALREADY_PRESENT`。文件的 inode、大小、修改时间与字节均保持一致，不给旧发布补记成功。
+| 中断发生时留在现场的真实状态 | 新任务核对后的处理方式 |
+| --- | --- |
+| 死在审批前（啥也没改） | 从头正常走完 6 步 |
+| 死在 `demo_text` 之后、`observe_demo` 之前（但字其实已经填对了） | 新任务首次 `observe_demo` 发现画面已经是 `items=2;quantity=5`，直接晋升 `demo_verified`，**自动跳过点击和输入**，绝不重复敲两遍！ |
+| 死在 `publish` 窗口（`result.txt` 已经原子落盘，但 journal 来不及写 `output_verified`） | 新任务读回磁盘文件发现字节完全一致，保留原文件（inode 和时间戳丝毫不动），如实报告 **`OUTPUT_ALREADY_PRESENT`**！ |
+| 现场残留了半截输入、不匹配的输出文件或中断留下的临时文件 | **立刻停机并保留现场**，提示用户人工检查，绝不自作聪明清空或覆盖 |
 
 <div style={{display: 'flex', gap: '1.5rem', flexWrap: 'wrap', margin: '1.25rem 0', alignItems: 'flex-start'}}>
   <figure style={{margin: 0, flex: '1 1 280px', minWidth: 0, maxWidth: 360}}>
     <img src={interruptedPublish} alt="发布后文件已存在，重启原生记录仍为interrupted、demo_verified和未确认publish意图" style={{display: 'block', width: '100%', height: 'auto'}} />
-    <figcaption>旧任务：有文件现状，但发布结果未确认。</figcaption>
+    <figcaption>崩溃瞬间复现：文件已落盘但 App 在确认前中断，重启后日志如实标出 interrupted / demo_verified / 意图 publish。</figcaption>
   </figure>
   <figure style={{margin: 0, flex: '1 1 280px', minWidth: 0, maxWidth: 360}}>
     <img src={recovery} alt="新run完成原生output_verified核验，明确报告OUTPUT_ALREADY_PRESENT且文件不变" style={{display: 'block', width: '100%', height: 'auto'}} />
-    <figcaption>新任务：重新核对，确认已有文件。</figcaption>
+    <figcaption>新 run 恢复完成：核对三端一致且识别已有文件 OUTPUT_ALREADY_PRESENT，原文件字节与 inode 保持不变。</figcaption>
   </figure>
 </div>
 
-同一进程里的 `unproven` owner 仍占用原槽；重置 journal 不会让它消失。已经提交的副作用也不会因为取消、重启或重置而回滚。
+## 动手跑一遍
 
-## 检查与源码
+1. 先按第 2—4 章启动 UID 2000 后端并创建演示虚拟屏（打开 `DisplayDemoActivity`），再在第 11 章确认模型配置已加密保存。
+2. 滚动到 **第 13 章 · CSV → Demo → 文件** 面板：
+   - 点击 **准备完整任务私有目录**（已有 `items.csv` 会保留）；
+   - 点击 **核对并开始完整模型任务**，确认弹窗中的模型地址、虚拟屏编号与上一条记录后启动；
+   - 按步骤逐次点 **同意完整任务当前步骤**（读 CSV → 首次观察 → 点击 → 输入 → 二次观察 → 发布 `result.txt`）；
+   - 核对原生面板显示 `completed / output_verified / items=2;quantity=5`，且虚拟屏和 `workspaces/demo/result.txt` 内容完全一致！
+3. **进阶体验（中断与幂等恢复）**：
+   - 在演示页已经正确显示 `items=2;quantity=5` 且 `result.txt` 已经存在的情况下，再点一次 **核对并开始完整模型任务**，观察这次新任务只需 3 步（读 CSV → 观察确认 Demo 已准确 → 核对已有文件）就干净收官，完全没有往输入框里重复打字，也没有覆盖原文件！
 
-练习：若报告已经出现在 Demo，但 App 在观察前退出，下次能否直接输入？若 `result.txt` 存在但旧 journal 仍显示发布意图，为什么只能说“观察到已有文件”？
+## 阶段收官与下一步
 
-<details>
-<summary>演示预算与分批验收范围</summary>
+恭喜你走完了 **PocketRun 第 1—13 章的完整主线**！回头看一遍，你已经从第一个 React Native 按钮出发，一路打通了：
 
-CSV 最多 1024 字节、0—32 条记录；数量每条最多 1,000,000，求和检查溢出。报告最多 64 个可打印 ASCII 字节，文件多一个 LF。运行 journal 最多 4096 明文编码字节，复用 Keystore/AES-GCM 与 AtomicFile，并严格检查字段和状态。
+1. **Android 权限与隔离虚拟屏**（第 1—5 章）：TurboModule → 本机无线 ADB → UID 2000 `app_process` + Typed Binder → 隔离 `VirtualDisplay` → 截图、UI 树与定向输入。
+2. **App 内的 Linux 与交互终端**（第 6—8 章）：私有工作区与防死锁管道 → 绕开 W^X 的 PRoot + 最小 Alpine → C++/JNI 真实 PTY。
+3. **可控的 AI Agent 闭环**（第 9—13 章）：`TaskHost` 安全审批网关 → `SingleTaskContext` 多步账本 → Kotlin 官方 SDK `AgentLoop` → 可管理的加密记忆 → 跨通道原生完成门与 WAL 中断恢复。
 
-源码检查点 `955f77a`：100 项 UI 回归、133 项选定 taskhost/本章 workspace JVM、App typecheck/lint/audit，以及 ARM64 Debug/Release/AndroidTest 构建通过。Jest 和 fake source 的 JVM 检查验证状态与原生策略，不是 Binder/模型集成成功。
+这套坚实的执行底座和固定 Demo 闭环已经全部验收交付；接下来，我们将对照[Ditto 功能对照与路线图](ditto-parity.md)，从固定示例一步步迈向**通用工作区文件/命令工具、一般第三方 App 操作、更完整的 Linux 包管理、以及面向多模态模型的安全观察协议**！
 
-同一冻结 App/Test 包在任务专用 API36 ARM64 模拟器通过 7 项隔离 Android 检查：4项加密 journal、3项真实 App UID 文件/JNI无覆盖发布与遗留 staging 阻断。这些机制检查与真实App/模型任务、三处中断和新任务核对分开记录，不互相替代。
-
-首轮 UI 检查发现不完整完成记录与解析失败后旧批准按钮仍可见的问题；修正后的完整 UI 回归通过。新增原生测试夹具的工具名/SDK必填字段错误、Android公开常量编译错误分别保留，后续结果不改写首次失败。
-
-真实本机模型完成六个获准步骤，文件和Demo报告一致；待批准、输入后未观察、发布后未确认三处中断均核对。发布窗口用仅AndroidTest包含的FileObserver/pidfd观察助手暂停本任务App，独立检查真实文件和journal；助手未进入正常App/Release，不生成结果或批准。
-
-[工程档案](verification-records.md)按源码/App/Test SHA区分初始机制、实际模型与最后制品批次，保留测试夹具、观察器和审批过期的原失败。本章注释 tag `chapter-13` 固定合并提交 `4310efa`；[完整源码 Release](https://github.com/kkkhs/pocketrun/releases/tag/chapter-13)的564个文件、匿名下载与SHA256已核验，不包含APK。
-
-</details>
-
-本章实现与文档见 [PR #28](https://github.com/kkkhs/pocketrun/pull/28)，实现检查点为 [`955f77a`](https://github.com/kkkhs/pocketrun/tree/955f77ac55a854766c1625392b04df680dd73467)。可沿 [CompleteTaskPanel.tsx](https://github.com/kkkhs/pocketrun/blob/955f77ac55a854766c1625392b04df680dd73467/app/CompleteTaskPanel.tsx) → [TaskHostModule.kt](https://github.com/kkkhs/pocketrun/blob/955f77ac55a854766c1625392b04df680dd73467/app/android/app/src/main/java/io/github/kkkhs/pocketrun/TaskHostModule.kt) → [CompleteTaskContract.kt](https://github.com/kkkhs/pocketrun/blob/955f77ac55a854766c1625392b04df680dd73467/app/android/app/src/main/java/io/github/kkkhs/pocketrun/taskhost/CompleteTaskContract.kt) 阅读开始、批准与完成。
-
-完整 Ditto 能力还要继续补 Linux 分发、通用工具、一般 App 操作和模型观察等差距，见[功能对照](ditto-parity.md)。这个固定 Demo 闭环是一个可读、可核对的学习阶段，不是最终工具范围。
+- **本章源码快照**：[Release `chapter-13`](https://github.com/kkkhs/pocketrun/releases/tag/chapter-13) · [PR #28](https://github.com/kkkhs/pocketrun/pull/28)
+- **延伸阅读**：[CompleteTaskPanel.tsx](https://github.com/kkkhs/pocketrun/blob/chapter-13/app/CompleteTaskPanel.tsx) → [CompleteTaskContract.kt](https://github.com/kkkhs/pocketrun/blob/chapter-13/app/android/app/src/main/java/io/github/kkkhs/pocketrun/taskhost/CompleteTaskContract.kt) → [TaskJournal.kt](https://github.com/kkkhs/pocketrun/blob/chapter-13/app/android/app/src/main/java/io/github/kkkhs/pocketrun/taskhost/TaskJournal.kt) · [实机验收与工程档案](verification-records.md)
