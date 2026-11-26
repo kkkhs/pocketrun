@@ -40,6 +40,14 @@ const sidebars: SidebarsConfig = {
     },
     {
       type: 'category',
+      label: '第四部分 · 走向真正的产品助手',
+      collapsed: false,
+      items: [
+        'chapter-14',
+      ],
+    },
+    {
+      type: 'category',
       label: '参考与工程档案',
       collapsed: false,
       items: [

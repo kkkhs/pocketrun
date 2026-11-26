@@ -13,7 +13,7 @@ PocketRun 的第 1—13 章把一套本机 Android AI 助手的骨架搭了出�
 
 - **Android 控制通道**：App 自有无线 ADB → UID 2000 独立 `app_process` → typed Binder（AIDL）→ 后端持有的 720×1280 隔离 `VirtualDisplay`、共享内存截图、有界 UI 树和定向输入。
 - **Linux 与终端通道**：普通 App UID 私有工作目录 → `ProcessBuilder` 管道 → 基于 `nativeLibraryDir` + PRoot 的最小 Alpine（BusyBox/musl）→ 基于 JNI `/dev/ptmx` 的真实交互式 PTY。
-- **工具与模型编排**：确定性审批网关 `TaskHost` → 内存单任务账本 `SingleTaskContext` → 基于 Anthropic Java SDK 的有界 `AgentLoop` → 可管理的加密记忆 `MemoryStore` → 跨通道原生完成门 `CompleteTaskContract` 与预写日志 `TaskJournal`。
+- **工具、对话产品外壳与模型编排**：确定性审批网关 `TaskHost` → 单任务账本 `SingleTaskContext` → 基于 Anthropic Java SDK 的流式 `AgentLoop` 与多轮 `ChatEngine` → 独立域加密的多会话存储 `ConversationStore`、偏好记忆 `MemoryStore` 与运行日志 `TaskJournal` → Gemini 风格多会话对话界面、内联审批卡片与通用私有工作区文件读写工具（`list / read / write`）。
 
 ## 已知的 Ditto 0.1.14 静态对照依据
 
@@ -32,7 +32,8 @@ PocketRun 的第 1—13 章把一套本机 Android AI 助手的骨架搭了出�
 | --- | --- | --- |
 | **Linux 用户态分发** | Alpine 3.22.8 派生的最小 BusyBox/musl（4 个 ELF、2 个代码绑定） | 显著小于完整 rootfs 范围；需按实际任务需求补齐常用工具、动态库和目录结构，并同步维护对应源码与开源许可 |
 | **包管理能力** | 暂不含 `apk`、软件源与动态装包入口 | 需先核实目标产品真实的装包、更新、网络与持久化流程，并在遵守 Android W^X 限制的前提下实现 |
-| **Agent 工具集** | 3 个基础工具，加第 13 章针对固定演示的 CSV 读取、Demo 观察与结果发布 | 固定 CSV 与自有 Demo 仍是教学探针，并非通用文件/目录/命令工具；需在守住审批与沙箱边界的前提下扩充通用工具协议 |
+| **对话产品体验** | 第 14 章已落地 Gemini 风格多会话流式对话主页、会话抽屉、加密历史存储、内联审批卡片与集中设置页（原 13 章面板收至实验室） | 待补齐：富 Markdown 渲染、文件/图片附件、语音输入、Token 趋势统计与虚拟屏内嵌实时小窗预览 |
+| **Agent 工具集** | 基础设备/Linux/虚拟屏工具 + 第 14 章新增通用私有工作区 `list_files / read_file / write_file`（均受 `CanonicalChildPath` 与手机审批保护） | 尚未开放通用受控 Shell（`run_shell`）、通用网页抓取、用户主动提问（`ask_user`）与 MCP 外部工具接入 |
 | **Android 通用 App 操作** | 仅针对固定 Demo 页完成截图、UI 树、点击与可打印 ASCII 输入 | 尚未覆盖一般第三方 App 的启动、复杂控件选择、滚动导航、中文输入与授权边界 |
 | **终端交互界面** | 真实 PTY 后端 + React 64 KiB 纯文本预览 | 尚不具备 ANSI 颜色、光标定位和全屏 TUI 程序渲染能力；需按目标体验决定是否接入完整终端渲染组件 |
 | **完整跨能力闭环** | 第 13 章已跑通“私有 CSV → 模型计算 → 自有虚拟屏 Demo 输入与复查 → 无覆盖写入 `result.txt`”及中断恢复 | 目前仅针对固定 Schema 与自有 Demo；通用第三方 App、任意工作区文件与复杂多步编排待后续扩充 |

@@ -24,24 +24,127 @@ import SingleTaskPanel from './SingleTaskPanel';
 import AgentLoopPanel from './AgentLoopPanel';
 import MemoryPanel from './MemoryPanel';
 import CompleteTaskPanel from './CompleteTaskPanel';
+import ChatScreen, { type ThemeColors } from './ChatScreen';
+import SettingsScreen from './SettingsScreen';
 import NativePocketRunDevice, {
   type DeviceInfo,
 } from './specs/NativePocketRunDevice';
 
+type TabKey = 'chat' | 'settings' | 'lab';
+
 export default function App() {
   return (
     <SafeAreaProvider>
-      <DeviceScreen />
+      <PocketRunShell />
     </SafeAreaProvider>
   );
 }
 
-function DeviceScreen() {
+function PocketRunShell() {
   const insets = useSafeAreaInsets();
   const dark = useColorScheme() === 'dark';
-  const colors = dark
-    ? { background: '#111827', text: '#f9fafb', muted: '#d1d5db' }
-    : { background: '#ffffff', text: '#111827', muted: '#4b5563' };
+  const colors: ThemeColors = dark
+    ? {
+        background: '#0f172a',
+        surface: '#1e293b',
+        surfaceAlt: '#273549',
+        border: '#334155',
+        text: '#f8fafc',
+        muted: '#cbd5e1',
+        accent: '#3b82f6',
+        accentSoft: '#1e3a5f',
+        danger: '#f87171',
+        warningBg: '#3b2f15',
+        warningBorder: '#b45309',
+      }
+    : {
+        background: '#f8fafc',
+        surface: '#ffffff',
+        surfaceAlt: '#f1f5f9',
+        border: '#e2e8f0',
+        text: '#0f172a',
+        muted: '#475569',
+        accent: '#1d4ed8',
+        accentSoft: '#dbeafe',
+        danger: '#dc2626',
+        warningBg: '#fffbeb',
+        warningBorder: '#f59e0b',
+      };
+
+  const [tab, setTab] = useState<TabKey>('chat');
+
+  return (
+    <View
+      style={[
+        styles.screen,
+        {
+          backgroundColor: colors.background,
+          paddingTop: insets.top,
+          paddingBottom: insets.bottom,
+        },
+      ]}
+    >
+      <StatusBar barStyle={dark ? 'light-content' : 'dark-content'} />
+      <View
+        style={[
+          styles.navBar,
+          { backgroundColor: colors.surface, borderBottomColor: colors.border },
+        ]}
+      >
+        <Text style={[styles.brand, { color: colors.text }]}>PocketRun</Text>
+        <View style={[styles.tabs, { backgroundColor: colors.surfaceAlt }]}>
+          {(
+            [
+              ['chat', '对话'],
+              ['settings', '设置'],
+              ['lab', '实验室'],
+            ] as const
+          ).map(([key, label]) => {
+            const active = tab === key;
+            return (
+              <Pressable
+                key={key}
+                accessibilityRole="tab"
+                accessibilityLabel={label}
+                accessibilityState={{ selected: active }}
+                onPress={() => setTab(key)}
+                style={[
+                  styles.tabBtn,
+                  active && { backgroundColor: colors.surface },
+                ]}
+              >
+                <Text
+                  style={[
+                    styles.tabText,
+                    { color: active ? colors.accent : colors.muted },
+                  ]}
+                >
+                  {label}
+                </Text>
+              </Pressable>
+            );
+          })}
+        </View>
+      </View>
+
+      <View style={styles.body}>
+        {tab === 'chat' ? (
+          <ChatScreen colors={colors} onOpenSettings={() => setTab('settings')} />
+        ) : tab === 'settings' ? (
+          <SettingsScreen colors={colors} onOpenLab={() => setTab('lab')} />
+        ) : (
+          <LabScreen colors={colors} />
+        )}
+      </View>
+    </View>
+  );
+}
+
+export function LabScreen({
+  colors,
+}: {
+  colors: { background: string; text: string; muted: string };
+}) {
   const [info, setInfo] = useState<DeviceInfo | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -68,91 +171,106 @@ function DeviceScreen() {
   }
 
   return (
-    <View style={[styles.screen, { backgroundColor: colors.background }]}>
-      <StatusBar barStyle={dark ? 'light-content' : 'dark-content'} />
-      <ScrollView
-        contentContainerStyle={[
-          styles.content,
-          { paddingTop: insets.top + 28, paddingBottom: insets.bottom + 28 },
+    <ScrollView contentContainerStyle={styles.content}>
+      <Text style={[styles.eyebrow, { color: colors.muted }]}>
+        PocketRun · 教学实验室（第 1—13 章）
+      </Text>
+      <Text style={[styles.title, { color: colors.text }]}>读取设备信息</Text>
+      <Text style={[styles.description, { color: colors.muted }]}>
+        点击按钮，让 TypeScript 调用 Kotlin，再把结果显示回来。
+      </Text>
+
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel="检查设备"
+        accessibilityState={{ disabled: loading, busy: loading }}
+        disabled={loading}
+        onPress={readDeviceInfo}
+        style={({ pressed }) => [
+          styles.button,
+          (pressed || loading) && styles.buttonDimmed,
         ]}
       >
-        <Text style={[styles.eyebrow, { color: colors.muted }]}>
-          PocketRun · 第 1 章
+        <Text style={styles.buttonText}>
+          {loading ? '读取中…' : '检查设备'}
         </Text>
-        <Text style={[styles.title, { color: colors.text }]}>读取设备信息</Text>
-        <Text style={[styles.description, { color: colors.muted }]}>
-          点击按钮，让 TypeScript 调用 Kotlin，再把结果显示回来。
-        </Text>
+      </Pressable>
+      {loading && <ActivityIndicator accessibilityLabel="正在读取设备信息" />}
 
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="检查设备"
-          accessibilityState={{ disabled: loading, busy: loading }}
-          disabled={loading}
-          onPress={readDeviceInfo}
-          style={({ pressed }) => [
-            styles.button,
-            (pressed || loading) && styles.buttonDimmed,
-          ]}
-        >
-          <Text style={styles.buttonText}>
-            {loading ? '读取中…' : '检查设备'}
+      <View accessibilityLiveRegion="polite" style={styles.result}>
+        {error ? (
+          <Text
+            accessibilityRole="alert"
+            style={[styles.value, { color: colors.text }]}
+          >
+            {error}
           </Text>
-        </Pressable>
-        {loading && <ActivityIndicator accessibilityLabel="正在读取设备信息" />}
-
-        <View accessibilityLiveRegion="polite" style={styles.result}>
-          {error ? (
-            <Text
-              accessibilityRole="alert"
-              style={[styles.value, { color: colors.text }]}
-            >
-              {error}
+        ) : info ? (
+          <>
+            <Text selectable style={[styles.value, { color: colors.text }]}>
+              Android 版本：{info.androidVersion}
             </Text>
-          ) : info ? (
-            <>
-              <Text selectable style={[styles.value, { color: colors.text }]}>
-                Android 版本：{info.androidVersion}
-              </Text>
-              <Text selectable style={[styles.value, { color: colors.text }]}>
-                API Level：{info.apiLevel}
-              </Text>
-              <Text selectable style={[styles.value, { color: colors.text }]}>
-                支持的 ABI：{info.supportedAbis.join(', ')}
-              </Text>
-              <Text selectable style={[styles.value, { color: colors.text }]}>
-                App UID：{info.appUid}
-              </Text>
-            </>
-          ) : (
-            <Text style={[styles.value, { color: colors.muted }]}>
-              尚未读取设备信息。
+            <Text selectable style={[styles.value, { color: colors.text }]}>
+              API Level：{info.apiLevel}
             </Text>
-          )}
-        </View>
+            <Text selectable style={[styles.value, { color: colors.text }]}>
+              支持的 ABI：{info.supportedAbis.join(', ')}
+            </Text>
+            <Text selectable style={[styles.value, { color: colors.text }]}>
+              App UID：{info.appUid}
+            </Text>
+          </>
+        ) : (
+          <Text style={[styles.value, { color: colors.muted }]}>
+            尚未读取设备信息。
+          </Text>
+        )}
+      </View>
 
-        <Text style={[styles.description, { color: colors.muted }]}>
-          UID 是当前应用进程的身份。原生桥接不会让应用获得 shell 或 root 权限。
-        </Text>
-        <AdbPanel colors={colors} />
-        <BackendPanel colors={colors} />
-        <DisplayPanel colors={colors} />
-        <WorkspacePanel colors={colors} />
-        <LinuxPanel colors={colors} />
-        <PtyPanel colors={colors} />
-        <TaskHostPanel colors={colors} />
-        <SingleTaskPanel colors={colors} />
-        <AgentLoopPanel colors={colors} />
-        <MemoryPanel colors={colors} />
-        <CompleteTaskPanel colors={colors} />
-      </ScrollView>
-    </View>
+      <Text style={[styles.description, { color: colors.muted }]}>
+        UID 是当前应用进程的身份。原生桥接不会让应用获得 shell 或 root 权限。
+      </Text>
+      <AdbPanel colors={colors} />
+      <BackendPanel colors={colors} />
+      <DisplayPanel colors={colors} />
+      <WorkspacePanel colors={colors} />
+      <LinuxPanel colors={colors} />
+      <PtyPanel colors={colors} />
+      <TaskHostPanel colors={colors} />
+      <SingleTaskPanel colors={colors} />
+      <AgentLoopPanel colors={colors} />
+      <MemoryPanel colors={colors} />
+      <CompleteTaskPanel colors={colors} />
+    </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
   screen: { flex: 1 },
-  content: { paddingHorizontal: 24, gap: 20 },
+  navBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    gap: 12,
+  },
+  brand: { fontSize: 18, fontWeight: '800' },
+  tabs: {
+    flexDirection: 'row',
+    borderRadius: 12,
+    padding: 3,
+    gap: 4,
+  },
+  tabBtn: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 9,
+  },
+  tabText: { fontSize: 13, fontWeight: '700' },
+  body: { flex: 1 },
+  content: { paddingHorizontal: 24, paddingVertical: 20, gap: 20 },
   eyebrow: { fontSize: 14 },
   title: { fontSize: 28, fontWeight: '700' },
   description: { fontSize: 16, lineHeight: 25 },

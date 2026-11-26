@@ -9,6 +9,9 @@ enum class PocketRunTool(val wireName: String) {
     LINUX_COUNT_DEMO_CSV("linux.count_demo_csv"),
     WORKSPACE_READ_DEMO_CSV("workspace.read_demo_csv"),
     WORKSPACE_PUBLISH_DEMO_RESULT("workspace.publish_demo_result"),
+    WORKSPACE_LIST_FILES("workspace.list_files"),
+    WORKSPACE_READ_FILE("workspace.read_file"),
+    WORKSPACE_WRITE_FILE("workspace.write_file"),
     ANDROID_VIRTUAL_DISPLAY("android.virtual_display_observe_or_demo_input");
 
     companion object {
@@ -42,6 +45,21 @@ internal sealed interface ParsedAction {
 
     data class PublishDemoResult(val text: String, val expectedInputDigest: String) : ParsedAction {
         override val tool = PocketRunTool.WORKSPACE_PUBLISH_DEMO_RESULT
+        override val approvalRequired = true
+    }
+
+    data object ListWorkspaceFiles : ParsedAction {
+        override val tool = PocketRunTool.WORKSPACE_LIST_FILES
+        override val approvalRequired = false
+    }
+
+    data class ReadWorkspaceFile(val path: String) : ParsedAction {
+        override val tool = PocketRunTool.WORKSPACE_READ_FILE
+        override val approvalRequired = true
+    }
+
+    data class WriteWorkspaceFile(val path: String, val content: String) : ParsedAction {
+        override val tool = PocketRunTool.WORKSPACE_WRITE_FILE
         override val approvalRequired = true
     }
 
@@ -85,6 +103,9 @@ internal sealed interface ParsedAction {
 
 internal object ToolSchema {
     const val MAX_INPUT_BYTES = 4096
+    const val MAX_WRITE_CONTENT_BYTES = 12 * 1024
+    private const val MAX_WRITE_INPUT_BYTES = MAX_WRITE_CONTENT_BYTES + 1024
+    private const val MAX_PATH_BYTES = 128
     private const val MAX_TOOL_BYTES = 96
     private const val MAX_KEY_BYTES = 64
     private const val MAX_ARGUMENTS = 8
@@ -96,13 +117,14 @@ internal object ToolSchema {
         reject(toolBytes in 1..MAX_TOOL_BYTES, "INVALID_TOOL_NAME", "Invalid tool name.")
         reject(call.arguments.size <= MAX_ARGUMENTS, "INPUT_TOO_LARGE", "Too many arguments.")
 
+        val maxBudget = if (call.tool == PocketRunTool.WORKSPACE_WRITE_FILE.wireName) MAX_WRITE_INPUT_BYTES else MAX_INPUT_BYTES
         var measured = toolBytes + 16
         val copied = LinkedHashMap<String, Any?>(call.arguments.size)
         for ((key, value) in call.arguments) {
             val keyBytes = utf8Length(key)
             reject(keyBytes in 1..MAX_KEY_BYTES, "INVALID_ARGUMENT_KEY", "Invalid argument key.")
             measured = checkedAdd(measured, keyBytes + measuredValueBytes(value) + 8)
-            reject(measured <= MAX_INPUT_BYTES, "INPUT_TOO_LARGE", "Tool input exceeds 4096 bytes.")
+            reject(measured <= maxBudget, "INPUT_TOO_LARGE", "Tool input exceeds allowed size.")
             copied[key] = value
         }
 
@@ -126,6 +148,24 @@ internal object ToolSchema {
                 reject(text.isNotEmpty() && text.all { it.code in 0x20..0x7e }, "INVALID_TEXT", "Result text must be bounded printable ASCII.")
                 reject(digest.matches(Regex("[a-f0-9]{64}")), "INVALID_INPUT_DIGEST", "Expected input digest is invalid.")
                 ParsedAction.PublishDemoResult(text, digest)
+            }
+            PocketRunTool.WORKSPACE_LIST_FILES -> {
+                exactKeys(copied, emptySet())
+                ParsedAction.ListWorkspaceFiles
+            }
+            PocketRunTool.WORKSPACE_READ_FILE -> {
+                exactKeys(copied, setOf("path"))
+                val path = strictString(copied, "path", MAX_PATH_BYTES)
+                reject(path.isNotBlank() && !path.contains('\u0000'), "INVALID_PATH", "Invalid workspace file path.")
+                ParsedAction.ReadWorkspaceFile(path)
+            }
+            PocketRunTool.WORKSPACE_WRITE_FILE -> {
+                exactKeys(copied, setOf("path", "content"))
+                val path = strictString(copied, "path", MAX_PATH_BYTES)
+                val content = strictString(copied, "content", MAX_WRITE_CONTENT_BYTES)
+                reject(path.isNotBlank() && !path.contains('\u0000'), "INVALID_PATH", "Invalid workspace file path.")
+                reject(!content.contains('\u0000'), "INVALID_TEXT", "File content must be valid UTF-8 text.")
+                ParsedAction.WriteWorkspaceFile(path, content)
             }
             PocketRunTool.ANDROID_VIRTUAL_DISPLAY -> parseDisplay(copied)
         }

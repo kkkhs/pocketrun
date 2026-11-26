@@ -9,6 +9,8 @@ jest.mock(
   'react-native-safe-area-context',
   () => require('react-native-safe-area-context/jest/mock').default,
 );
+jest.mock('../ChatScreen', () => 'ChatScreen');
+jest.mock('../SettingsScreen', () => 'SettingsScreen');
 jest.mock('../AdbPanel', () => 'AdbPanel');
 jest.mock('../BackendPanel', () => 'BackendPanel');
 jest.mock('../DisplayPanel', () => 'DisplayPanel');
@@ -16,6 +18,10 @@ jest.mock('../WorkspacePanel', () => 'WorkspacePanel');
 jest.mock('../LinuxPanel', () => 'LinuxPanel');
 jest.mock('../PtyPanel', () => 'PtyPanel');
 jest.mock('../TaskHostPanel', () => 'TaskHostPanel');
+jest.mock('../SingleTaskPanel', () => 'SingleTaskPanel');
+jest.mock('../AgentLoopPanel', () => 'AgentLoopPanel');
+jest.mock('../MemoryPanel', () => 'MemoryPanel');
+jest.mock('../CompleteTaskPanel', () => 'CompleteTaskPanel');
 jest.mock('../specs/NativePocketRunDevice', () => ({
   __esModule: true,
   default: { getDeviceInfo: jest.fn() },
@@ -31,12 +37,26 @@ const device: DeviceInfo = {
   appUid: 10123,
 };
 let screen: ReactTestRenderer.ReactTestRenderer;
+
+const findTab = (label: string) =>
+  screen.root.find(
+    node =>
+      node.props.accessibilityRole === 'tab' &&
+      node.props.accessibilityLabel === label,
+  );
+
 const button = () =>
   screen.root.find(
     node =>
       node.props.accessibilityLabel === '检查设备' &&
       typeof node.props.onPress === 'function',
   );
+
+async function openLabTab() {
+  await ReactTestRenderer.act(() => {
+    findTab('实验室').props.onPress();
+  });
+}
 
 beforeEach(async () => {
   readInfo.mockReset();
@@ -49,7 +69,18 @@ afterEach(async () => {
   await ReactTestRenderer.act(() => screen.unmount());
 });
 
-test('disables the button while reading and displays the native result', async () => {
+test('launches into the Chat product shell by default and switches between tabs', async () => {
+  expect(JSON.stringify(screen.toJSON())).toContain('ChatScreen');
+  await ReactTestRenderer.act(() => {
+    findTab('设置').props.onPress();
+  });
+  expect(JSON.stringify(screen.toJSON())).toContain('SettingsScreen');
+  await openLabTab();
+  expect(JSON.stringify(screen.toJSON())).toContain('检查设备');
+});
+
+test('disables the button while reading and displays the native result in Lab tab', async () => {
+  await openLabTab();
   let finish!: (value: DeviceInfo) => void;
   readInfo.mockImplementationOnce(
     () =>
@@ -72,7 +103,8 @@ test('disables the button while reading and displays the native result', async (
   expect(button().props.disabled).toBe(false);
 });
 
-test('shows a native error and allows retry', async () => {
+test('shows a native error and allows retry in Lab tab', async () => {
+  await openLabTab();
   readInfo.mockRejectedValueOnce(new Error('设备信息读取失败'));
   await ReactTestRenderer.act(async () => {
     await button().props.onPress();
@@ -88,7 +120,8 @@ test('shows a native error and allows retry', async () => {
   expect(JSON.stringify(screen.toJSON())).toContain('10123');
 });
 
-test('reports a missing native module without crashing the screen', async () => {
+test('reports a missing native module without crashing the Lab screen', async () => {
+  await openLabTab();
   const bridge = jest.requireMock('../specs/NativePocketRunDevice');
   const original = bridge.default;
   bridge.default = null;

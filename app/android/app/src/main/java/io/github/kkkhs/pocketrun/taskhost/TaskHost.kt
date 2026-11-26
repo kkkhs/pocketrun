@@ -313,6 +313,12 @@ class TaskHost private constructor(
                     }
                     else -> error("Workspace action was bound")
                 }
+                is Binding.WorkspaceGeneral -> when (val action = binding.action) {
+                    ParsedAction.ListWorkspaceFiles -> capabilities.prepareWorkspaceList(binding.target)
+                    is ParsedAction.ReadWorkspaceFile -> capabilities.prepareWorkspaceRead(binding.target, action.path)
+                    is ParsedAction.WriteWorkspaceFile -> capabilities.prepareWorkspaceWrite(binding.target, action.path, action.content)
+                    else -> error("General workspace action was bound")
+                }
                 is Binding.Display -> {
                     val contract = complete
                     if (contract == null) capabilities.prepareDisplay(binding.target, binding.action)
@@ -553,6 +559,17 @@ class TaskHost private constructor(
             }
             Binding.Workspace(target, action)
         }
+        ParsedAction.ListWorkspaceFiles, is ParsedAction.ReadWorkspaceFile, is ParsedAction.WriteWorkspaceFile -> {
+            val target = snapshot("Private workspace root") { capabilities.currentWorkspaceRoot() }
+            requireUid(target.packageUid)
+            val normalizedRoot = target.root.toAbsolutePath().normalize()
+            when (action) {
+                is ParsedAction.ReadWorkspaceFile -> CanonicalChildPath.existingRegularFile(normalizedRoot, action.path)
+                is ParsedAction.WriteWorkspaceFile -> CanonicalChildPath.targetRegularFile(normalizedRoot, action.path)
+                else -> Unit
+            }
+            Binding.WorkspaceGeneral(target.copy(root = normalizedRoot), action)
+        }
         is ParsedAction.Display -> {
             val target = snapshot("Typed Binder virtual display") { capabilities.currentDisplayTarget() }
             requireUid(target.packageUid)
@@ -611,6 +628,22 @@ class TaskHost private constructor(
                 }
             }
             is Binding.Workspace -> if (capabilities.currentWorkspaceTarget() == binding.target) null else "INPUT_CHANGED"
+            is Binding.WorkspaceGeneral -> {
+                val current = capabilities.currentWorkspaceRoot()
+                val normalized = current.root.toAbsolutePath().normalize()
+                if (current.packageUid != binding.target.packageUid || normalized != binding.target.root) "TARGET_CHANGED"
+                else when (val act = binding.action) {
+                    is ParsedAction.ReadWorkspaceFile -> {
+                        CanonicalChildPath.existingRegularFile(normalized, act.path)
+                        null
+                    }
+                    is ParsedAction.WriteWorkspaceFile -> {
+                        CanonicalChildPath.targetRegularFile(normalized, act.path)
+                        null
+                    }
+                    else -> null
+                }
+            }
             is Binding.Display -> {
                 val current = capabilities.currentDisplayTarget()
                 when {
@@ -643,6 +676,17 @@ class TaskHost private constructor(
                 parts += listOf("packageUid" to binding.target.packageUid.toString(), "root" to binding.target.root.toString(),
                     "inputDigest" to binding.target.inputDigest)
                 if (binding.action is ParsedAction.PublishDemoResult) parts += "text" to binding.action.text
+            }
+            is Binding.WorkspaceGeneral -> {
+                parts += listOf("packageUid" to binding.target.packageUid.toString(), "root" to binding.target.root.toString())
+                when (val act = binding.action) {
+                    is ParsedAction.ReadWorkspaceFile -> parts += "path" to act.path
+                    is ParsedAction.WriteWorkspaceFile -> parts += listOf(
+                        "path" to act.path,
+                        "contentDigest" to DemoCsvReport.digest(act.content.toByteArray(Charsets.UTF_8)),
+                    )
+                    else -> Unit
+                }
             }
             is Binding.Display -> {
                 parts += listOf(
@@ -705,6 +749,12 @@ class TaskHost private constructor(
         is Binding.Device -> "PocketRun App UID ${value.target.packageUid}"
         is Binding.Linux -> "${CanonicalChildPath.DEMO_GUEST_PATH} · rootfs ${value.target.rootfsGeneration} · UID ${value.target.packageUid}"
         is Binding.Workspace -> "private ${if (value.action == ParsedAction.ReadDemoCsv) "items.csv disclosure" else "result.txt no-overwrite publication"} · input ${value.target.inputDigest} · UID ${value.target.packageUid}"
+        is Binding.WorkspaceGeneral -> when (val act = value.action) {
+            ParsedAction.ListWorkspaceFiles -> "工作区文件列表 · UID ${value.target.packageUid}"
+            is ParsedAction.ReadWorkspaceFile -> "读取工作区文件 ${act.path} · UID ${value.target.packageUid}"
+            is ParsedAction.WriteWorkspaceFile -> "写入工作区文件 ${act.path}（${act.content.toByteArray(Charsets.UTF_8).size} 字节） · UID ${value.target.packageUid}"
+            else -> "工作区 · UID ${value.target.packageUid}"
+        }
         is Binding.Display -> "virtual display ${value.target.displayId} · epoch ${value.target.displayEpoch} · PocketRun UID ${value.target.packageUid}"
     }
 
@@ -732,6 +782,9 @@ class TaskHost private constructor(
         }
         data class Workspace(val target: WorkspaceTarget, val action: ParsedAction) : Binding {
             override val backendEpoch = "workspace:${target.packageUid}:${target.inputDigest}"
+        }
+        data class WorkspaceGeneral(val target: WorkspaceRootTarget, val action: ParsedAction) : Binding {
+            override val backendEpoch = "workspace-root:${target.packageUid}"
         }
         data class Display(val target: DisplayTarget, val action: DisplayAction) : Binding {
             override val backendEpoch = "display:${target.displayEpoch}:${target.displayId}:${target.packageUid}"
