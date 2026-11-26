@@ -22,7 +22,7 @@ import figureStyles from '@site/src/css/tutorial-figures.module.css';
 
 这里不是让模型自动记住聊天，也不是把整份任务账本长期保存。**用户能看见、修改和删除的笔记，才是本章的跨任务记忆。**
 
-> **本章实际记忆任务已验收，发布中。** 同一正常 App 包完成 A/B 记忆任务、纠正和删除后的重启检查、旧入口无记忆任务，以及恶意“自动批准”笔记仍等待手机、删除即取消的场景。[PR #27](https://github.com/kkkhs/pocketrun/pull/27) 提供实现与记录；发布检查和源码快照继续收口。
+> **本章已验收并发布。** 同一正常 App 包完成 A/B 记忆任务、纠正/删除后的重启检查、旧入口无记忆任务，以及恶意“自动批准”笔记仍等手机、删除即取消。[PR #27](https://github.com/kkkhs/pocketrun/pull/27)、main CI/Pages 和 [chapter-12 源码快照](https://github.com/kkkhs/pocketrun/releases/tag/chapter-12)已完成。
 
 ## 1. 先在手机做三次任务
 
@@ -189,6 +189,6 @@ discardContextLocked()
 - [源码检查点 de9cf23](https://github.com/kkkhs/pocketrun/tree/de9cf23b75676dae52ee78de2eac3ac522ae904d)
 - [MemoryPanel.tsx](https://github.com/kkkhs/pocketrun/blob/de9cf23b75676dae52ee78de2eac3ac522ae904d/app/MemoryPanel.tsx) → TaskHostModule → [MemoryStore.kt](https://github.com/kkkhs/pocketrun/blob/de9cf23b75676dae52ee78de2eac3ac522ae904d/app/android/app/src/main/java/io/github/kkkhs/pocketrun/taskhost/MemoryStore.kt)：从一个保存按钮沿调用链阅读。
 
-本章源码 Release 在实际任务、精确 head CI、Pages 和线上内容核验后建立，不提供调试签名 APK。
+[本章源码 Release](https://github.com/kkkhs/pocketrun/releases/tag/chapter-12)已发布，注释 tag 固定合并提交 `6f4ee43`。完整544个源码文件及对应第三方源码，匿名下载和 SHA256 已核验；不提供调试签名 APK。
 
 下一章把读取文件、操作目标 Demo 和保存结果串成一次完整任务，并用运行记录处理中断。用户知识记忆与运行恢复记录分开；两章都是阶段能力，完整 Ditto 缺口继续按[功能对照](ditto-parity.md)逐项补齐。

@@ -2,7 +2,7 @@
 
 这份文档面向继续开发项目的人或 agent，记录实现入口、工作方法、验证/发布流程和交接要求。项目目标与历次决定见 [`PROJECT_RECORD.md`](PROJECT_RECORD.md)，当前功能差距见 [Ditto 对照](website/docs/ditto-parity.md)，读者教程从[导读](website/docs/intro.md)开始。
 
-**基线日期：2026-11-25。** 工具链和命令已按当前源码核对；未来版本以对应配置文件为准，改动时同时更新这里。
+**基线日期：2026-11-26。** 工具链和命令已按当前源码核对；未来版本以对应配置文件为准，改动时同时更新这里。
 
 ## 1. 开始前：确认版本和工作范围
 
@@ -119,6 +119,16 @@ TaskHostPanel / SingleTaskPanel / AgentLoopPanel
 
 旧 `startAgent(goal)` 不带记忆；新入口明确绑定所选IDs、预期版本、endpoint和model。用户确认的数据进入初始user消息，后续作为历史回放，不进入授权。编辑/删除先取消旧循环并释放其本地上下文，不能撤回provider收到的数据或已提交副作用；同进程unproven owner仍保槽。提交后的读回错误是未确认，不保证回滚，UI必须核对新状态后再关闭/重启。
 
+### 完整任务与运行事实（第 13 章）
+
+[`CompleteTaskPanel.tsx`](app/CompleteTaskPanel.tsx) → `startCompleteAgent()` / `beginCompleteTask()` → `SingleTaskContext.beginComplete()` → 原 `TaskHost`。开始绑定预期 journal run、当前 displayId/epoch、模型目标，创建新的 run 和原生契约；自然语言、模型参数和旧记录不能切换执行模式。
+
+[`CompleteTaskContract.kt`](app/android/app/src/main/java/io/github/kkkhs/pocketrun/taskhost/CompleteTaskContract.kt) 管理 CSV 读取、获准 Demo 观察、真实输入、再观察、无覆盖发布和最终核验的阶段；手动 `finishTask()` 与模型 `end_turn` 都走同一完成门。最终 Demo/输出读取之后再次检查输入摘要，防止长观察期间输入已改变。普通模型任务保留原工具与元数据披露范围。
+
+文件操作复用 WorkspaceSession 和 AtomicSamplePublisher，使用普通 App UID，不启动另一套 Linux 摘要执行器。`observe_demo` 复用 typed Binder，只披露自有 Demo 的两个必要节点；新读取/发布工具和观察都需原手机审批。已准确存在的输入/文件只核对，不重复输入或声称新写入。
+
+[`TaskJournal.kt`](app/android/app/src/main/java/io/github/kkkhs/pocketrun/taskhost/TaskJournal.kt) 使用独立加密 AtomicFile `complete-task.bin`，保存最新 run、目标、摘要、确认阶段、尚未确认的意图及终态。模块首次加载把在途记录标成 interrupted；重启后不恢复 nonce、模型完整历史或句柄。继续前重新核对当前资源和文件，创建新任务；部分输入、不同输出、改变的输入、遗留临时文件或未知读取保留并阻断。同进程 unproven owner 不由 journal 重置释放。
+
 ## 3. 工具链与环境
 
 | 项目 | 当前要求 | 配置来源 |
@@ -190,7 +200,7 @@ npm run serve -- --host 127.0.0.1 --port 3000 --no-open
 - 不操作个人实体手机，不绕过系统配对、设备管理或调试期限。配对码只用于当次流程，不存日志、源码或录屏。
 - 不把主机 ADB 代启动后端描述为 App 自有启动成功；实际产品验证走按钮、JS、Codegen、原生和系统能力。
 - HostDeath 类需要各自宿主协议和排他设备窗口，不直接作为普通全类 instrumentation 运行。默认排除不代表这些专项已被普通测试覆盖。
-- UiAutomation 观察器有冲突风险；后端查询目标显示时不并行抢占另一个 instrumentation 观察器。
+- UiAutomation 观察器有冲突风险；后端查询目标显示时不并行抢占另一个 instrumentation 观察器。后端持久连接建立后，UI 驱动也不再用另一条 `uiautomator dump` 接入；使用任务专用截图与离线识别，核对当前步骤再点击。层级读取失败不表示模型任务已经停止。
 - 测试 mock/暂停夹具限定于测试范围，不能生成工具结果、替代手机批准或进入正常 Release；本次临时规则由本次清理。
 - 进程/FD 身份或 procfs 读取未知不当作不存在。清理失败保留原 owner，不对可能复用的 PID/FD 重试危险操作。
 

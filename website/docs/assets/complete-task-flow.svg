@@ -1,0 +1,38 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 560 760" role="img" aria-labelledby="pr-complete-title pr-complete-desc" class="pr-complete-diagram">
+  <title id="pr-complete-title">一份 CSV 怎样变成 Demo 输入和可读回的报告文件</title>
+  <desc id="pr-complete-desc">普通 App UID 读取私有 CSV，手机批准后把内容交给模型整理。UID 2000 后端通过原 typed Binder 在同一虚拟屏观察、点击和输入，再观察两个 Demo 节点。普通 App UID 无覆盖发布并读回报告文件。原生完成门检查输入摘要、Demo、输出和清理。每次副作用前保存意图，确认后保存事实；重启只能核对并创建新任务。</desc>
+  <style>
+    .pr-complete-diagram { --ink: var(--ifm-font-color-base, #1c1e21); --muted: var(--ifm-color-emphasis-700, #606770); --border: var(--ifm-color-emphasis-300, #dadde1); --panel: var(--ifm-background-surface-color, #fff); font-family: system-ui, -apple-system, "Segoe UI", sans-serif; }
+    .pr-complete-diagram .heading { fill: var(--ink); font-size: 23px; font-weight: 650; }
+    .pr-complete-diagram .body { fill: var(--ink); font-size: 21px; }
+    .pr-complete-diagram .note { fill: var(--muted); font-size: 18px; }
+    .pr-complete-diagram .card { fill: var(--panel); stroke: var(--border); stroke-width: 1.5; }
+    .pr-complete-diagram .edge { fill: none; stroke: var(--muted); stroke-width: 2; }
+  </style>
+  <defs><marker id="pr-complete-arrow" markerWidth="9" markerHeight="8" refX="8" refY="4" orient="auto"><path d="M0 0 9 4 0 8Z" fill="var(--muted)"/></marker></defs>
+  <text x="280" y="34" text-anchor="middle" class="heading">CSV → 模型整理 → Demo → 报告文件</text>
+  <rect x="30" y="62" width="500" height="106" rx="10" class="card"/>
+  <text x="52" y="96" class="heading">1 · 手机批准读取 items.csv</text>
+  <text x="52" y="127" class="body">普通 App UID：内容 + 输入 SHA256</text>
+  <text x="52" y="153" class="note">模型只在获准后收到这份演示数据。</text>
+  <path d="M280 168 V206" class="edge" marker-end="url(#pr-complete-arrow)"/>
+  <rect x="30" y="206" width="500" height="106" rx="10" class="card"/>
+  <text x="52" y="240" class="heading">2 · 模型计算，原生独立核对</text>
+  <text x="52" y="271" class="body">两条数据、数量之和：2 + 3 = 5</text>
+  <text x="52" y="297" class="note">报告：items=2;quantity=5</text>
+  <path d="M280 312 V350" class="edge" marker-end="url(#pr-complete-arrow)"/>
+  <rect x="30" y="350" width="500" height="132" rx="10" class="card"/>
+  <text x="52" y="384" class="heading">3 · 观察 → 点击 → 输入 → 再观察</text>
+  <text x="52" y="415" class="body">UID 2000 后端：同一 displayId / epoch</text>
+  <text x="52" y="442" class="note">逐次手机批准；两个 Demo 节点确认相同报告。</text>
+  <text x="52" y="468" class="note">已准确存在时只核对，不重复输入。</text>
+  <path d="M280 482 V520" class="edge" marker-end="url(#pr-complete-arrow)"/>
+  <rect x="30" y="520" width="500" height="106" rx="10" class="card"/>
+  <text x="52" y="554" class="heading">4 · 无覆盖发布并读回 result.txt</text>
+  <text x="52" y="585" class="body">普通 App UID：同步临时文件 → 原子发布</text>
+  <text x="52" y="611" class="note">原生核对输入、Demo、文件字节与资源清理。</text>
+  <path d="M280 626 V664" class="edge" marker-end="url(#pr-complete-arrow)"/>
+  <text x="280" y="692" text-anchor="middle" class="body">核验通过并提交 journal → completed</text>
+  <text x="280" y="725" text-anchor="middle" class="note">每步：先留意图，确认后留事实。</text>
+  <text x="280" y="751" text-anchor="middle" class="note">重启：核对现状 → 新 run / 新目标 / 新批准。</text>
+</svg>

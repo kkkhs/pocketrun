@@ -8,7 +8,7 @@
 
 在电脑上写一个 AI Agent 很容易——Node.js 调个大模型接口，再 `child_process` 跑几条命令就行了。但在 Android 手机上，普通 App 关在严格的沙箱里，既不能随便看别的 App 的屏幕，也无法直接像 Linux 桌面那样跑现成的命令行工具。
 
-PocketRun 用渐进式章节带你一层层拆开这些系统限制；第 0—11 章已发布，第 12 章已通过实际记忆任务验收并推进发布：
+PocketRun 用渐进式章节带你一层层拆开这些系统限制；第 0—12 章教程和源码快照已发布：
 
 | 部分 | 章节 | 你会亲手搭通的核心机制 |
 | --- | --- | --- |
@@ -16,7 +16,7 @@ PocketRun 用渐进式章节带你一层层拆开这些系统限制；第 0—11
 | **二、在 App 里跑起 Linux 与终端** | 第 6—8 章 | 私有工作目录与 `ProcessBuilder` 管道 → 绕开 Android W^X 限制跑起 PRoot + 最小 Alpine（BusyBox/musl）→ 通过 JNI 与 `/dev/ptmx` 实现真正的交互式 PTY 终端 |
 | **三、从受控工具到 AI Agent 循环** | 第 9—12 章 | 带参数校验、目标绑定与手机端审批的确定性 `TaskHost` → 多步任务账本 `SingleTaskContext` → 真实模型循环 `AgentLoop` → 用户明确保存/选择的加密跨任务记忆 |
 
-每一章对应真实源码与分阶段验收。[已发布章节源码快照](https://github.com/kkkhs/pocketrun/releases)可检出历史版本；[第 12 章](website/docs/chapter-12.md)的源码 Release 在发布检查后建立，完整 Ditto 功能仍按对照清单逐项补齐。
+每一章对应真实源码与分阶段验收。[已发布章节源码快照](https://github.com/kkkhs/pocketrun/releases)可检出历史版本；[第 12 章](website/docs/chapter-12.md)与[源码 Release](https://github.com/kkkhs/pocketrun/releases/tag/chapter-12)已核验发布。[第 13 章](website/docs/chapter-13.md)实现 CSV→Demo→结果文件与运行 journal，实际任务与中断/恢复已验收，公开交付在[PR #28](https://github.com/kkkhs/pocketrun/pull/28)收口。完整 Ditto 功能仍按对照清单逐项补齐。
 
 ## 目录结构
 
