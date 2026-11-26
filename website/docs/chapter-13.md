@@ -18,7 +18,7 @@ CSV 的真实字节 → 模型计算 → Demo 的真实输入与结果 → 文�
 
 为什么还要专门做这一章？第 11 章的模型能提出工具、等待手机决定、继续下一回合，但“几个工具都成功了”还不等于这个目标完成。这里需要原生核对三端数据一致，并在中断后分清**做过什么、确认了什么、哪些动作不能再做一遍**。
 
-> **本章已完成实际完整任务与中断恢复验收。** 六步任务、三处中断、新run核对和准确现状不重复输入分别验证；源码与发布进度见 [PR #28](https://github.com/kkkhs/pocketrun/pull/28)，各批次的证明范围见[工程档案](verification-records.md)。
+> **本章已完成实际完整任务与中断恢复验收。** 六步任务、三处中断、新run核对和准确现状不重复输入分别验证；[PR #28](https://github.com/kkkhs/pocketrun/pull/28)、main CI/Pages 与 [chapter-13 源码 Release](https://github.com/kkkhs/pocketrun/releases/tag/chapter-13)已核验发布，各批次的证明范围见[工程档案](verification-records.md)。
 
 ## 1. 先看这次任务的输入和结果
 
@@ -187,7 +187,7 @@ CSV 最多 1024 字节、0—32 条记录；数量每条最多 1,000,000，求�
 
 真实本机模型完成六个获准步骤，文件和Demo报告一致；待批准、输入后未观察、发布后未确认三处中断均核对。发布窗口用仅AndroidTest包含的FileObserver/pidfd观察助手暂停本任务App，独立检查真实文件和journal；助手未进入正常App/Release，不生成结果或批准。
 
-[工程档案](verification-records.md)按源码/App/Test SHA区分初始机制、实际模型与最后制品批次，保留测试夹具、观察器和审批过期的原失败。本章源码快照在公开交付收口时固定。
+[工程档案](verification-records.md)按源码/App/Test SHA区分初始机制、实际模型与最后制品批次，保留测试夹具、观察器和审批过期的原失败。本章注释 tag `chapter-13` 固定合并提交 `4310efa`；[完整源码 Release](https://github.com/kkkhs/pocketrun/releases/tag/chapter-13)的564个文件、匿名下载与SHA256已核验，不包含APK。
 
 </details>
 

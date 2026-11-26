@@ -2,7 +2,7 @@
 sidebar_position: 3
 sidebar_label: 实机验收与工程档案
 title: 实机验收记录与工程档案
-description: 集中归档第 0—11 章的实机与模型验收批次、产物 SHA-256、历史失败留痕、第三方源码来源与依赖审计策略。
+description: 集中归档第 0—13 章的实机与模型验收批次、产物 SHA-256、历史失败留痕、第三方源码来源与依赖审计策略。
 ---
 
 为了保持教程正文清晰可读，我们将各章的**实机测试批次、APK 校验和、历史失败留痕、Instrumentation 命令、第三方开源许可与 npm 审计记录**统一集中归档在这里。
@@ -89,7 +89,7 @@ adb -s "$SERIAL" shell am instrument -w \
 - **取消与越权边界：** 实际恶意“自动批准CSV”笔记仍停在工具阶段等待手机，未点批准；删笔记后实际`cancelled / MEMORY_CHANGED`并清除本地记忆上下文。坏参数/旧回调/unproven保槽另由核心回归检查，不拼成全部实机安全分支通过。
 - **原失败保留：** 空JSON应计2字节的初次断言错误、两次UI驱动批准过期、UI层读取超时、无记忆任务首轮传输失败、点删除确认后立即停App未等提交而仍保留B，分别保留。后续通过不补记原删除或模型失败为成功，也不宣称传输根因已修复。
 
-[第12章教程](chapter-12.md)保留任务主线和实际截图；源码Release在最终CI/Pages核验后建立。共享的credential/memory密文机制保持独立schema/文件/别名/AAD，无新增provider凭据导入。
+[第12章教程](chapter-12.md)保留任务主线和实际截图；[源码Release](https://github.com/kkkhs/pocketrun/releases/tag/chapter-12)已核验发布，固定合并`6f4ee43`。共享的credential/memory密文机制保持独立schema/文件/别名/AAD，无新增provider凭据导入。
 
 ## 第 13 章：CSV、Demo 与结果文件
 
@@ -102,6 +102,8 @@ adb -s "$SERIAL" shell am instrument -w \
 - **原失败：** 新增JVM夹具的原工具wire名/SDK caller错误与Android公开常量编译错误保留；首次UI未严查完成字段、解析失败保留旧批准按钮的问题已修正。实际预检曾返回`DEMO_OBSERVATION_UNAVAILABLE`；接入第二个uiautomator观察器的驱动失败和后来未及时批准而`APPROVAL_EXPIRED`各自保留。切换截图驱动并校准滚动后，新运行成功，不补称原运行成功。仅测试助手的首轮把Android管理的filesDir 0771模式误当私有目录错误，未armed也未批准发布；调整为只验证该平台根的身份、严格检查其私有子目录后命中窗口。首次已有Demo任务在两步后实际`MODEL_TRANSPORT_ERROR`，后续独立新任务的3步通过不改写它，也不据此宣称传输根因已修复。
 
 最终App包还在display32/epoch33、6次新批准的真实模型任务中完成Demo再观察与已有文件核对；原生completed/OUTPUT_ALREADY_PRESENT，文件仍不变。[第13章教程](chapter-13.md)与项目/开发总账同步维护；实现、测试与正文见[PR #28](https://github.com/kkkhs/pocketrun/pull/28)。
+
+[PR #28](https://github.com/kkkhs/pocketrun/pull/28)最终head `1b2afff`及合并`4310efa`的Android/网站CI与Pages通过，线上两张PNG的SHA256和源码一致。注释`chapter-13`与[源码Release](https://github.com/kkkhs/pocketrun/releases/tag/chapter-13)固定合并提交；全部564个源码/资产文件逐项核对，Windows wrapper按`.gitattributes`转换CRLF。匿名下载SHA256 `a24dcfb1a819525847f9d1dc2f59265b538db474d27d8b96a3c649cd56996b8b`、文件范围和无APK附件已核验。
 
 ## 第三方源码来源与开源许可
 

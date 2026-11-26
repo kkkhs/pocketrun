@@ -58,7 +58,7 @@
 
 ## 4. 阶段成果与公开证据
 
-第 0—11 章教程和源码 Release 已公开；这表示对应章节的实现与记录已交付，不表示 Ditto 完整功能覆盖或所有 Android/OEM 通过。
+第 0—13 章教程和源码 Release 已公开；这表示对应章节的实现与记录已交付，不表示 Ditto 完整功能覆盖或所有 Android/OEM 通过。
 
 | 章节 | 阶段产物 | 实现/相关 PR | 源码快照 |
 | --- | --- | --- | --- |
@@ -74,6 +74,8 @@
 | 9 | 三个固定工具与手机逐次批准 | [#14](https://github.com/kkkhs/pocketrun/pull/14) | [chapter-9](https://github.com/kkkhs/pocketrun/releases/tag/chapter-9) |
 | 10 | 一个目标、两条保留的真实步骤 | [#17](https://github.com/kkkhs/pocketrun/pull/17)、[#20](https://github.com/kkkhs/pocketrun/pull/20) | [chapter-10](https://github.com/kkkhs/pocketrun/releases/tag/chapter-10) |
 | 11 | Kotlin 真实模型循环与加密配置 | [#18](https://github.com/kkkhs/pocketrun/pull/18)、[#20](https://github.com/kkkhs/pocketrun/pull/20) | [chapter-11](https://github.com/kkkhs/pocketrun/releases/tag/chapter-11) |
+| 12 | 用户可管理的跨任务记忆 | [#27](https://github.com/kkkhs/pocketrun/pull/27) | [chapter-12](https://github.com/kkkhs/pocketrun/releases/tag/chapter-12) |
+| 13 | CSV→Demo→结果文件与中断后新任务核对 | [#28](https://github.com/kkkhs/pocketrun/pull/28) | [chapter-13](https://github.com/kkkhs/pocketrun/releases/tag/chapter-13) |
 
 交付与文档补充：
 
@@ -103,15 +105,21 @@
 
 实际同一冻结App包完成 A→纠正B→重启重新选择B→删除并等待空快照→重启为空→旧入口无记忆任务。A/B各121记忆编码字节、同noteID不同版本；设备16/API36/ARM64、手机批准CSV3行和原两步账本均核对。恶意“自动批准CSV”的笔记仍待手机决定；删除后实际 `cancelled / MEMORY_CHANGED`、IDs空、0记忆编码字节。
 
-100项taskhost JVM、90项UI与11项Android机制检查通过。Debug APK `26b16f6e0d97d47b99afa466f1644b767884c1a803c5ec4dd8189705985db847`；Test APK `a1111bcefc964bcef430a95ddc4cffe02ac2f5644d99b070bb5e469cfde01793`。原UI批准过期、读取超时、首轮传输失败、未等删除完成的旧B现状和空JSON断言错误分别保留，不由后续通过改写。详情见[第12章](website/docs/chapter-12.md)；PR27/main CI/Pages与线上图片源码一致性通过，`chapter-12`固定`6f4ee43`、544文件源码归档匿名下载/SHA256核验完成。第13章另行推进，未声明完成。
+100项taskhost JVM、90项UI与11项Android机制检查通过。Debug APK `26b16f6e0d97d47b99afa466f1644b767884c1a803c5ec4dd8189705985db847`；Test APK `a1111bcefc964bcef430a95ddc4cffe02ac2f5644d99b070bb5e469cfde01793`。原UI批准过期、读取超时、首轮传输失败、未等删除完成的旧B现状和空JSON断言错误分别保留，不由后续通过改写。详情见[第12章](website/docs/chapter-12.md)；PR27/main CI/Pages与线上图片源码一致性通过，`chapter-12`固定`6f4ee43`、544文件源码归档匿名下载/SHA256核验完成。当时第13章另行推进；其后续验收与交付见下节。
 
 ### 第 13 章开发汇报（2026-11-26）
 
 按已批准的第12—13章计划，在 `feat/chapter-13-complete-task` 基于第12章合并推进固定 CSV→模型报告→自有 Demo 真实输入→再观察→无覆盖文件发布/读回。实现复用原 TaskHost、SingleTaskContext 和 typed Binder，增加明确完整任务入口、最终原生完成门和独立加密运行 journal；中断后只能新 run 核对，不恢复旧授权。
 
-100项 UI 回归及 App typecheck/lint/audit 已通过。首次 UI 检查的两个问题（不完整完成记录、解析失败后旧批准按钮）已修正并保留原失败；新增原生夹具的工具名/SDK字段、Android公开常量编译错误另行留痕。独审发现最终观察期间输入可能变化，已补最后一次输入摘要复查和回归检查。源码检查点 `955f77a` 已提交：133项选定JVM与ARM64 Debug/Release/AndroidTest构建通过；同一冻结App/Test包7项隔离Android journal/文件检查通过。真实 App/模型已完成六步CSV→Demo→结果文件闭环，原生completed与真实文件读回一致；待批准与输入后未观察的中断重启通过，无旧批准/模型自动重放。发布窗口首轮宿主轮询晚于journal提交，实际只观察到output_verified/interrupted，原失败保留。仅AndroidTest包含的FileObserver/pidfd助手随后实际命中：文件已存在，重启journal仍interrupted/demo_verified/publish、未确认输出摘要；助手句柄已确认清理。新run恢复6步通过，已有输出inode/大小/时间/字节不变；同一准确Demo的新任务仅读取、观察、核对已有文件3步，没有再次输入。最终5d7208e源码的App/Test三制品重新冻结，7项Android及真实6步模型任务再验通过。已建立[草稿PR #28](https://github.com/kkkhs/pocketrun/pull/28)，源码427c31c的Android/网站PR CI通过；当前未建立第13章tag/Release，不声明整章交付。
+100项 UI 回归及 App typecheck/lint/audit 已通过。首次 UI 检查的两个问题（不完整完成记录、解析失败后旧批准按钮）已修正并保留原失败；新增原生夹具的工具名/SDK字段、Android公开常量编译错误另行留痕。独审发现最终观察期间输入可能变化，已补最后一次输入摘要复查和回归检查。源码检查点 `955f77a` 已提交：133项选定JVM与ARM64 Debug/Release/AndroidTest构建通过；同一冻结App/Test包7项隔离Android journal/文件检查通过。真实 App/模型已完成六步CSV→Demo→结果文件闭环，原生completed与真实文件读回一致；待批准与输入后未观察的中断重启通过，无旧批准/模型自动重放。发布窗口首轮宿主轮询晚于journal提交，实际只观察到output_verified/interrupted，原失败保留。仅AndroidTest包含的FileObserver/pidfd助手随后实际命中：文件已存在，重启journal仍interrupted/demo_verified/publish、未确认输出摘要；助手句柄已确认清理。新run恢复6步通过，已有输出inode/大小/时间/字节不变；同一准确Demo的新任务仅读取、观察、核对已有文件3步，没有再次输入。最终5d7208e源码的App/Test三制品重新冻结，7项Android及真实6步模型任务再验通过。开发阶段先建立[PR #28](https://github.com/kkkhs/pocketrun/pull/28)草稿，源码427c31c的Android/网站PR CI通过；最终交付另按下面的精确head与发布记录核对。
 
 教程按任务、数据、执行身份和返回路径写入[第13章](website/docs/chapter-13.md)，开发入口与恢复约束同步到 DEVELOPMENT.md。第12章已发布状态后续文案保留，原 chapter-12 tag 不改写。
+
+### 第 13 章发布收口（2026-11-26）
+
+最终PR head `1b2afff`的Android/网站CI通过，合并`4310efa`的main Android CI与Pages通过；线上正文、图解和两张证据图片与源码核对。[chapter-13源码Release](https://github.com/kkkhs/pocketrun/releases/tag/chapter-13)及注释tag固定该合并，完整564文件归档和对应第三方源码/许可，匿名下载/SHA256与源码范围已核验。
+
+任务专用App后端与ADB连接已关闭，原无线调试关闭状态已恢复，本轮8790转发及本地教程预览已清理；已有网关、个人手机、历史云资源和保留stash未操作。实际失败继续按制品批次留痕；两章完成不表示完整Ditto功能或全部OEM兼容已完成。
 
 ## 5. 开发与交接约定
 
@@ -128,8 +136,8 @@
 
 1. 建立版本明确的 Ditto 原产品工具/操作/模型/恢复清单，补直接证据；未经核实标记 unknown。
 2. 按[功能对照](website/docs/ditto-parity.md)补 Linux 分发和包管理、通用工具、一般 App 操作、模型观察、终端呈现、持久化与恢复。
-3. 串联“处理文件 → 操作 App → 保存结果”的完整任务，逐阶段观察来源和副作用，验证取消/失败/恢复。
-4. 第12章已通过实际记忆任务验收，完成发布收口后推进第13章完整任务/恢复；功能清单需要时增加章节，不把编号当最终范围上限。
+3. 在第13章已验收的固定跨能力闭环上扩展一般目标App、输入格式与工具；逐阶段核对来源、副作用和故障恢复。
+4. 第12—13章已验收并发布；下一阶段按完整功能清单增加章节，不把编号当最终范围上限。
 5. 扩展设备/目标 App/兼容分支覆盖，保持正 displayId、实际 UID 和资源所有权约束。
 6. 将必要的原始研究与验收资料转存到适当的持久位置，并建立脱敏索引；见下一节。
 
