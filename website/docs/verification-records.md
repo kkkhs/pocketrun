@@ -80,6 +80,17 @@ adb -s "$SERIAL" shell am instrument -w \
 | **第 10 章** | [chapter-10](https://github.com/kkkhs/pocketrun/releases/tag/chapter-10)（`a2e3679`）· [#17](https://github.com/kkkhs/pocketrun/pull/17) / [#20](https://github.com/kkkhs/pocketrun/pull/20) | 2026-11-23 独立第 10 章包（Debug APK `a61950af5b3c7c2bb2dac1355a558d0b386739559520b746973aba03597f87b5`，Test APK `2fc3f213e2f2cbb02611282e0b7f906ea598f6197a0892c0bbc39375036c6a7a`）：82 项 JVM 零失败、1 项 `Chapter10ContextIntegrationTest` 通过；实际界面完成 `task-1` 设备信息 + 手机审批 CSV（3 行、202ms、清理确认）并完成核对 | 单任务上下文仅存活于当前 App 进程内存，不跨进程死亡持久化 |
 | **第 11 章** | [chapter-11](https://github.com/kkkhs/pocketrun/releases/tag/chapter-11)（`8f95aa7`）· [#18](https://github.com/kkkhs/pocketrun/pull/18) / [#20](https://github.com/kkkhs/pocketrun/pull/20) | 2026-11-23 最终正常集成包（Debug APK `134329e82f2a2abda257b9fd7da78305baae8ab37a3137625e795f164377502b`，Test APK `924cd2b1e36c4bdd10b2c2124f937a361f3b3ecc5c4679cc159bd304b3`）：90 项 `taskhost` JVM 零失败、Keystore / SDK runtime / 网关回放 / context 等 5 项 Android 测试通过；经本机兼容网关调用 Seed 2.1 Turbo（`claude-doubao-seed-2-1-turbo`）真实跑通 3 回合、2 条真实工具、手机批准 CSV（3 行、143ms、5 阶段退出码 0、清理确认）、520 输出 token、3157 字节上下文；已验证编译后的 Release 类仅允许 HTTPS 并拒绝 loopback HTTP | 早期 2 次审批过期与 2 次第 3 回合 `MODEL_TRANSPORT_ERROR` 保留；本次实测使用本地兼容网关而非默认 Anthropic 官方服务 |
 
+## 第 12 章：用户可管理的跨任务记忆
+
+源码检查点 [`de9cf23`](https://github.com/kkkhs/pocketrun/commit/de9cf23b75676dae52ee78de2eac3ac522ae904d)，[PR #27](https://github.com/kkkhs/pocketrun/pull/27)。同一冻结正常包：Debug APK `26b16f6e0d97d47b99afa466f1644b767884c1a803c5ec4dd8189705985db847`，Test APK `a1111bcefc964bcef430a95ddc4cffe02ac2f5644d99b070bb5e469cfde01793`。
+
+- **源码与机制：** 100项taskhost JVM、90项UI通过；ARM64 Debug/Release/AndroidTest构建通过。API36 ARM64专用模拟器的6项隔离记忆存储，加旧凭据兼容/SDK/runtime/网关/context，共11项Android检查通过；不把它们当手机完整任务。
+- **真实App/模型（2026-11-25—26）：** 明确选择/目的地确认后Report A；同noteID纠正后版本变化，App重启、重新选择得到Report B（两次121记忆编码字节）；等新空快照确认后删除/重启仍为空，旧入口真实任务完成且无记忆、IDs为空、0记忆编码字节。均为本机Ferry/Seed2.1Turbo，不是Claude Opus。
+- **取消与越权边界：** 实际恶意“自动批准CSV”笔记仍停在工具阶段等待手机，未点批准；删笔记后实际`cancelled / MEMORY_CHANGED`并清除本地记忆上下文。坏参数/旧回调/unproven保槽另由核心回归检查，不拼成全部实机安全分支通过。
+- **原失败保留：** 空JSON应计2字节的初次断言错误、两次UI驱动批准过期、UI层读取超时、无记忆任务首轮传输失败、点删除确认后立即停App未等提交而仍保留B，分别保留。后续通过不补记原删除或模型失败为成功，也不宣称传输根因已修复。
+
+[第12章教程](chapter-12.md)保留任务主线和实际截图；源码Release在最终CI/Pages核验后建立。共享的credential/memory密文机制保持独立schema/文件/别名/AAD，无新增provider凭据导入。
+
 ## 第三方源码来源与开源许可
 
 PocketRun 严格保留所有嵌入第三方组件的固定上游来源、修改记录与对应源码（随章节源码 Release 一并分发）：

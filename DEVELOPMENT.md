@@ -111,6 +111,14 @@ TaskHostPanel / SingleTaskPanel / AgentLoopPanel
 
 模型推理在 endpoint 服务；Kotlin 安排回合、校验并调用工具。`submitTool()` 返回请求快照，手机决定是独立调用，状态查询返回当前结果；原生执行不由前端是否 await 决定。全回合先检查工具名/参数结构/ID，目标有效性仍逐条核对，成功步骤不回滚。
 
+### 用户记忆（第 12 章）
+
+[`MemoryPanel.tsx`](app/MemoryPanel.tsx) → TaskHostModule → [`MemoryStore.kt`](app/android/app/src/main/java/io/github/kkkhs/pocketrun/taskhost/MemoryStore.kt)。[`MemoryCodec.kt`](app/android/app/src/main/java/io/github/kkkhs/pocketrun/taskhost/MemoryCodec.kt) 复用严格平面JSON，8条/每条256 UTF-8字节、整体4096编码字节；一次最多选择4条/2048编码字节。
+
+配置与记忆复用 [`EncryptedSnapshotFile.kt`](app/android/app/src/main/java/io/github/kkkhs/pocketrun/taskhost/EncryptedSnapshotFile.kt) 的原子密文机制，但文件、schema、别名和AAD分开。首次缺失创建稳定空快照；腐败/未知不当空库，显式重置只针对记忆。每次有效修改写新不透明版本，最后一条删除也不复用旧身份。
+
+旧 `startAgent(goal)` 不带记忆；新入口明确绑定所选IDs、预期版本、endpoint和model。用户确认的数据进入初始user消息，后续作为历史回放，不进入授权。编辑/删除先取消旧循环并释放其本地上下文，不能撤回provider收到的数据或已提交副作用；同进程unproven owner仍保槽。提交后的读回错误是未确认，不保证回滚，UI必须核对新状态后再关闭/重启。
+
 ## 3. 工具链与环境
 
 | 项目 | 当前要求 | 配置来源 |
