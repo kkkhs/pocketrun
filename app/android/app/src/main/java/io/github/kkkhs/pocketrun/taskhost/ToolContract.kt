@@ -7,6 +7,8 @@ import java.security.MessageDigest
 enum class PocketRunTool(val wireName: String) {
     ANDROID_DEVICE_INFO("android.device_info"),
     LINUX_COUNT_DEMO_CSV("linux.count_demo_csv"),
+    WORKSPACE_READ_DEMO_CSV("workspace.read_demo_csv"),
+    WORKSPACE_PUBLISH_DEMO_RESULT("workspace.publish_demo_result"),
     ANDROID_VIRTUAL_DISPLAY("android.virtual_display_observe_or_demo_input");
 
     companion object {
@@ -33,6 +35,16 @@ internal sealed interface ParsedAction {
         override val approvalRequired = true
     }
 
+    data object ReadDemoCsv : ParsedAction {
+        override val tool = PocketRunTool.WORKSPACE_READ_DEMO_CSV
+        override val approvalRequired = true
+    }
+
+    data class PublishDemoResult(val text: String, val expectedInputDigest: String) : ParsedAction {
+        override val tool = PocketRunTool.WORKSPACE_PUBLISH_DEMO_RESULT
+        override val approvalRequired = true
+    }
+
     sealed interface Display : ParsedAction {
         val expectedDisplayId: Int
         val expectedDisplayEpoch: Long
@@ -43,6 +55,13 @@ internal sealed interface ParsedAction {
             override val expectedDisplayEpoch: Long,
         ) : Display {
             override val approvalRequired = false
+        }
+
+        data class ObserveDemo(
+            override val expectedDisplayId: Int,
+            override val expectedDisplayEpoch: Long,
+        ) : Display {
+            override val approvalRequired = true
         }
 
         data class DemoTap(
@@ -96,6 +115,18 @@ internal object ToolSchema {
                 exactKeys(copied, emptySet())
                 ParsedAction.CountDemoCsv
             }
+            PocketRunTool.WORKSPACE_READ_DEMO_CSV -> {
+                exactKeys(copied, emptySet())
+                ParsedAction.ReadDemoCsv
+            }
+            PocketRunTool.WORKSPACE_PUBLISH_DEMO_RESULT -> {
+                exactKeys(copied, setOf("text", "expectedInputDigest"))
+                val text = strictString(copied, "text", MAX_TEXT_BYTES)
+                val digest = strictString(copied, "expectedInputDigest", 64)
+                reject(text.isNotEmpty() && text.all { it.code in 0x20..0x7e }, "INVALID_TEXT", "Result text must be bounded printable ASCII.")
+                reject(digest.matches(Regex("[a-f0-9]{64}")), "INVALID_INPUT_DIGEST", "Expected input digest is invalid.")
+                ParsedAction.PublishDemoResult(text, digest)
+            }
             PocketRunTool.ANDROID_VIRTUAL_DISPLAY -> parseDisplay(copied)
         }
     }
@@ -103,7 +134,7 @@ internal object ToolSchema {
     private fun parseDisplay(arguments: Map<String, Any?>): ParsedAction.Display {
         val action = strictString(arguments, "action", 24)
         val expected = when (action) {
-            "observe" -> DISPLAY_BASE
+            "observe", "observe_demo" -> DISPLAY_BASE
             "demo_tap" -> DISPLAY_BASE + setOf("x", "y")
             "demo_text" -> DISPLAY_BASE + "text"
             else -> throw ToolValidationException("UNKNOWN_ACTION", "Unknown virtual-display action.")
@@ -115,6 +146,7 @@ internal object ToolSchema {
         reject(epoch > 0, "INVALID_DISPLAY_EPOCH", "expectedDisplayEpoch must be positive.")
         return when (action) {
             "observe" -> ParsedAction.Display.Observe(displayId, epoch)
+            "observe_demo" -> ParsedAction.Display.ObserveDemo(displayId, epoch)
             "demo_tap" -> {
                 val x = strictInt(arguments, "x")
                 val y = strictInt(arguments, "y")

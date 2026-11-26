@@ -67,7 +67,29 @@ export type MemorySnapshot = {
   maxSelectedBytes: number;
 };
 
+export type CompleteTaskState = {
+  runId: string | null;
+  taskId: string | null;
+  phase: string;
+  stage: string;
+  pendingEffect: string;
+  inputDigest: string;
+  expectedText: string;
+  outputDigest: string;
+  code: string | null;
+  displayId: number | null;
+  displayEpoch: string | null;
+  packageUid: number;
+};
+
 export interface Spec extends TurboModule {
+  getCompleteTaskState(): Promise<CompleteTaskState>;
+  prepareCompleteTask(): Promise<CompleteTaskState>;
+  beginCompleteTask(expectedRunId: string, expectedDisplayId: number,
+    expectedDisplayEpoch: string): Promise<CompleteTaskState>;
+  startCompleteAgent(expectedRunId: string, expectedDisplayId: number, expectedDisplayEpoch: string,
+    expectedEndpoint: string, expectedModel: string): Promise<CompleteTaskState>;
+  resetCompleteJournal(): Promise<CompleteTaskState>;
   getModelConfiguration(): Promise<ModelConfiguration>;
   saveModelConfiguration(endpoint: string, model: string, apiKey: string): Promise<ModelConfiguration>;
   clearModelConfiguration(): Promise<ModelConfiguration>;

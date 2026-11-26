@@ -25,10 +25,11 @@ internal interface ModelTransport : Closeable {
 internal class AnthropicModelTransport(
     private val credential: ModelCredential,
     private val client: AnthropicClientAsync,
+    private val completeTask: Boolean = false,
 ) : ModelTransport {
-    constructor(credential: ModelCredential) : this(credential, AnthropicOkHttpClientAsync.builder()
+    constructor(credential: ModelCredential, completeTask: Boolean = false) : this(credential, AnthropicOkHttpClientAsync.builder()
         .apiKey(credential.apiKey).baseUrl(credential.settings.endpoint)
-        .timeout(Duration.ofSeconds(20)).maxRetries(0).logLevel(LogLevel.OFF).openTelemetry(false).build())
+        .timeout(Duration.ofSeconds(20)).maxRetries(0).logLevel(LogLevel.OFF).openTelemetry(false).build(), completeTask)
     private val worker = Executors.newSingleThreadExecutor { Thread(it, "PocketRun-ModelTransport") }
     private val closed = AtomicBoolean(false)
     private var active: PendingRequest? = null
@@ -42,8 +43,8 @@ internal class AnthropicModelTransport(
                 check(!request.cancelled.get())
                 val params = MessageCreateParams.builder().model(credential.settings.model)
                     .maxTokens(4096L).thinking(ThinkingConfigAdaptive.builder().build())
-                    .system(ModelToolSurface.SYSTEM_PROMPT).messages(history)
-                    .apply { ModelToolSurface.tools().forEach { addTool(it) } }.build()
+                    .system(if (completeTask) ModelToolSurface.COMPLETE_PROMPT else ModelToolSurface.SYSTEM_PROMPT).messages(history)
+                    .apply { ModelToolSurface.tools(completeTask).forEach { addTool(it) } }.build()
                 val stream = client.messages().createStreaming(params,
                     RequestOptions.builder().followRedirects(false).build())
                 synchronized(request) {

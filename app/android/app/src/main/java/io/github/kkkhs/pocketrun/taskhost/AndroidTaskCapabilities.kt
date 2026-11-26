@@ -8,6 +8,8 @@ import io.github.kkkhs.pocketrun.LinuxRecoveryProbe
 import io.github.kkkhs.pocketrun.LinuxRuntimeManifest
 import io.github.kkkhs.pocketrun.LinuxSession
 import io.github.kkkhs.pocketrun.RootfsInstaller
+import io.github.kkkhs.pocketrun.WorkspaceSession
+import io.github.kkkhs.pocketrun.AtomicSamplePublisher
 import java.io.Closeable
 import java.io.File
 import java.io.IOException
@@ -43,6 +45,8 @@ internal class AndroidTaskCapabilities(
     private var linuxTarget: LinuxTarget? = null
     private var linuxPreparing = false
     private var activeLinux: LinuxCountExecution? = null
+    private val workspaceSession = WorkspaceSession(files)
+    private var activeWorkspace: WorkspaceExecution? = null
     private var sequence = 0L
     private val closeCoordinator = RetryableCloseCoordinator()
 
@@ -155,6 +159,111 @@ internal class AndroidTaskCapabilities(
         return DisplayExecution(port, expected, action, worker)
     }
 
+    fun prepareWorkspaceEnvironment(): WorkspaceTarget {
+        synchronized(lock) { check(!closeCoordinator.closing && activeWorkspace == null) }
+        workspaceSession.prepare()
+        return currentWorkspaceTarget()
+    }
+
+    fun checkWorkspaceRecovery(): DemoCsvReport {
+        val root = workspaceSession.demoRoot()
+        val children = checkNotNull(root.listFiles()) { "WORKSPACE_RECOVERY_UNKNOWN" }
+        check(children.none { it.name.startsWith(".pocketrun-result-") && it.name.endsWith(".tmp") }) {
+            "WORKSPACE_RESULT_RECOVERY_REQUIRED"
+        }
+        return DemoCsvReport.parse(workspaceSession.readDemoCsvBytes())
+    }
+
+    override fun currentWorkspaceTarget(): WorkspaceTarget {
+        synchronized(lock) { check(!closeCoordinator.closing) }
+        val bytes = workspaceSession.readDemoCsvBytes()
+        val report = DemoCsvReport.parse(bytes)
+        return WorkspaceTarget(packageUid, workspaceSession.demoRoot().toPath(), report.inputDigest)
+    }
+
+    override fun currentDemoObservation(expected: DisplayTarget): DemoObservation {
+        val port = checkNotNull(TaskHostDisplayPortRegistry.current()) { "Owned Demo backend is unavailable." }
+        check(port.snapshot() == expected && expected.packageUid == packageUid)
+        return port.observeDemo(expected)
+    }
+
+    override fun currentDemoResult(): ByteArray? = workspaceSession.readDemoResultBytes()
+
+    override fun prepareReadDemoCsv(expected: WorkspaceTarget): OwnedExecution = synchronized(lock) {
+        check(!closeCoordinator.closing && activeWorkspace == null && currentWorkspaceTarget() == expected)
+        WorkspaceExecution(expected, null, {}).also { activeWorkspace = it }
+    }
+
+    override fun preparePublishDemoResult(expected: WorkspaceTarget, text: String, guard: () -> Unit): OwnedExecution = synchronized(lock) {
+        check(!closeCoordinator.closing && activeWorkspace == null && currentWorkspaceTarget() == expected)
+        WorkspaceExecution(expected, text, guard).also { activeWorkspace = it }
+    }
+
+    override fun prepareCompleteDisplay(expected: DisplayTarget, action: DisplayAction, skipInput: () -> Boolean): OwnedExecution {
+        val port = checkNotNull(TaskHostDisplayPortRegistry.current()) { "Owned Demo backend is unavailable." }
+        check(port.snapshot() == expected && expected.packageUid == packageUid && expected.backendReady)
+        return DisplayExecution(port, expected, action, worker, skipInput)
+    }
+
+    private inner class WorkspaceExecution(
+        private val expected: WorkspaceTarget,
+        private val text: String?,
+        private val guard: () -> Unit,
+    ) : OwnedExecution {
+        private val gate = Any()
+        private val done = CountDownLatch(1)
+        private var started = false
+        private var cancelled = false
+        private var temporary: File? = null
+
+        private fun checkCurrent() {
+            check(!cancelled && !closeCoordinator.closing && activeWorkspace === this) { "Workspace execution is stale." }
+            check(currentWorkspaceTarget() == expected) { "Workspace input changed." }
+        }
+
+        override fun start(completion: (ExecutionOutcome) -> Unit) {
+            synchronized(gate) { checkCurrent(); check(!started); started = true }
+            try {
+                worker.execute {
+                    val outcome = try {
+                        synchronized(gate) { checkCurrent(); guard() }
+                        val result = if (text == null) {
+                            val bytes = workspaceSession.readDemoCsvBytes()
+                            val report = DemoCsvReport.parse(bytes)
+                            check(report.inputDigest == expected.inputDigest)
+                            ToolResult(mapOf("source" to "app-private-workspace", "csvText" to String(bytes, Charsets.UTF_8),
+                                "inputDigest" to report.inputDigest))
+                        } else {
+                            val publication = workspaceSession.publishDemoResult(text,
+                                guard = { synchronized(gate) { checkCurrent(); guard() } },
+                                onTemporary = { temporary = it },
+                                commit = { source, target -> synchronized(gate) {
+                                    checkCurrent(); guard(); AtomicSamplePublisher.publish(source, target)
+                                } })
+                            ToolResult(mapOf("source" to "app-private-workspace", "inputDigest" to expected.inputDigest,
+                                "publicationStatus" to publication.status, "outputDigest" to publication.outputDigest))
+                        }
+                        synchronized(gate) { checkCurrent() }
+                        ExecutionOutcome.Success(result)
+                    } catch (_: Exception) { ExecutionOutcome.Failure("WORKSPACE_SOURCE_FAILED", "Workspace state or publication could not be verified.") }
+                    done.countDown()
+                    completion(outcome)
+                }
+            } catch (error: RejectedExecutionException) { done.countDown(); throw error }
+        }
+
+        override fun close() {
+            val wasStarted = synchronized(gate) { cancelled = true; started }
+            if (wasStarted && !done.await(3000, TimeUnit.MILLISECONDS)) throw IOException("Workspace IO cleanup remains unproven.")
+            temporary?.let { file ->
+                val exists = LinuxDirectoryLease.readAttributes(file) != null
+                if (exists && !file.delete()) throw IOException("Workspace temporary file remains owned.")
+                if (LinuxDirectoryLease.readAttributes(file) != null) throw IOException("Workspace temporary cleanup remains unproven.")
+            }
+            synchronized(lock) { if (activeWorkspace === this) activeWorkspace = null }
+        }
+    }
+
     private fun startLinux(execution: LinuxCountExecution, completion: (ExecutionOutcome) -> Unit) {
         val session: LinuxSession
         val operation: LinuxSession.Operation
@@ -229,6 +338,8 @@ internal class AndroidTaskCapabilities(
         }
         // A failed close retains active/session/worker and keeps this coordinator retryable.
         active?.close()
+        synchronized(lock) { activeWorkspace }?.close()
+        workspaceSession.close()
         val session = synchronized(lock) {
             check(activeLinux == null) { "Linux execution cleanup is still owned." }
             linuxSession
@@ -275,6 +386,7 @@ internal class AndroidTaskCapabilities(
         private val expected: DisplayTarget,
         private val action: DisplayAction,
         private val worker: ExecutorService,
+        private val skipInput: (() -> Boolean)? = null,
     ) : OwnedExecution {
         private val cancelled = AtomicBoolean(false)
         private val started = AtomicBoolean(false)
@@ -287,8 +399,12 @@ internal class AndroidTaskCapabilities(
                 worker.execute {
                     val outcome = try {
                         check(!cancelled.get() && port.snapshot() == expected) { "Display target changed." }
-                        val result = when (val value = action) {
+                        val skip = skipInput?.invoke() == true
+                        val result = if (skip && (action is DisplayAction.DemoTap || action is DisplayAction.DemoText)) {
+                            ToolResult(OwnedDemoObservation.fields(port.observeDemo(expected)) + ("effect" to "already_present"))
+                        } else when (val value = action) {
                             DisplayAction.Observe -> port.observe(expected)
+                            DisplayAction.ObserveDemo -> ToolResult(OwnedDemoObservation.fields(port.observeDemo(expected)))
                             is DisplayAction.DemoTap -> port.demoTap(expected, value.x, value.y)
                             is DisplayAction.DemoText -> port.demoText(expected, value.text)
                         }

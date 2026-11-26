@@ -86,6 +86,14 @@ class TaskHost private constructor(
     private var requestSequence = 0L
     private var executionSequence = 0L
     private var closed = false
+    private var complete: CompleteTaskContract? = null
+
+    internal fun installCompleteContract(value: CompleteTaskContract?) = synchronized(lock) {
+        check(!closed && active == null) { "TaskHost still owns a request." }
+        if (value == null) check(complete?.blocksOrdinaryTask() != true) { "Interrupted complete task requires review." }
+        value?.start()
+        complete = value
+    }
 
     fun submit(call: RawToolCall, taskDeadlineNanos: Long? = null): HostStatus {
         refresh()
@@ -94,7 +102,12 @@ class TaskHost private constructor(
             synchronized(lock) {
                 check(!closed) { "TaskHost is closed." }
                 if (active != null) throw HostBusyException()
+                if (complete?.blocksOrdinaryTask() == false) complete = null
                 val action = ToolSchema.validate(call)
+                val needsComplete = action == ParsedAction.ReadDemoCsv || action is ParsedAction.PublishDemoResult || action is ParsedAction.Display.ObserveDemo
+                if (needsComplete && complete == null) throw ToolValidationException("COMPLETE_TASK_REQUIRED", "This action requires the native complete-task contract.")
+                try { complete?.validate(action) }
+                catch (_: IllegalArgumentException) { throw ToolValidationException("COMPLETE_TASK_PREREQUISITE", "Complete-task prerequisites are not satisfied.") }
                 val binding = bind(action)
                 requestSequence = Math.addExact(requestSequence, 1L)
                 val sourceNonce = nonceSource.nextNonce()
@@ -293,7 +306,18 @@ class TaskHost private constructor(
             when (val binding = launch.request.binding) {
                 is Binding.Device -> capabilities.prepareDeviceInfo(binding.target)
                 is Binding.Linux -> capabilities.prepareCountDemoCsv(binding.target, binding.csv)
-                is Binding.Display -> capabilities.prepareDisplay(binding.target, binding.action)
+                is Binding.Workspace -> when (val action = binding.action) {
+                    ParsedAction.ReadDemoCsv -> capabilities.prepareReadDemoCsv(binding.target)
+                    is ParsedAction.PublishDemoResult -> capabilities.preparePublishDemoResult(binding.target, action.text) {
+                        guardCompleteExecution(launch, action)
+                    }
+                    else -> error("Workspace action was bound")
+                }
+                is Binding.Display -> {
+                    val contract = complete
+                    if (contract == null) capabilities.prepareDisplay(binding.target, binding.action)
+                    else capabilities.prepareCompleteDisplay(binding.target, binding.action) { guardCompleteExecution(launch, launch.request.action) }
+                }
             }
         } catch (error: Throwable) {
             preparationFailed(launch, error)
@@ -349,12 +373,27 @@ class TaskHost private constructor(
         if (!mayStart) return
 
         try {
+            complete?.beforeStart(launch.request.action)
             // start() and requestClose() share one gate: close-before-start can never start later.
             lease.start { outcome -> finish(launch, outcome) }
         } catch (error: Throwable) {
             failAndCleanup(launch, "START_FAILED", error.message)
             if (error !is Exception) throw error
         }
+    }
+
+    private fun guardCompleteExecution(launch: Launch, action: ParsedAction): Boolean {
+        fun requireOwner() = synchronized(lock) {
+            val request = active
+            check(request === launch.request && request.executionEpoch == launch.executionEpoch &&
+                request.terminal == null && !isDue(clock.nowNanos(), request.executionDeadlineNanos)) {
+                "COMPLETE_EXECUTION_STALE"
+            }
+        }
+        requireOwner()
+        val skip = checkNotNull(complete).guard(action)
+        requireOwner()
+        return skip
     }
 
     private fun preparationFailed(launch: Launch, error: Throwable) {
@@ -468,6 +507,14 @@ class TaskHost private constructor(
                     "CLEANUP_RECOVERED", "Resource cleanup required a retry; success is not claimed.",
                     work.terminal.result) else work.terminal
                 status = terminalView(request, terminal, CleanupState.PROVEN)
+                if (terminal.phase == HostPhase.SUCCEEDED) {
+                    try { complete?.accept(request.action, checkNotNull(terminal.result)) }
+                    catch (_: Exception) {
+                        status = view(request, HostPhase.FAILED, code = "JOURNAL_COMMIT_UNCONFIRMED",
+                            message = "Tool state was observed but journal commit could not be confirmed.",
+                            result = terminal.result, cleanupState = CleanupState.PROVEN)
+                    }
+                }
             } else {
                 request.cleanupEverFailed = true
                 request.owner = work.owner
@@ -497,6 +544,15 @@ class TaskHost private constructor(
                 CanonicalChildPath.DEMO_RELATIVE_PATH)
             Binding.Linux(target.copy(workspaceRoot = target.workspaceRoot.toAbsolutePath().normalize()), csv)
         }
+        ParsedAction.ReadDemoCsv, is ParsedAction.PublishDemoResult -> {
+            val target = snapshot("Private workspace") { capabilities.currentWorkspaceTarget() }
+            requireUid(target.packageUid)
+            if (!target.inputDigest.matches(Regex("[a-f0-9]{64}"))) throw ToolValidationException("INVALID_INPUT_DIGEST", "Workspace digest is invalid.")
+            if (action is ParsedAction.PublishDemoResult && action.expectedInputDigest != target.inputDigest) {
+                throw ToolValidationException("INPUT_CHANGED", "Approved input digest is not current.")
+            }
+            Binding.Workspace(target, action)
+        }
         is ParsedAction.Display -> {
             val target = snapshot("Typed Binder virtual display") { capabilities.currentDisplayTarget() }
             requireUid(target.packageUid)
@@ -513,6 +569,7 @@ class TaskHost private constructor(
             }
             val displayAction = when (action) {
                 is ParsedAction.Display.Observe -> DisplayAction.Observe
+                is ParsedAction.Display.ObserveDemo -> DisplayAction.ObserveDemo
                 is ParsedAction.Display.DemoTap -> DisplayAction.DemoTap(action.x, action.y)
                 is ParsedAction.Display.DemoText -> DisplayAction.DemoText(action.text)
             }
@@ -529,7 +586,9 @@ class TaskHost private constructor(
     }
 
     private fun targetMismatch(request: ActiveRequest): String? = try {
-        when (val binding = request.binding) {
+        val input = complete?.snapshot()?.inputDigest.orEmpty()
+        if (input.isNotEmpty() && capabilities.currentWorkspaceTarget().inputDigest != input) "INPUT_CHANGED"
+        else when (val binding = request.binding) {
             is Binding.Device -> {
                 val current = capabilities.currentDeviceInfoTarget()
                 when {
@@ -551,6 +610,7 @@ class TaskHost private constructor(
                     else -> null
                 }
             }
+            is Binding.Workspace -> if (capabilities.currentWorkspaceTarget() == binding.target) null else "INPUT_CHANGED"
             is Binding.Display -> {
                 val current = capabilities.currentDisplayTarget()
                 when {
@@ -570,6 +630,7 @@ class TaskHost private constructor(
             "nonce" to nonce,
             "tool" to action.tool.wireName,
         )
+        complete?.snapshot()?.let { parts += listOf("completeRunId" to it.runId, "inputDigest" to it.inputDigest) }
         when (binding) {
             is Binding.Device -> parts += "packageUid" to binding.target.packageUid.toString()
             is Binding.Linux -> parts += listOf(
@@ -578,6 +639,11 @@ class TaskHost private constructor(
                 "guestPath" to CanonicalChildPath.DEMO_GUEST_PATH,
                 "hostPath" to binding.csv.toString(),
             )
+            is Binding.Workspace -> {
+                parts += listOf("packageUid" to binding.target.packageUid.toString(), "root" to binding.target.root.toString(),
+                    "inputDigest" to binding.target.inputDigest)
+                if (binding.action is ParsedAction.PublishDemoResult) parts += "text" to binding.action.text
+            }
             is Binding.Display -> {
                 parts += listOf(
                     "packageUid" to binding.target.packageUid.toString(),
@@ -586,6 +652,7 @@ class TaskHost private constructor(
                 )
                 when (val displayAction = binding.action) {
                     DisplayAction.Observe -> parts += "action" to "observe"
+                    DisplayAction.ObserveDemo -> parts += "action" to "observe_demo"
                     is DisplayAction.DemoTap -> parts += listOf(
                         "action" to "demo_tap", "x" to displayAction.x.toString(),
                         "y" to displayAction.y.toString())
@@ -622,13 +689,22 @@ class TaskHost private constructor(
         result = result,
     )
 
-    private fun terminalView(request: ActiveRequest, terminal: Terminal, cleanup: CleanupState) =
-        view(request, terminal.phase, code = terminal.code, message = terminal.message,
+    private fun terminalView(request: ActiveRequest, terminal: Terminal, cleanup: CleanupState): HostStatus {
+        if (terminal.phase != HostPhase.SUCCEEDED) {
+            try { complete?.terminal(terminal.code, terminal.phase == HostPhase.CANCELLED) }
+            catch (_: Exception) {
+                return view(request, HostPhase.FAILED, code = "JOURNAL_UPDATE_UNCONFIRMED",
+                    message = "Terminal state could not be durably recorded.", result = terminal.result, cleanupState = cleanup)
+            }
+        }
+        return view(request, terminal.phase, code = terminal.code, message = terminal.message,
             result = terminal.result, cleanupState = cleanup)
+    }
 
     private fun ActiveRequest.targetLabel(): String = when (val value = binding) {
         is Binding.Device -> "PocketRun App UID ${value.target.packageUid}"
         is Binding.Linux -> "${CanonicalChildPath.DEMO_GUEST_PATH} · rootfs ${value.target.rootfsGeneration} · UID ${value.target.packageUid}"
+        is Binding.Workspace -> "private ${if (value.action == ParsedAction.ReadDemoCsv) "items.csv disclosure" else "result.txt no-overwrite publication"} · input ${value.target.inputDigest} · UID ${value.target.packageUid}"
         is Binding.Display -> "virtual display ${value.target.displayId} · epoch ${value.target.displayEpoch} · PocketRun UID ${value.target.packageUid}"
     }
 
@@ -653,6 +729,9 @@ class TaskHost private constructor(
         }
         data class Linux(val target: LinuxTarget, val csv: Path) : Binding {
             override val backendEpoch = "rootfs:${target.rootfsGeneration}:${target.packageUid}"
+        }
+        data class Workspace(val target: WorkspaceTarget, val action: ParsedAction) : Binding {
+            override val backendEpoch = "workspace:${target.packageUid}:${target.inputDigest}"
         }
         data class Display(val target: DisplayTarget, val action: DisplayAction) : Binding {
             override val backendEpoch = "display:${target.displayEpoch}:${target.displayId}:${target.packageUid}"

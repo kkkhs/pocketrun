@@ -23,7 +23,7 @@ class AdbModule(private val context: ReactApplicationContext) : NativePocketRunA
     private val timer = Executors.newSingleThreadScheduledExecutor()
     private val backend = PrivilegedBackendController(context)
     private val taskHostDisplayRegistration = io.github.kkkhs.pocketrun.taskhost.TaskHostDisplayPortRegistry.install(
-        BinderTaskHostDisplayPort(backend),
+        BinderTaskHostDisplayPort(backend, context.packageName),
     )
     private var active: Operation? = null
     private var backendBusy = false

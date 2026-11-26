@@ -23,6 +23,7 @@ import TaskHostPanel from './TaskHostPanel';
 import SingleTaskPanel from './SingleTaskPanel';
 import AgentLoopPanel from './AgentLoopPanel';
 import MemoryPanel from './MemoryPanel';
+import CompleteTaskPanel from './CompleteTaskPanel';
 import NativePocketRunDevice, {
   type DeviceInfo,
 } from './specs/NativePocketRunDevice';
@@ -143,6 +144,7 @@ function DeviceScreen() {
         <SingleTaskPanel colors={colors} />
         <AgentLoopPanel colors={colors} />
         <MemoryPanel colors={colors} />
+        <CompleteTaskPanel colors={colors} />
       </ScrollView>
     </View>
   );

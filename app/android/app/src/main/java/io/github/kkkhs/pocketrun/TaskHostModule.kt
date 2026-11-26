@@ -24,6 +24,10 @@ import io.github.kkkhs.pocketrun.taskhost.MemorySelection
 import io.github.kkkhs.pocketrun.taskhost.MemorySnapshot
 import io.github.kkkhs.pocketrun.taskhost.MemoryStore
 import io.github.kkkhs.pocketrun.taskhost.SingleTaskContext
+import io.github.kkkhs.pocketrun.taskhost.CompleteTaskContract
+import io.github.kkkhs.pocketrun.taskhost.TaskJournal
+import io.github.kkkhs.pocketrun.taskhost.TaskJournalCodec
+import io.github.kkkhs.pocketrun.taskhost.TaskJournalRecord
 import org.json.JSONArray
 import io.github.kkkhs.pocketrun.taskhost.HostBusyException
 import io.github.kkkhs.pocketrun.taskhost.HostStatus
@@ -45,6 +49,8 @@ class TaskHostModule(context: ReactApplicationContext) : NativePocketRunTaskHost
     private val agent = AgentLoop(task)
     private val modelStore = ModelCredentialStore(context)
     private val memoryStore = MemoryStore(context)
+    private val journal = TaskJournal(context)
+    private var journalInitialized = false
     private val worker = Executors.newSingleThreadExecutor { runnable ->
         Thread(runnable, "PocketRun-TaskHostModule")
     }
@@ -68,6 +74,7 @@ class TaskHostModule(context: ReactApplicationContext) : NativePocketRunTaskHost
     }
 
     override fun submitTool(tool: String, argumentsJson: String, promise: Promise) = execute(promise) {
+        requireOrdinaryTaskAvailable()
         task.withoutActiveTask { stateMap(host.submit(parseCall(tool, argumentsJson))) }
     }
 
@@ -124,22 +131,134 @@ class TaskHostModule(context: ReactApplicationContext) : NativePocketRunTaskHost
     }
 
     private fun startModel(goal: String, memory: MemorySelection? = null,
-        expectedEndpoint: String? = null, expectedModel: String? = null): WritableMap {
+        expectedEndpoint: String? = null, expectedModel: String? = null,
+        complete: CompleteTaskContract? = null): WritableMap {
         check(!disposed)
+        if (complete == null) requireOrdinaryTaskAvailable()
         check(android.os.Build.VERSION.SDK_INT >= 26) { "MODEL_RUNTIME_REQUIRES_API_26" }
         val credential = checkNotNull(modelStore.load()) { "MODEL_CREDENTIAL_REQUIRED" }
-        if (memory != null) check(credential.settings.endpoint == expectedEndpoint &&
-            credential.settings.model == expectedModel) { "MEMORY_MODEL_TARGET_CHANGED" }
-        val source = AnthropicModelTransport(credential)
+        if (memory != null || complete != null) check(credential.settings.endpoint == expectedEndpoint &&
+            credential.settings.model == expectedModel) { "MODEL_TARGET_CHANGED" }
+        val source = AnthropicModelTransport(credential, complete != null)
         return try {
             val ready = adapter.readiness()
             val observation = "linuxReady=${ready.linuxReady}; displayReady=${ready.displayReady}; " +
                 "displayId=${ready.displayId}; displayEpoch=${ready.displayEpoch}"
-            agentMap(agent.start(goal, source, observation, memory))
+            agentMap(agent.start(goal, source, observation, memory, complete))
         } catch (error: Exception) {
             source.close()
             throw error
         }
+    }
+
+    override fun getCompleteTaskState(promise: Promise) = executeComplete(promise) { task.state(); completeMap(currentJournal()) }
+
+    override fun prepareCompleteTask(promise: Promise) = executeComplete(promise) {
+        task.withoutActiveTask {
+            requireSettledHost()
+            adapter.prepareWorkspaceEnvironment()
+            completeMap(currentJournal())
+        }
+    }
+
+    override fun beginCompleteTask(expectedRunId: String, expectedDisplayId: Double,
+        expectedDisplayEpoch: String, promise: Promise) = executeComplete(promise) {
+        val contract = newCompleteContract(expectedRunId, expectedDisplayId, expectedDisplayEpoch)
+        task.beginComplete(COMPLETE_GOAL, contract)
+        completeMap(currentJournal())
+    }
+
+    override fun startCompleteAgent(expectedRunId: String, expectedDisplayId: Double,
+        expectedDisplayEpoch: String, expectedEndpoint: String, expectedModel: String,
+        promise: Promise) = executeComplete(promise) {
+        val contract = newCompleteContract(expectedRunId, expectedDisplayId, expectedDisplayEpoch)
+        startModel(COMPLETE_GOAL, expectedEndpoint = expectedEndpoint, expectedModel = expectedModel, complete = contract)
+        completeMap(currentJournal())
+    }
+
+    override fun resetCompleteJournal(promise: Promise) = executeComplete(promise) {
+        task.withoutActiveTask {
+            requireSettledHost()
+            journal.resetUnreadable()
+            journalInitialized = true
+            completeMap(null)
+        }
+    }
+
+    // All journal entry points use this module's existing serial worker; the file itself is atomic.
+    private fun currentJournal(): TaskJournalRecord? {
+        val value = journal.load()
+        val next = if (!journalInitialized && value?.phase in setOf("ready", "running")) {
+            checkNotNull(value).copy(phase = "interrupted", code = "CONTEXT_RECREATED").also(journal::save)
+        } else value
+        journalInitialized = true
+        return next
+    }
+
+    private fun requireOrdinaryTaskAvailable() {
+        val value = currentJournal()
+        check(value == null || value.pendingEffect == "none" && value.phase !in setOf("ready", "running", "interrupted")) {
+            "COMPLETE_TASK_REVIEW_REQUIRED"
+        }
+    }
+
+    private fun requireSettledHost() {
+        check(!agent.isActive()) { "MODEL_TASK_ACTIVE" }
+        val value = host.state()
+        check(value.phase !in setOf(io.github.kkkhs.pocketrun.taskhost.HostPhase.PENDING_APPROVAL,
+            io.github.kkkhs.pocketrun.taskhost.HostPhase.EXECUTING) &&
+            value.cleanupState !in setOf(CleanupState.PENDING, CleanupState.UNPROVEN)) { "TASK_OWNER_UNSETTLED" }
+    }
+
+    private fun newCompleteContract(expectedRunId: String, expectedDisplayId: Double,
+        expectedDisplayEpoch: String): CompleteTaskContract = task.withoutActiveTask {
+        requireSettledHost()
+        val previous = currentJournal()
+        check(expectedRunId == previous?.runId.orEmpty()) { "COMPLETE_JOURNAL_CHANGED" }
+        val target = adapter.currentDisplayTarget()
+        check(expectedDisplayId.isFinite() && expectedDisplayId == target.displayId.toDouble() &&
+            expectedDisplayEpoch == target.displayEpoch.toString() && target.backendReady) { "COMPLETE_DISPLAY_CHANGED" }
+        val workspace = adapter.currentWorkspaceTarget()
+        val report = adapter.checkWorkspaceRecovery()
+        check(workspace.inputDigest == report.inputDigest && workspace.packageUid == target.packageUid) { "COMPLETE_INPUT_CHANGED" }
+        if (previous != null) {
+            check(previous.inputDigest.isEmpty() || previous.inputDigest == report.inputDigest) { "COMPLETE_INPUT_CHANGED" }
+            check(previous.packageUid == 0 || previous.packageUid == workspace.packageUid) { "COMPLETE_UID_CHANGED" }
+        }
+        val actual = adapter.currentDemoObservation(target)
+        check(actual.target == target && (actual.value.isEmpty() && actual.resultValue == "input: " ||
+            actual.value == report.text && actual.resultValue == "input: ${report.text}")) { "COMPLETE_DEMO_REVIEW_REQUIRED" }
+        val result = adapter.currentDemoResult()
+        check(result == null || result.contentEquals(report.fileText.toByteArray(Charsets.UTF_8))) { "COMPLETE_OUTPUT_REVIEW_REQUIRED" }
+        CompleteTaskContract(TaskJournalRecord(TaskJournalCodec.newRunId(), COMPLETE_GOAL,
+            inputDigest = workspace.inputDigest), target, adapter::currentWorkspaceTarget,
+            { adapter.currentDemoObservation(target) }, adapter::currentDemoResult, journal::save)
+    }
+
+    private fun completeMap(value: TaskJournalRecord?): WritableMap = Arguments.createMap().apply {
+        putNullableString("runId", value?.runId)
+        putNullableString("taskId", task.state().taskId?.takeIf { value != null && task.completeRunId() == value.runId })
+        putString("phase", value?.phase ?: "none")
+        putString("stage", value?.stage ?: "none")
+        putString("pendingEffect", value?.pendingEffect ?: "none")
+        putString("inputDigest", value?.inputDigest.orEmpty())
+        putString("expectedText", value?.expectedText.orEmpty())
+        putString("outputDigest", value?.outputDigest.orEmpty())
+        putNullableString("code", value?.code)
+        if (value == null || value.displayId == 0) putNull("displayId") else putInt("displayId", value.displayId)
+        putNullableString("displayEpoch", value?.displayEpoch?.takeIf { it > 0 }?.toString())
+        putInt("packageUid", value?.packageUid ?: 0)
+    }
+
+    private fun executeComplete(promise: Promise, action: () -> Any?) {
+        try {
+            worker.execute {
+                try { check(!disposed); val value = action(); check(!disposed); promise.resolve(value) }
+                catch (_: Exception) {
+                    promise.reject("E_COMPLETE_TASK", "Complete task could not be verified. Refresh the journal and target; check input, Demo, output and retained cleanup. Nothing is automatically replayed or replaced.")
+                }
+            }
+        } catch (_: RejectedExecutionException) { promise.reject("E_COMPLETE_CLOSED", "Complete-task module is closed.") }
     }
 
     private fun executeMemory(promise: Promise, action: () -> Any?) {
@@ -205,6 +324,7 @@ class TaskHostModule(context: ReactApplicationContext) : NativePocketRunTaskHost
 
     override fun beginTask(goal: String, promise: Promise) = execute(promise) {
         if (agent.isActive()) throw HostBusyException()
+        requireOrdinaryTaskAvailable()
         contextMap(task.begin(goal))
     }
 
@@ -375,11 +495,15 @@ class TaskHostModule(context: ReactApplicationContext) : NativePocketRunTaskHost
         backendDeathWorker.shutdownNow()
         agent.close()
         task.close()
+        journal.close()
         // If cleanup is unproven, the adapter retains its source owner until process teardown.
         if (host.state().cleanupState != CleanupState.UNPROVEN) adapter.close()
         worker.shutdown()
         super.invalidate()
     }
 
-    companion object { const val NAME = "PocketRunTaskHost" }
+    companion object {
+        const val NAME = "PocketRunTaskHost"
+        private const val COMPLETE_GOAL = "读取私有 items.csv，整理为 items=N;quantity=N；输入自有虚拟屏 Demo，重新观察确认后无覆盖发布并读回 result.txt。"
+    }
 }
