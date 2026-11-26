@@ -254,8 +254,10 @@ class TaskHostModule(context: ReactApplicationContext) : NativePocketRunTaskHost
         try {
             worker.execute {
                 try { check(!disposed); val value = action(); check(!disposed); promise.resolve(value) }
-                catch (_: Exception) {
-                    promise.reject("E_COMPLETE_TASK", "Complete task could not be verified. Refresh the journal and target; check input, Demo, output and retained cleanup. Nothing is automatically replayed or replaced.")
+                catch (error: Exception) {
+                    val code = error.message?.takeIf { it in COMPLETE_FAILURE_CODES } ?: "COMPLETE_STATE_UNVERIFIED"
+                    Log.w(NAME, "Complete operation failed: $code")
+                    promise.reject("E_COMPLETE_TASK", "Complete task could not be verified ($code). Refresh the journal and target; check input, Demo, output and retained cleanup. Nothing is automatically replayed or replaced.")
                 }
             }
         } catch (_: RejectedExecutionException) { promise.reject("E_COMPLETE_CLOSED", "Complete-task module is closed.") }
@@ -504,6 +506,10 @@ class TaskHostModule(context: ReactApplicationContext) : NativePocketRunTaskHost
 
     companion object {
         const val NAME = "PocketRunTaskHost"
+        private val COMPLETE_FAILURE_CODES = setOf("DEMO_INPUT_NOT_UNIQUE", "DEMO_RESULT_NOT_UNIQUE", "DEMO_OBSERVATION_UNAVAILABLE",
+            "INVALID_DEMO_NODE", "DEMO_VALUE_UNCONFIRMED", "COMPLETE_INPUT_CHANGED", "COMPLETE_DISPLAY_CHANGED", "COMPLETE_UID_CHANGED",
+            "COMPLETE_OUTPUT_REVIEW_REQUIRED", "COMPLETE_DEMO_REVIEW_REQUIRED", "COMPLETE_JOURNAL_CHANGED", "WORKSPACE_RESULT_RECOVERY_REQUIRED",
+            "TASK_JOURNAL_CORRUPT", "MODEL_CREDENTIAL_REQUIRED", "MODEL_TARGET_CHANGED", "TASK_OWNER_UNSETTLED", "MODEL_TASK_ACTIVE")
         private const val COMPLETE_GOAL = "读取私有 items.csv，整理为 items=N;quantity=N；输入自有虚拟屏 Demo，重新观察确认后无覆盖发布并读回 result.txt。"
     }
 }
