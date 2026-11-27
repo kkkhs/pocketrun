@@ -199,6 +199,94 @@ internal class AndroidTaskCapabilities(
         WorkspaceExecution(expected, text, guard).also { activeWorkspace = it }
     }
 
+    override fun currentWorkspaceRoot(): WorkspaceRootTarget {
+        synchronized(lock) { check(!closeCoordinator.closing) }
+        return WorkspaceRootTarget(packageUid, workspaceSession.ensureRoot().canonicalFile.toPath())
+    }
+
+    fun listWorkspaceFileSummaries(): List<Pair<String, Long>> =
+        workspaceSession.listFiles().map { it.relativePath to it.bytes }
+
+    override fun prepareWorkspaceList(expected: WorkspaceRootTarget): OwnedExecution = synchronized(lock) {
+        check(!closeCoordinator.closing && currentWorkspaceRoot() == expected)
+        GeneralWorkspaceExecution(expected) {
+            val files = workspaceSession.listFiles()
+            val formatted = if (files.isEmpty()) "(empty)" else files.joinToString("\n") { "${it.relativePath} (${it.bytes} B)" }
+            ToolResult(linkedMapOf(
+                "source" to "app-private-workspace",
+                "count" to files.size.toString(),
+                "files" to formatted,
+            ))
+        }
+    }
+
+    override fun prepareWorkspaceRead(expected: WorkspaceRootTarget, relativePath: String): OwnedExecution = synchronized(lock) {
+        check(!closeCoordinator.closing && currentWorkspaceRoot() == expected)
+        GeneralWorkspaceExecution(expected) {
+            val read = workspaceSession.readTextFile(relativePath)
+            ToolResult(linkedMapOf(
+                "source" to "app-private-workspace",
+                "path" to read.relativePath,
+                "content" to read.content,
+                "bytes" to read.bytes.toString(),
+                "sha256" to read.sha256,
+            ))
+        }
+    }
+
+    override fun prepareWorkspaceWrite(expected: WorkspaceRootTarget, relativePath: String, content: String): OwnedExecution = synchronized(lock) {
+        check(!closeCoordinator.closing && currentWorkspaceRoot() == expected)
+        GeneralWorkspaceExecution(expected) {
+            val written = workspaceSession.writeTextFile(relativePath, content)
+            ToolResult(linkedMapOf(
+                "source" to "app-private-workspace",
+                "path" to written.relativePath,
+                "bytes" to written.bytes.toString(),
+                "sha256" to written.sha256,
+                "status" to if (written.created) "created" else "updated",
+            ))
+        }
+    }
+
+    private inner class GeneralWorkspaceExecution(
+        private val expected: WorkspaceRootTarget,
+        private val run: () -> ToolResult,
+    ) : OwnedExecution {
+        private val cancelled = AtomicBoolean(false)
+        private val started = AtomicBoolean(false)
+        private val done = CountDownLatch(1)
+
+        override fun start(completion: (ExecutionOutcome) -> Unit) {
+            check(started.compareAndSet(false, true) && !cancelled.get()) { "Workspace execution is stale." }
+            try {
+                worker.execute {
+                    val outcome = try {
+                        check(!cancelled.get() && !closeCoordinator.closing && currentWorkspaceRoot() == expected) {
+                            "Workspace target changed."
+                        }
+                        val result = run()
+                        check(!cancelled.get() && !closeCoordinator.closing) { "Workspace execution cancelled." }
+                        ExecutionOutcome.Success(result)
+                    } catch (error: Exception) {
+                        ExecutionOutcome.Failure("WORKSPACE_TOOL_ERROR", error.message.orEmpty().take(256))
+                    }
+                    done.countDown()
+                    completion(outcome)
+                }
+            } catch (error: RejectedExecutionException) {
+                done.countDown()
+                throw error
+            }
+        }
+
+        override fun close() {
+            cancelled.set(true)
+            if (started.get() && !done.await(3_000, TimeUnit.MILLISECONDS)) {
+                throw IOException("Workspace IO cleanup remains unproven.")
+            }
+        }
+    }
+
     override fun prepareCompleteDisplay(expected: DisplayTarget, action: DisplayAction, skipInput: () -> Boolean): OwnedExecution {
         val port = checkNotNull(TaskHostDisplayPortRegistry.current()) { "Owned Demo backend is unavailable." }
         check(port.snapshot() == expected && expected.packageUid == packageUid && expected.backendReady)

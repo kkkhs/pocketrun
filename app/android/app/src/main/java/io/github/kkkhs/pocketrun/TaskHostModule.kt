@@ -16,8 +16,14 @@ import io.github.kkkhs.pocketrun.taskhost.ContextStatus
 import io.github.kkkhs.pocketrun.taskhost.AgentLoop
 import io.github.kkkhs.pocketrun.taskhost.AgentStatus
 import io.github.kkkhs.pocketrun.taskhost.AnthropicModelTransport
+import io.github.kkkhs.pocketrun.taskhost.ChatConversation
+import io.github.kkkhs.pocketrun.taskhost.ChatEngine
+import io.github.kkkhs.pocketrun.taskhost.ChatRuntimeStatus
+import io.github.kkkhs.pocketrun.taskhost.ConversationCodec
+import io.github.kkkhs.pocketrun.taskhost.ConversationStore
 import io.github.kkkhs.pocketrun.taskhost.DisplayTarget
 import io.github.kkkhs.pocketrun.taskhost.ModelCredentialStore
+import io.github.kkkhs.pocketrun.taskhost.ModelMode
 import io.github.kkkhs.pocketrun.taskhost.ModelSettings
 import io.github.kkkhs.pocketrun.taskhost.MemoryCodec
 import io.github.kkkhs.pocketrun.taskhost.MemorySelection
@@ -49,6 +55,8 @@ class TaskHostModule(context: ReactApplicationContext) : NativePocketRunTaskHost
     private val agent = AgentLoop(task)
     private val modelStore = ModelCredentialStore(context)
     private val memoryStore = MemoryStore(context)
+    private val conversationStore = ConversationStore(context)
+    private val chatEngine = ChatEngine(task, conversationStore)
     private val journal = TaskJournal(context)
     private var journalInitialized = false
     private val worker = Executors.newSingleThreadExecutor { runnable ->
@@ -82,35 +90,172 @@ class TaskHostModule(context: ReactApplicationContext) : NativePocketRunTaskHost
 
     override fun saveModelConfiguration(endpoint: String, model: String, apiKey: String, promise: Promise) = executeModel(promise) {
         agent.cancel("MODEL_CONFIG_CHANGED")
+        chatEngine.cancel("MODEL_CONFIG_CHANGED")
         modelStore.save(ModelSettings(endpoint, model), apiKey)
         modelConfigurationMap()
     }
 
     override fun clearModelConfiguration(promise: Promise) = executeModel(promise) {
         agent.cancel("MODEL_CONFIG_CLEARED")
+        chatEngine.cancel("MODEL_CONFIG_CLEARED")
         modelStore.clear()
         modelConfigurationMap()
     }
 
     override fun startAgent(goal: String, promise: Promise) = executeModel(promise) { startModel(goal) }
 
+    override fun listConversations(promise: Promise) = executeChat(promise) {
+        conversationListMap(conversationStore.list())
+    }
+
+    override fun getConversation(conversationId: String, promise: Promise) = executeChat(promise) {
+        val conv = conversationStore.get(conversationId) ?: throw IllegalArgumentException("CONVERSATION_NOT_FOUND")
+        conversationDetailMap(conv)
+    }
+
+    override fun createConversation(title: String, promise: Promise) = executeChat(promise) {
+        conversationDetailMap(conversationStore.create(title))
+    }
+
+    override fun deleteConversation(conversationId: String, promise: Promise) = executeChat(promise) {
+        if (chatEngine.state().conversationId == conversationId && chatEngine.isActive()) {
+            chatEngine.cancel("CONVERSATION_DELETED")
+        }
+        conversationListMap(conversationStore.delete(conversationId))
+    }
+
+    override fun resetConversations(promise: Promise) = executeChat(promise) {
+        chatEngine.cancel("CONVERSATION_RESET")
+        conversationListMap(conversationStore.resetUnreadable())
+    }
+
+    override fun sendChatMessage(conversationId: String, prompt: String, includeMemory: Boolean, promise: Promise) =
+        executeChat(promise) {
+            check(!disposed)
+            check(!agent.isActive()) { "MODEL_TASK_ACTIVE" }
+            check(android.os.Build.VERSION.SDK_INT >= 26) { "MODEL_RUNTIME_REQUIRES_API_26" }
+            val credential = checkNotNull(modelStore.load()) { "MODEL_CREDENTIAL_REQUIRED" }
+            val memory = if (includeMemory) {
+                val snap = memoryStore.snapshot()
+                if (snap.notes.isNotEmpty()) {
+                    MemoryCodec.select(snap, snap.notes.take(MemoryCodec.MAX_SELECTED).map { it.id })
+                } else null
+            } else null
+            val ready = adapter.readiness()
+            val observation = "androidReady=true; workspaceReady=true; linuxReady=${ready.linuxReady}; " +
+                "displayReady=${ready.displayReady}; displayId=${ready.displayId}; displayEpoch=${ready.displayEpoch}"
+            val source = AnthropicModelTransport(credential, ModelMode.CHAT)
+            try {
+                chatRuntimeMap(chatEngine.send(conversationId.ifBlank { null }, prompt, source, observation, memory))
+            } catch (error: Exception) {
+                source.close()
+                throw error
+            }
+        }
+
+    override fun getChatRuntimeState(promise: Promise) {
+        resolve(promise) { chatRuntimeMap(chatEngine.state()) }
+    }
+
+    override fun cancelChatTurn(promise: Promise) = executeChat(promise) {
+        chatRuntimeMap(chatEngine.cancel())
+    }
+
+    override fun listWorkspaceFiles(promise: Promise) = execute(promise) {
+        val target = adapter.currentWorkspaceRoot()
+        val files = adapter.listWorkspaceFileSummaries()
+        JSONArray().apply {
+            files.forEach { (path, size) ->
+                put(JSONObject().put("path", path).put("bytes", size))
+            }
+        }.toString().also { check(target.packageUid > 0) }
+    }
+
+    private fun executeChat(promise: Promise, action: () -> Any?) {
+        try {
+            worker.execute {
+                try {
+                    check(!disposed)
+                    val value = action()
+                    check(!disposed)
+                    promise.resolve(value)
+                } catch (error: HostBusyException) {
+                    promise.reject("E_CHAT_BUSY", "当前已有任务正在执行，请等待完成或先取消。")
+                } catch (error: Exception) {
+                    val code = error.message?.takeIf { it.matches(Regex("[A-Z][A-Z0-9_]{0,63}")) } ?: "CHAT_OPERATION_FAILED"
+                    promise.reject("E_CHAT_$code", chatFailureMessage(code))
+                }
+            }
+        } catch (_: RejectedExecutionException) { promise.reject("E_CHAT_CLOSED", "对话模块已关闭。") }
+    }
+
+    private fun chatFailureMessage(code: String): String = when (code) {
+        "MODEL_CREDENTIAL_REQUIRED" -> "请先在「设置」中保存模型地址、模型名和 API Key。"
+        "CONVERSATION_STORE_CORRUPT" -> "本地对话记录不可读取，可在「设置」中手动重置。"
+        "CONVERSATION_NOT_FOUND" -> "该对话已不存在，请刷新列表或新建对话。"
+        "INVALID_CHAT_PROMPT" -> "请输入 1～2048 字节以内的有效消息。"
+        "MODEL_TASK_ACTIVE" -> "实验室中仍有活跃任务正在运行，请先结束或取消。"
+        else -> "对话操作失败（$code），请检查配置或稍后重试。"
+    }
+
+    private fun conversationListMap(conversations: List<ChatConversation>): WritableMap = Arguments.createMap().apply {
+        putString("conversationsJson", ConversationCodec.listSummariesJson(conversations))
+    }
+
+    private fun conversationDetailMap(conversation: ChatConversation): WritableMap = Arguments.createMap().apply {
+        putString("id", conversation.id)
+        putString("title", conversation.title)
+        putDouble("createdAtMillis", conversation.createdAtMillis.toDouble())
+        putDouble("updatedAtMillis", conversation.updatedAtMillis.toDouble())
+        putString("messagesJson", ConversationCodec.messagesJson(conversation.messages))
+    }
+
+    private fun chatRuntimeMap(value: ChatRuntimeStatus): WritableMap = Arguments.createMap().apply {
+        putString("phase", value.phase.name.lowercase())
+        putNullableString("conversationId", value.conversationId)
+        putNullableString("taskId", value.taskId)
+        putString("streamingText", value.streamingText)
+        putNullableString("pendingNonce", value.pendingApproval?.requestNonce)
+        putNullableString("pendingHash", value.pendingApproval?.requestHash)
+        putNullableString("pendingTool", value.pendingApproval?.tool)
+        putNullableString("pendingTarget", value.pendingApproval?.target)
+        putNullableString("pendingArgs", value.pendingApproval?.argumentsSummary)
+        putString("activeToolsJson", ConversationCodec.toolTracesJson(value.activeTools))
+        putInt("rounds", value.rounds)
+        putDouble("outputTokens", value.outputTokens.toDouble())
+        putNullableString("code", value.code)
+        putNullableString("errorMessage", value.errorMessage)
+    }
+
     override fun getMemorySnapshot(promise: Promise) = executeMemory(promise) { memoryMap(memoryStore.snapshot()) }
 
     override fun saveMemoryNote(expectedRevision: String, noteId: String, text: String, promise: Promise) =
         executeMemory(promise) {
-            memoryMap(memoryStore.save(expectedRevision, noteId, text) { agent.discardMemoryContext() })
+            memoryMap(memoryStore.save(expectedRevision, noteId, text) {
+                agent.discardMemoryContext()
+                chatEngine.cancel("MEMORY_CHANGED")
+            })
         }
 
     override fun deleteMemoryNote(expectedRevision: String, noteId: String, promise: Promise) = executeMemory(promise) {
-        memoryMap(memoryStore.delete(expectedRevision, noteId) { agent.discardMemoryContext() })
+        memoryMap(memoryStore.delete(expectedRevision, noteId) {
+            agent.discardMemoryContext()
+            chatEngine.cancel("MEMORY_CHANGED")
+        })
     }
 
     override fun clearMemory(expectedRevision: String, promise: Promise) = executeMemory(promise) {
-        memoryMap(memoryStore.clear(expectedRevision) { agent.discardMemoryContext() })
+        memoryMap(memoryStore.clear(expectedRevision) {
+            agent.discardMemoryContext()
+            chatEngine.cancel("MEMORY_CHANGED")
+        })
     }
 
     override fun resetMemory(promise: Promise) = executeMemory(promise) {
-        memoryMap(memoryStore.resetUnreadable { agent.discardMemoryContext() })
+        memoryMap(memoryStore.resetUnreadable {
+            agent.discardMemoryContext()
+            chatEngine.cancel("MEMORY_CHANGED")
+        })
     }
 
     override fun startAgentWithMemory(goal: String, noteIds: ReadableArray, expectedRevision: String,
@@ -203,7 +348,7 @@ class TaskHostModule(context: ReactApplicationContext) : NativePocketRunTaskHost
     }
 
     private fun requireSettledHost() {
-        check(!agent.isActive()) { "MODEL_TASK_ACTIVE" }
+        check(!agent.isActive() && !chatEngine.isActive()) { "MODEL_TASK_ACTIVE" }
         val value = host.state()
         check(value.phase !in setOf(io.github.kkkhs.pocketrun.taskhost.HostPhase.PENDING_APPROVAL,
             io.github.kkkhs.pocketrun.taskhost.HostPhase.EXECUTING) &&
@@ -325,13 +470,13 @@ class TaskHostModule(context: ReactApplicationContext) : NativePocketRunTaskHost
     }
 
     override fun beginTask(goal: String, promise: Promise) = execute(promise) {
-        if (agent.isActive()) throw HostBusyException()
+        if (agent.isActive() || chatEngine.isActive()) throw HostBusyException()
         requireOrdinaryTaskAvailable()
         contextMap(task.begin(goal))
     }
 
     override fun submitTaskStep(taskId: String, tool: String, argumentsJson: String, promise: Promise) = execute(promise) {
-        if (agent.isActive()) throw HostBusyException()
+        if (agent.isActive() || chatEngine.isActive()) throw HostBusyException()
         val call = try {
             parseCall(tool, argumentsJson)
         } catch (_: IllegalArgumentException) {
@@ -345,7 +490,7 @@ class TaskHostModule(context: ReactApplicationContext) : NativePocketRunTaskHost
     }
 
     override fun finishTask(taskId: String, promise: Promise) = execute(promise) {
-        if (agent.isActive()) throw HostBusyException()
+        if (agent.isActive() || chatEngine.isActive()) throw HostBusyException()
         contextMap(task.finish(taskId))
     }
 
@@ -492,6 +637,8 @@ class TaskHostModule(context: ReactApplicationContext) : NativePocketRunTaskHost
 
     override fun invalidate() {
         disposed = true
+        chatEngine.close()
+        conversationStore.close()
         memoryStore.close()
         displayDeathRegistration.close()
         backendDeathWorker.shutdownNow()

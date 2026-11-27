@@ -19,22 +19,41 @@ import java.util.concurrent.atomic.AtomicBoolean
 
 internal interface ModelTransport : Closeable {
     fun request(history: List<MessageParam>, completion: (Result<Message>) -> Unit): Closeable
+
+    fun requestStreaming(
+        history: List<MessageParam>,
+        onTextDelta: (String) -> Unit,
+        completion: (Result<Message>) -> Unit,
+    ): Closeable = request(history, completion)
 }
 
 /** Official asynchronous SDK: a cancellable stream handle exists before the network handshake. */
 internal class AnthropicModelTransport(
     private val credential: ModelCredential,
     private val client: AnthropicClientAsync,
-    private val completeTask: Boolean = false,
+    private val mode: ModelMode,
 ) : ModelTransport {
-    constructor(credential: ModelCredential, completeTask: Boolean = false) : this(credential, AnthropicOkHttpClientAsync.builder()
-        .apiKey(credential.apiKey).baseUrl(credential.settings.endpoint)
-        .timeout(Duration.ofSeconds(20)).maxRetries(0).logLevel(LogLevel.OFF).openTelemetry(false).build(), completeTask)
+    constructor(credential: ModelCredential, client: AnthropicClientAsync, completeTask: Boolean = false) :
+        this(credential, client, if (completeTask) ModelMode.COMPLETE else ModelMode.ORDINARY)
+
+    constructor(credential: ModelCredential, completeTask: Boolean = false) :
+        this(credential, buildClient(credential), if (completeTask) ModelMode.COMPLETE else ModelMode.ORDINARY)
+
+    constructor(credential: ModelCredential, mode: ModelMode) :
+        this(credential, buildClient(credential), mode)
+
     private val worker = Executors.newSingleThreadExecutor { Thread(it, "PocketRun-ModelTransport") }
     private val closed = AtomicBoolean(false)
     private var active: PendingRequest? = null
 
-    override fun request(history: List<MessageParam>, completion: (Result<Message>) -> Unit): Closeable {
+    override fun request(history: List<MessageParam>, completion: (Result<Message>) -> Unit): Closeable =
+        requestStreaming(history, {}, completion)
+
+    override fun requestStreaming(
+        history: List<MessageParam>,
+        onTextDelta: (String) -> Unit,
+        completion: (Result<Message>) -> Unit,
+    ): Closeable {
         check(!closed.get())
         val request = PendingRequest()
         synchronized(this) { check(active == null || active!!.settled.get()); active = request }
@@ -43,8 +62,8 @@ internal class AnthropicModelTransport(
                 check(!request.cancelled.get())
                 val params = MessageCreateParams.builder().model(credential.settings.model)
                     .maxTokens(4096L).thinking(ThinkingConfigAdaptive.builder().build())
-                    .system(if (completeTask) ModelToolSurface.COMPLETE_PROMPT else ModelToolSurface.SYSTEM_PROMPT).messages(history)
-                    .apply { ModelToolSurface.tools(completeTask).forEach { addTool(it) } }.build()
+                    .system(ModelToolSurface.prompt(mode)).messages(history)
+                    .apply { ModelToolSurface.tools(mode).forEach { addTool(it) } }.build()
                 val stream = client.messages().createStreaming(params,
                     RequestOptions.builder().followRedirects(false).build())
                 synchronized(request) {
@@ -59,6 +78,10 @@ internal class AnthropicModelTransport(
                     wireBytes += SdkJsonBudget.bytes(event)
                     check(++events <= 2048 && wireBytes <= 262_144) { "MODEL_RESPONSE_BUDGET" }
                     accumulator.accumulate(event)
+                    if (event.isContentBlockDelta()) {
+                        val delta = event.asContentBlockDelta().delta()
+                        if (delta.isText()) onTextDelta(delta.asText().text())
+                    }
                 }.onCompleteFuture().whenComplete { _, error ->
                     request.settled.set(true)
                     if (!request.cancelled.get()) {
@@ -93,5 +116,12 @@ internal class AnthropicModelTransport(
             synchronized(this) { stream?.close() }
             future?.cancel(true)
         }
+    }
+
+    companion object {
+        private fun buildClient(credential: ModelCredential): AnthropicClientAsync =
+            AnthropicOkHttpClientAsync.builder()
+                .apiKey(credential.apiKey).baseUrl(credential.settings.endpoint)
+                .timeout(Duration.ofSeconds(20)).maxRetries(0).logLevel(LogLevel.OFF).openTelemetry(false).build()
     }
 }

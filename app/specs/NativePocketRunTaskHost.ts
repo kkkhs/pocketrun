@@ -82,7 +82,45 @@ export type CompleteTaskState = {
   packageUid: number;
 };
 
+export type ChatConversationList = {
+  conversationsJson: string;
+};
+
+export type ChatConversationDetail = {
+  id: string;
+  title: string;
+  createdAtMillis: number;
+  updatedAtMillis: number;
+  messagesJson: string;
+};
+
+export type ChatRuntimeState = {
+  phase: string;
+  conversationId: string | null;
+  taskId: string | null;
+  streamingText: string;
+  pendingNonce: string | null;
+  pendingHash: string | null;
+  pendingTool: string | null;
+  pendingTarget: string | null;
+  pendingArgs: string | null;
+  activeToolsJson: string;
+  rounds: number;
+  outputTokens: number;
+  code: string | null;
+  errorMessage: string | null;
+};
+
 export interface Spec extends TurboModule {
+  listConversations(): Promise<ChatConversationList>;
+  getConversation(conversationId: string): Promise<ChatConversationDetail>;
+  createConversation(title: string): Promise<ChatConversationDetail>;
+  deleteConversation(conversationId: string): Promise<ChatConversationList>;
+  resetConversations(): Promise<ChatConversationList>;
+  sendChatMessage(conversationId: string, prompt: string, includeMemory: boolean): Promise<ChatRuntimeState>;
+  getChatRuntimeState(): Promise<ChatRuntimeState>;
+  cancelChatTurn(): Promise<ChatRuntimeState>;
+  listWorkspaceFiles(): Promise<string>;
   getCompleteTaskState(): Promise<CompleteTaskState>;
   prepareCompleteTask(): Promise<CompleteTaskState>;
   beginCompleteTask(expectedRunId: string, expectedDisplayId: number,

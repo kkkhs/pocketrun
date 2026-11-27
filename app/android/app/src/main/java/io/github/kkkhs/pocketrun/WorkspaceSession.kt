@@ -11,9 +11,12 @@ import java.io.FileInputStream
 import java.io.FileOutputStream
 import java.io.InputStream
 import java.nio.channels.FileChannel
+import java.nio.charset.CodingErrorAction
+import java.nio.ByteBuffer
 import java.nio.file.Files
 import java.nio.file.LinkOption
 import java.nio.file.NoSuchFileException
+import java.nio.file.StandardCopyOption
 import java.nio.file.StandardOpenOption
 import java.nio.file.attribute.BasicFileAttributes
 import java.nio.file.attribute.PosixFilePermission
@@ -66,6 +69,92 @@ class WorkspaceSession(
             "私有演示工作目录不可用。"
         }
         directory
+    }
+
+    internal fun ensureRoot(): File = synchronized(lock) {
+        check(!closed) { "工作目录会话已关闭。" }
+        check(filesDirectory.isDirectory) { "App 私有文件目录不可用。" }
+        val parent = checkNotNull(directory.parentFile)
+        require(parent.canonicalFile == parent.absoluteFile) { "工作目录不能使用符号链接。" }
+        check(parent.isDirectory || parent.mkdir()) { "无法创建工作目录。" }
+        require(directory.canonicalFile == directory.absoluteFile) { "工作目录不能逃逸 App 私有目录。" }
+        check(directory.isDirectory || directory.mkdir()) { "无法创建演示工作目录。" }
+        Files.setPosixFilePermissions(directory.toPath(), setOf(PosixFilePermission.OWNER_READ,
+            PosixFilePermission.OWNER_WRITE, PosixFilePermission.OWNER_EXECUTE))
+        directory
+    }
+
+    internal data class WorkspaceFileInfo(val relativePath: String, val bytes: Long)
+    internal data class WorkspaceReadResult(val relativePath: String, val content: String, val bytes: Int, val sha256: String)
+    internal data class WorkspaceWriteResult(val relativePath: String, val bytes: Int, val sha256: String, val created: Boolean)
+
+    internal fun listFiles(): List<WorkspaceFileInfo> {
+        val root = ensureRoot().toPath()
+        val entries = mutableListOf<WorkspaceFileInfo>()
+        Files.walk(root, 4).use { stream ->
+            val iterator = stream.iterator()
+            while (iterator.hasNext() && entries.size < MAX_LIST_FILES) {
+                val path = iterator.next()
+                if (path == root || Files.isSymbolicLink(path)) continue
+                if (!Files.isRegularFile(path, LinkOption.NOFOLLOW_LINKS)) continue
+                val relative = root.relativize(path).toString().replace(File.separatorChar, '/')
+                if (relative.split('/').any { it.startsWith(".pocketrun-") }) continue
+                entries += WorkspaceFileInfo(relative, Files.size(path))
+            }
+        }
+        return entries.sortedBy { it.relativePath }
+    }
+
+    internal fun readTextFile(relativePath: String, limit: Int = MAX_TEXT_FILE_BYTES): WorkspaceReadResult {
+        val root = ensureRoot().toPath()
+        val resolved = CanonicalChildPath.existingRegularFile(root, relativePath)
+        val bytes = readRegular(resolved.toFile(), limit)
+        val text = Charsets.UTF_8.newDecoder()
+            .onMalformedInput(CodingErrorAction.REPORT)
+            .onUnmappableCharacter(CodingErrorAction.REPORT)
+            .decode(ByteBuffer.wrap(bytes)).toString()
+        val canonicalRelative = root.relativize(resolved).toString().replace(File.separatorChar, '/')
+        return WorkspaceReadResult(canonicalRelative, text, bytes.size, DemoCsvReport.digest(bytes))
+    }
+
+    internal fun writeTextFile(relativePath: String, content: String, limit: Int = MAX_TEXT_FILE_BYTES): WorkspaceWriteResult {
+        val encoded = content.toByteArray(Charsets.UTF_8)
+        require(encoded.size <= limit) { "WORKSPACE_WRITE_BUDGET" }
+        val root = ensureRoot().toPath()
+        val target = CanonicalChildPath.targetRegularFile(root, relativePath)
+        val parent = checkNotNull(target.parent)
+        var cursor = root
+        for (segment in root.relativize(parent)) {
+            if (segment.toString().isEmpty()) continue
+            cursor = cursor.resolve(segment)
+            if (!Files.exists(cursor, LinkOption.NOFOLLOW_LINKS)) {
+                Files.createDirectory(cursor)
+                Files.setPosixFilePermissions(cursor, setOf(PosixFilePermission.OWNER_READ,
+                    PosixFilePermission.OWNER_WRITE, PosixFilePermission.OWNER_EXECUTE))
+            }
+            require(Files.isDirectory(cursor, LinkOption.NOFOLLOW_LINKS) && !Files.isSymbolicLink(cursor)) {
+                "INVALID_WORKSPACE_DIRECTORY"
+            }
+        }
+        val existed = Files.exists(target, LinkOption.NOFOLLOW_LINKS)
+        val temporary = File.createTempFile(".pocketrun-write-", ".tmp", parent.toFile())
+        try {
+            Files.setPosixFilePermissions(temporary.toPath(),
+                setOf(PosixFilePermission.OWNER_READ, PosixFilePermission.OWNER_WRITE))
+            FileOutputStream(temporary).use { output ->
+                output.write(encoded)
+                output.fd.sync()
+            }
+            CanonicalChildPath.targetRegularFile(root, relativePath)
+            Files.move(temporary.toPath(), target, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING)
+            syncDirectory(parent.toFile())
+            val verified = readRegular(target.toFile(), limit)
+            require(verified.contentEquals(encoded)) { "WORKSPACE_WRITE_UNCONFIRMED" }
+            val canonicalRelative = root.relativize(target).toString().replace(File.separatorChar, '/')
+            return WorkspaceWriteResult(canonicalRelative, verified.size, DemoCsvReport.digest(verified), !existed)
+        } finally {
+            if (temporary.exists()) temporary.delete()
+        }
     }
 
     internal fun readDemoCsvBytes(): ByteArray {
@@ -198,6 +287,8 @@ class WorkspaceSession(
     }
 
     companion object {
+        const val MAX_TEXT_FILE_BYTES = 12 * 1024
+        const val MAX_LIST_FILES = 64
         private val PREPARATION_LOCK = Any()
         const val DEMO_CSV = "name,quantity\napple,2\nbanana,3\n"
         private val DEMO_COMMANDS = listOf(

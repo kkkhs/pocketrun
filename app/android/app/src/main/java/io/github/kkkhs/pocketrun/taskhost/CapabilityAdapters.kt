@@ -27,6 +27,8 @@ data class DisplayTarget(
 
 data class WorkspaceTarget(val packageUid: Int, val root: Path, val inputDigest: String)
 
+data class WorkspaceRootTarget(val packageUid: Int, val root: Path)
+
 data class DemoObservation(
     val target: DisplayTarget,
     val value: String,
@@ -94,6 +96,12 @@ interface TaskCapabilities {
     fun prepareReadDemoCsv(expected: WorkspaceTarget): OwnedExecution = throw UnsupportedOperationException("Demo file read unavailable.")
     fun preparePublishDemoResult(expected: WorkspaceTarget, text: String, guard: () -> Unit): OwnedExecution =
         throw UnsupportedOperationException("Demo publication unavailable.")
+
+    fun currentWorkspaceRoot(): WorkspaceRootTarget = throw UnsupportedOperationException("Workspace root unavailable.")
+    fun prepareWorkspaceList(expected: WorkspaceRootTarget): OwnedExecution = throw UnsupportedOperationException("Workspace list unavailable.")
+    fun prepareWorkspaceRead(expected: WorkspaceRootTarget, relativePath: String): OwnedExecution = throw UnsupportedOperationException("Workspace read unavailable.")
+    fun prepareWorkspaceWrite(expected: WorkspaceRootTarget, relativePath: String, content: String): OwnedExecution =
+        throw UnsupportedOperationException("Workspace write unavailable.")
 }
 
 sealed interface DisplayAction {
@@ -153,5 +161,54 @@ object CanonicalChildPath {
             throw ToolValidationException("INVALID_PATH", "Demo CSV is not a canonical regular child.")
         }
         return realChild
+    }
+
+    /** Validates a relative file target inside root (existing or new), rejecting traversal, symlinks, and hidden temps. */
+    fun targetRegularFile(root: Path, relative: String): Path {
+        if (relative.toByteArray(Charsets.UTF_8).size !in 1..128 || relative.contains('\\') ||
+            relative.any { it.code < 0x20 || it.code == 0x7f }) {
+            throw ToolValidationException("INVALID_PATH", "Invalid workspace relative path.")
+        }
+        val requested = try {
+            Paths.get(relative)
+        } catch (_: RuntimeException) {
+            throw ToolValidationException("INVALID_PATH", "Invalid workspace relative path.")
+        }
+        if (requested.isAbsolute || requested.nameCount !in 1..4 ||
+            requested.any { segment ->
+                val text = segment.toString()
+                text.isEmpty() || text == "." || text == ".." || text.startsWith(".pocketrun-")
+            }) {
+            throw ToolValidationException("PATH_TRAVERSAL", "Workspace path must stay below its trusted root.")
+        }
+        val absoluteRoot = root.toAbsolutePath().normalize()
+        val realRoot = try {
+            root.toRealPath()
+        } catch (_: Exception) {
+            throw ToolValidationException("INVALID_PATH", "Trusted workspace root is unavailable.")
+        }
+        if (absoluteRoot != realRoot || Files.isSymbolicLink(absoluteRoot)) {
+            throw ToolValidationException("INVALID_PATH", "Trusted workspace root must already be canonical.")
+        }
+        val candidate = absoluteRoot.resolve(requested).normalize()
+        if (!candidate.startsWith(absoluteRoot)) {
+            throw ToolValidationException("PATH_TRAVERSAL", "Workspace path escaped its trusted root.")
+        }
+        var cursor = absoluteRoot
+        for (index in 0 until requested.nameCount) {
+            cursor = cursor.resolve(requested.getName(index))
+            if (Files.isSymbolicLink(cursor)) {
+                throw ToolValidationException("SYMLINK_REJECTED", "Symlink workspace paths are not accepted.")
+            }
+            if (index < requested.nameCount - 1 && Files.exists(cursor, LinkOption.NOFOLLOW_LINKS) &&
+                !Files.isDirectory(cursor, LinkOption.NOFOLLOW_LINKS)) {
+                throw ToolValidationException("INVALID_PATH", "Parent path segment is not a directory.")
+            }
+        }
+        if (Files.exists(candidate, LinkOption.NOFOLLOW_LINKS) &&
+            !Files.isRegularFile(candidate, LinkOption.NOFOLLOW_LINKS)) {
+            throw ToolValidationException("INVALID_PATH", "Target path is not a regular file.")
+        }
+        return candidate
     }
 }

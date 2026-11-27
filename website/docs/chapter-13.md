@@ -145,7 +145,7 @@ App 被强杀再重启后，旧进程里的 Binder 代理、PID、文件描述�
 2. **App 内的 Linux 与交互终端**（第 6—8 章）：私有工作区与防死锁管道 → 绕开 W^X 的 PRoot + 最小 Alpine → C++/JNI 真实 PTY。
 3. **可控的 AI Agent 闭环**（第 9—13 章）：`TaskHost` 安全审批网关 → `SingleTaskContext` 多步账本 → Kotlin 官方 SDK `AgentLoop` → 可管理的加密记忆 → 跨通道原生完成门与 WAL 中断恢复。
 
-这套坚实的执行底座和固定 Demo 闭环已经全部验收交付；接下来，我们将对照[Ditto 功能对照与路线图](ditto-parity.md)，从固定示例一步步迈向**通用工作区文件/命令工具、一般第三方 App 操作、更完整的 Linux 包管理、以及面向多模态模型的安全观察协议**！
+这套坚实的执行底座和固定 Demo 闭环已经全部验收交付；从[下一章（第 14 章）](chapter-14.md)开始，我们将把这套内核装进真正像 Gemini 一样的多会话流式对话产品外壳，并开放通用的私有工作区文件读写工具！完整后续路线见[Ditto 功能对照与路线图](ditto-parity.md)。
 
 - **本章源码快照**：[Release `chapter-13`](https://github.com/kkkhs/pocketrun/releases/tag/chapter-13) · [PR #28](https://github.com/kkkhs/pocketrun/pull/28)
 - **延伸阅读**：[CompleteTaskPanel.tsx](https://github.com/kkkhs/pocketrun/blob/chapter-13/app/CompleteTaskPanel.tsx) → [CompleteTaskContract.kt](https://github.com/kkkhs/pocketrun/blob/chapter-13/app/android/app/src/main/java/io/github/kkkhs/pocketrun/taskhost/CompleteTaskContract.kt) → [TaskJournal.kt](https://github.com/kkkhs/pocketrun/blob/chapter-13/app/android/app/src/main/java/io/github/kkkhs/pocketrun/taskhost/TaskJournal.kt) · [实机验收与工程档案](verification-records.md)
