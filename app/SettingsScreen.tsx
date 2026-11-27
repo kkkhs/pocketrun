@@ -27,10 +27,22 @@ const PRESETS: ReadonlyArray<{
   model: string;
 }> = [
   {
-    label: 'Anthropic',
-    protocol: 'anthropic',
-    endpoint: 'https://api.anthropic.com',
-    model: 'claude-opus-5-5',
+    label: '智谱免费',
+    protocol: 'openai',
+    endpoint: 'https://open.bigmodel.cn/api/paas/v4',
+    model: 'glm-4-flash',
+  },
+  {
+    label: 'Gemini 免费',
+    protocol: 'openai',
+    endpoint: 'https://generativelanguage.googleapis.com/v1beta/openai',
+    model: 'gemini-2.5-flash',
+  },
+  {
+    label: 'DeepSeek',
+    protocol: 'openai',
+    endpoint: 'https://api.deepseek.com/v1',
+    model: 'deepseek-chat',
   },
   {
     label: 'OpenAI',
@@ -39,10 +51,10 @@ const PRESETS: ReadonlyArray<{
     model: 'gpt-4o-mini',
   },
   {
-    label: 'DeepSeek',
-    protocol: 'openai',
-    endpoint: 'https://api.deepseek.com/v1',
-    model: 'deepseek-chat',
+    label: 'Anthropic',
+    protocol: 'anthropic',
+    endpoint: 'https://api.anthropic.com',
+    model: 'claude-opus-5-5',
   },
   {
     label: '本地 Debug',

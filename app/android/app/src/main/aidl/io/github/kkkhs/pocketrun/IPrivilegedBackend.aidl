@@ -14,4 +14,9 @@ interface IPrivilegedBackend {
     boolean injectText(int expectedDisplayId, String text);
     void releaseDisplay();
     void shutdown();
+    boolean launchAppOnDisplay(int expectedDisplayId, String packageName);
+    boolean injectAppTap(int expectedDisplayId, int x, int y);
+    boolean injectAppSwipe(int expectedDisplayId, int x1, int y1, int x2, int y2, int durationMs);
+    boolean injectAppKey(int expectedDisplayId, int keyCode);
+    boolean injectAppText(int expectedDisplayId, String text);
 }

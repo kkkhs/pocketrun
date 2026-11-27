@@ -3,6 +3,7 @@ package io.github.kkkhs.pocketrun
 import android.accessibilityservice.AccessibilityServiceInfo
 import android.app.UiAutomation
 import android.graphics.Rect
+import android.os.Bundle
 import android.os.HandlerThread
 import android.os.Looper
 import android.os.Process
@@ -62,6 +63,95 @@ internal class DisplayAutomation(private val displayId: Int) : Closeable {
             query.complete(status(UiTreeCodec.Status.QueryFailed))
         }
         return query
+    }
+
+    /** Injects UTF-8 / Chinese text into the focused editable node on this owned virtual display only. */
+    fun setFocusedText(text: String): Boolean {
+        if (closed.get() || !DisplayInputPolicy.acceptsAppText(text)) return false
+        if (!busy.compareAndSet(false, true)) return false
+        val done = CountDownLatch(1)
+        val ok = AtomicBoolean(false)
+        val query = Query()
+        active.set(query)
+        try {
+            worker.execute {
+                try {
+                    query.checkDeadline()
+                    val instance = getAutomation(query)
+                    query.checkDeadline()
+                    val all = instance.javaClass.getMethod("getWindowsOnAllDisplays").invoke(instance) as? SparseArray<*>
+                        ?: return@execute
+                    try {
+                        val windows = all.get(displayId) as? List<*> ?: return@execute
+                        var target: AccessibilityNodeInfo? = null
+                        fun findTarget(node: AccessibilityNodeInfo, depth: Int) {
+                            if (depth > UiTreeCodec.MAX_DEPTH) return
+                            query.checkDeadline()
+                            if (node.isEditable && node.isFocused) {
+                                target?.let { @Suppress("DEPRECATION") it.recycle() }
+                                target = AccessibilityNodeInfo.obtain(node)
+                                return
+                            }
+                            if (target == null && node.isEditable && node.isEnabled) {
+                                target = AccessibilityNodeInfo.obtain(node)
+                            }
+                            for (i in 0 until node.childCount) {
+                                val child = node.getChild(i) ?: continue
+                                try {
+                                    findTarget(child, depth + 1)
+                                } finally {
+                                    @Suppress("DEPRECATION")
+                                    child.recycle()
+                                }
+                                if (target?.isFocused == true) return
+                            }
+                        }
+                        for (value in windows) {
+                            val window = value as? AccessibilityWindowInfo ?: continue
+                            val root = window.root ?: continue
+                            try {
+                                findTarget(root, 0)
+                            } finally {
+                                @Suppress("DEPRECATION")
+                                root.recycle()
+                            }
+                            if (target?.isFocused == true) break
+                        }
+                        val chosen = target
+                        if (chosen != null) {
+                            try {
+                                val args = Bundle().apply {
+                                    putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, text)
+                                }
+                                ok.set(chosen.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, args))
+                            } finally {
+                                @Suppress("DEPRECATION")
+                                chosen.recycle()
+                            }
+                        }
+                    } finally {
+                        for (index in 0 until all.size()) {
+                            (all.valueAt(index) as? List<*>)?.forEach { value ->
+                                @Suppress("DEPRECATION")
+                                (value as? AccessibilityWindowInfo)?.recycle()
+                            }
+                        }
+                    }
+                } catch (_: Exception) {
+                    ok.set(false)
+                } finally {
+                    active.compareAndSet(query, null)
+                    busy.set(false)
+                    done.countDown()
+                    if (closed.get()) disconnectAndQuit()
+                }
+            }
+            done.await(QUERY_TIMEOUT_MS, TimeUnit.MILLISECONDS)
+        } catch (_: Exception) {
+            active.compareAndSet(query, null)
+            busy.set(false)
+        }
+        return ok.get()
     }
 
     inner class Query internal constructor() {
@@ -202,7 +292,13 @@ internal class DisplayAutomation(private val displayId: Int) : Closeable {
                     }
                     val bounds = Rect()
                     node.getBoundsInScreen(bounds)
-                    check(bounds.left <= bounds.right && bounds.top <= bounds.bottom) { "UI node bounds 无效。" }
+                    // Off-screen clipped RecyclerView/ScrollView children on Android 16 can report
+                    // inverted bounds (e.g. top > bottom). Skip invisible non-root subtrees cleanly.
+                    if (bounds.left > bounds.right || bounds.top > bounds.bottom) {
+                        if (parent >= 0) return
+                        bounds.right = maxOf(bounds.left, bounds.right)
+                        bounds.bottom = maxOf(bounds.top, bounds.bottom)
+                    }
                     val record = UiTreeCodec.Node(parent, windowId, depth,
                         field(node.className), field(node.packageName), field(node.viewIdResourceName),
                         field(node.text), field(node.contentDescription),
@@ -345,7 +441,7 @@ internal class DisplayAutomation(private val displayId: Int) : Closeable {
     private class DeadlineExceeded : RuntimeException()
 
     companion object {
-        private const val QUERY_TIMEOUT_MS = 1800L
+        private const val QUERY_TIMEOUT_MS = 3500L
         private const val CALLBACK_JOIN_MS = 500L
     }
 }

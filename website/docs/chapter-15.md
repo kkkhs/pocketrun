@@ -152,7 +152,7 @@ PocketRunTool.LINUX_RUN_SHELL -> {
 
 第 15 章补齐了成为“日常可用本地 AI 助手”最关键的四块拼图：**OpenAI + Anthropic 双协议流式支持、受控 `linux.run_shell`、内置工作区文件编辑器、以及清晰的 Markdown 排版**。
 
-现在，PocketRun 已经是一个在手机上真正好用的**多协议流式对话 + 本地文件与 Linux 沙箱助手**。下一步（第 16 章）将直击 Ditto 最惊艳的核心体验：**通用第三方 App 操控（打开指定 App、滑动/返回、中文输入）+ 视觉/UI 安全观察协议 + 对话页内嵌虚拟屏实时预览**，以及更省心的引导式无线 ADB 配对！
+现在，PocketRun 已经是一个在手机上真正好用的**多协议流式对话 + 本地文件与 Linux 沙箱助手**。下一步请继续阅读 **[第 16 章：让 AI 在后台虚拟屏操控任意第三方 App](chapter-16.md)**——解锁通用第三方 App 启动/观察/点击/滑动/中文输入、对话页内嵌虚拟屏实时预览窗、断网退避重试与免费模型预设！
 
 - **核心源码入口**：[OpenAiModelTransport.kt](https://github.com/kkkhs/pocketrun/blob/main/app/android/app/src/main/java/io/github/kkkhs/pocketrun/taskhost/OpenAiModelTransport.kt) · [LinuxSession.kt](https://github.com/kkkhs/pocketrun/blob/main/app/android/app/src/main/java/io/github/kkkhs/pocketrun/LinuxSession.kt) · [MarkdownView.tsx](https://github.com/kkkhs/pocketrun/blob/main/app/MarkdownView.tsx) · [WorkspaceFilesScreen.tsx](https://github.com/kkkhs/pocketrun/blob/main/app/WorkspaceFilesScreen.tsx) · [SettingsScreen.tsx](https://github.com/kkkhs/pocketrun/blob/main/app/SettingsScreen.tsx)
 - **测试与验证档案**：[实机验收与工程档案](verification-records.md)

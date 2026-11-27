@@ -90,6 +90,85 @@ class VirtualDisplaySession(private val packageName: String) : Closeable {
         DisplayInput(appUid).text(current.displayId, text)
     }
 
+    fun launchApp(expectedDisplayId: Int, targetPackage: String): Boolean = synchronized(lock) {
+        val current = requireOwnedLocked(expectedDisplayId)
+        requireValidPackageName(targetPackage)
+        val component = resolveLauncherComponent(targetPackage)
+        val argv = if (component != null) {
+            buildAppLaunchArguments(component, current.displayId)
+        } else {
+            listOf(
+                "/system/bin/am",
+                "start",
+                "-W",
+                "--display",
+                current.displayId.toString(),
+                "-a",
+                "android.intent.action.MAIN",
+                "-c",
+                "android.intent.category.LAUNCHER",
+                "-p",
+                targetPackage,
+            )
+        }
+        val process = ProcessBuilder(argv)
+            .redirectOutput(File("/dev/null"))
+            .redirectError(File("/dev/null"))
+            .start()
+        if (!process.waitFor(10, TimeUnit.SECONDS)) {
+            process.destroyForcibly()
+            process.waitFor(1, TimeUnit.SECONDS)
+            throw IllegalStateException("在虚拟屏启动应用超时。")
+        }
+        process.exitValue() == 0
+    }
+
+    fun injectAppTap(expectedDisplayId: Int, x: Int, y: Int, appUid: Int): Boolean = synchronized(lock) {
+        val current = requireOwnedLocked(expectedDisplayId)
+        DisplayInput(appUid).appTap(current.displayId, x, y)
+    }
+
+    fun injectAppSwipe(expectedDisplayId: Int, x1: Int, y1: Int, x2: Int, y2: Int, durationMs: Int, appUid: Int): Boolean =
+        synchronized(lock) {
+            val current = requireOwnedLocked(expectedDisplayId)
+            DisplayInput(appUid).appSwipe(current.displayId, x1, y1, x2, y2, durationMs)
+        }
+
+    fun injectAppKey(expectedDisplayId: Int, keyCode: Int, appUid: Int): Boolean = synchronized(lock) {
+        val current = requireOwnedLocked(expectedDisplayId)
+        DisplayInput(appUid).appKey(current.displayId, keyCode)
+    }
+
+    fun injectAppText(expectedDisplayId: Int, text: String, appUid: Int): Boolean {
+        val current = synchronized(lock) { requireOwnedLocked(expectedDisplayId) }
+        if (!DisplayInputPolicy.acceptsAppText(text)) return false
+        if (current.automation.setFocusedText(text)) return true
+        return if (DisplayInputPolicy.acceptsText(text)) {
+            synchronized(lock) {
+                val verified = requireOwnedLocked(expectedDisplayId)
+                DisplayInput(appUid).appTextAscii(verified.displayId, text)
+            }
+        } else {
+            false
+        }
+    }
+
+    private fun resolveLauncherComponent(targetPackage: String): String? {
+        val process = ProcessBuilder(buildResolveLauncherArguments(targetPackage))
+            .redirectError(File("/dev/null"))
+            .start()
+        val output = try {
+            process.inputStream.bufferedReader(Charsets.UTF_8).use { it.readText() }
+        } finally {
+            if (!process.waitFor(5, TimeUnit.SECONDS)) {
+                process.destroyForcibly()
+                process.waitFor(1, TimeUnit.SECONDS)
+            }
+        }
+        if (process.exitValue() != 0) return null
+        return parseResolvedComponent(output, targetPackage)
+    }
+
     private fun requireOwnedLocked(expectedDisplayId: Int): OwnedDisplay {
         DisplayInputPolicy.requireDisplay(expectedDisplayId, owned?.displayId ?: -1)
         return checkNotNull(owned)
@@ -279,6 +358,51 @@ class VirtualDisplaySession(private val packageName: String) : Closeable {
                 displayId.toString(),
                 "-n",
                 "$packageName/.DisplayDemoActivity",
+            )
+        }
+
+        private val PACKAGE_PATTERN = Regex("[A-Za-z][A-Za-z0-9_]*(\\.[A-Za-z0-9_]+)+")
+        private val COMPONENT_PATTERN = Regex("[A-Za-z][A-Za-z0-9_]*(\\.[A-Za-z0-9_]+)+/[A-Za-z0-9_.$]+")
+
+        fun requireValidPackageName(packageName: String) {
+            require(packageName.length in 3..128 && PACKAGE_PATTERN.matches(packageName)) {
+                "目标应用包名无效。"
+            }
+        }
+
+        fun buildResolveLauncherArguments(packageName: String): List<String> {
+            requireValidPackageName(packageName)
+            return listOf(
+                "/system/bin/cmd",
+                "package",
+                "resolve-activity",
+                "--brief",
+                "-a",
+                "android.intent.action.MAIN",
+                "-c",
+                "android.intent.category.LAUNCHER",
+                packageName,
+            )
+        }
+
+        fun parseResolvedComponent(output: String, expectedPackage: String): String? =
+            output.lineSequence()
+                .map { it.trim() }
+                .firstOrNull { line ->
+                    line.startsWith("$expectedPackage/") && COMPONENT_PATTERN.matches(line)
+                }
+
+        fun buildAppLaunchArguments(component: String, displayId: Int): List<String> {
+            require(COMPONENT_PATTERN.matches(component)) { "目标应用组件无效。" }
+            require(displayId > 0) { "目标 displayId 无效。" }
+            return listOf(
+                "/system/bin/am",
+                "start",
+                "-W",
+                "--display",
+                displayId.toString(),
+                "-n",
+                component,
             )
         }
 

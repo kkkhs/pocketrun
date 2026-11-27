@@ -135,6 +135,7 @@ function PocketRunShell() {
           <ChatScreen
             colors={colors}
             onOpenSettings={() => setTab('settings')}
+            onOpenLab={() => setTab('lab')}
             initialPrompt={queuedPrompt}
             onConsumeInitialPrompt={() => setQueuedPrompt(null)}
           />

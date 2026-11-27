@@ -78,6 +78,105 @@ internal class BinderTaskHostDisplayPort(
         return inputResult(expected, "demo-text")
     }
 
+    override fun openApp(expected: DisplayTarget, packageName: String): ToolResult {
+        requireTarget(expected)
+        check(backend.launchAppOnDisplay(expected.displayId, packageName, expected.displayEpoch)) {
+            "Failed to launch $packageName on virtual display ${expected.displayId}."
+        }
+        Thread.sleep(450)
+        val preview = runCatching { backend.captureTaskHostScreenshot(expected.displayId, expected.displayEpoch) }.getOrNull()
+        val fields = linkedMapOf(
+            "source" to "app-owned-typed-binder",
+            "displayId" to expected.displayId.toString(),
+            "displayEpoch" to expected.displayEpoch.toString(),
+            "packageName" to packageName,
+            "action" to "app_open",
+            "launched" to "true",
+            "sourceStatus" to "accepted",
+        )
+        if (preview != null) fields["screenshotUri"] = preview.uri
+        return ToolResult(fields)
+    }
+
+    override fun observeScreen(expected: DisplayTarget): ToolResult {
+        requireTarget(expected)
+        val frame = runCatching { backend.captureTaskHostScreenshot(expected.displayId, expected.displayEpoch) }.getOrNull()
+        val tree = backend.dumpTypedUiTree(expected.displayId, expected.displayEpoch)
+        val summary = UiTreeSummaryFormatter.format(tree)
+        val fields = linkedMapOf(
+            "source" to "app-owned-typed-binder",
+            "displayId" to expected.displayId.toString(),
+            "displayEpoch" to expected.displayEpoch.toString(),
+            "action" to "app_observe",
+            "uiTreeStatus" to tree.status.wire,
+            "topPackage" to summary.topPackage,
+            "nodeCount" to summary.elementCount.toString(),
+            "truncated" to summary.truncated.toString(),
+            "uiElements" to summary.text,
+            "sourceStatus" to "observed",
+        )
+        if (frame != null) {
+            fields["screenshotUri"] = frame.uri
+            fields["frameTimestampNanos"] = frame.frameTimestampNanos
+        }
+        return ToolResult(fields)
+    }
+
+    override fun appTap(expected: DisplayTarget, x: Int, y: Int): ToolResult {
+        requireTarget(expected)
+        check(backend.injectAppTap(expected.displayId, x, y, expected.displayEpoch)) {
+            "Backend did not accept app tap at ($x,$y)."
+        }
+        Thread.sleep(300)
+        return appActionResult(expected, "app_tap")
+    }
+
+    override fun appSwipe(expected: DisplayTarget, x1: Int, y1: Int, x2: Int, y2: Int, durationMs: Int): ToolResult {
+        requireTarget(expected)
+        check(backend.injectAppSwipe(expected.displayId, x1, y1, x2, y2, durationMs, expected.displayEpoch)) {
+            "Backend did not accept app swipe."
+        }
+        Thread.sleep(300)
+        return appActionResult(expected, "app_swipe")
+    }
+
+    override fun appInputText(expected: DisplayTarget, text: String): ToolResult {
+        requireTarget(expected)
+        check(backend.injectAppText(expected.displayId, text, expected.displayEpoch)) {
+            "Backend did not accept app text input (ensure an editable text field is focused)."
+        }
+        Thread.sleep(250)
+        return appActionResult(expected, "app_input_text")
+    }
+
+    override fun appPressKey(expected: DisplayTarget, key: String): ToolResult {
+        requireTarget(expected)
+        val keyCode = checkNotNull(DisplayInputPolicy.ALLOWED_KEYS[key.uppercase()]) { "Unsupported key: $key" }
+        check(backend.injectAppKey(expected.displayId, keyCode, expected.displayEpoch)) {
+            "Backend did not accept key $key."
+        }
+        Thread.sleep(300)
+        return appActionResult(expected, "app_press_key", extra = mapOf("key" to key.uppercase()))
+    }
+
+    private fun appActionResult(
+        expected: DisplayTarget,
+        action: String,
+        extra: Map<String, String> = emptyMap(),
+    ): ToolResult {
+        val preview = runCatching { backend.captureTaskHostScreenshot(expected.displayId, expected.displayEpoch) }.getOrNull()
+        val fields = linkedMapOf(
+            "source" to "app-owned-typed-binder",
+            "displayId" to expected.displayId.toString(),
+            "displayEpoch" to expected.displayEpoch.toString(),
+            "action" to action,
+            "sourceStatus" to "accepted",
+        )
+        fields.putAll(extra)
+        if (preview != null) fields["screenshotUri"] = preview.uri
+        return ToolResult(fields)
+    }
+
     override fun invalidate(expected: DisplayTarget) {
         if (expected.packageUid == Process.myUid() && expected.displayId > 0) {
             backend.invalidateQueriesIfCurrent(expected.displayId, expected.displayEpoch)

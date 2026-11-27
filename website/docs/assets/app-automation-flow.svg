@@ -1,0 +1,57 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 560 700" role="img" aria-labelledby="pr-ch16-title pr-ch16-desc" class="pr-ch16-diagram">
+  <title id="pr-ch16-title">第 16 章通用第三方 App 虚拟屏操控与实时预览架构</title>
+  <desc id="pr-ch16-desc">用户在对话页发起操控第三方 App 的请求后，ChatEngine 带断网自动重试调用大模型，经 TaskHost 手机端逐次审批并自动绑定当前虚拟屏 displayId 与 epoch，通过 typed Binder 调用 UID 2000 后端启动目标应用、采集容错裁剪后的精简控件树、执行点击滑动或中文 ACTION_SET_TEXT 输入，并按事件把最新预览帧回传对话页顶部实时预览窗。</desc>
+  <style>
+    .pr-ch16-diagram { --ink: var(--ifm-font-color-base, #1c1e21); --muted: var(--ifm-color-emphasis-700, #606770); --border: var(--ifm-color-emphasis-300, #dadde1); --panel: var(--ifm-background-surface-color, #fff); --accent: var(--app, #2a78d6); --warm: var(--shell, #eb6834); font-family: system-ui, -apple-system, "Segoe UI", sans-serif; }
+    .pr-ch16-diagram .heading { fill: var(--ink); font-size: 21px; font-weight: 650; }
+    .pr-ch16-diagram .body { fill: var(--ink); font-size: 18px; }
+    .pr-ch16-diagram .note { fill: var(--muted); font-size: 15.5px; }
+    .pr-ch16-diagram .card { fill: var(--panel); stroke: var(--border); stroke-width: 1.5; }
+    .pr-ch16-diagram .accent-card { fill: var(--panel); stroke: var(--accent); stroke-width: 2; }
+    .pr-ch16-diagram .warm-card { fill: var(--panel); stroke: var(--warm); stroke-width: 2; }
+    .pr-ch16-diagram .edge { fill: none; stroke: var(--muted); stroke-width: 2; }
+  </style>
+  <defs>
+    <marker id="pr-ch16-arrow" markerWidth="9" markerHeight="8" refX="8" refY="4" orient="auto">
+      <path d="M0 0 9 4 0 8Z" fill="var(--muted)"/>
+    </marker>
+  </defs>
+  <text x="280" y="34" text-anchor="middle" class="heading">对话内操控第三方 App · 虚拟屏隔离与实时预览</text>
+
+  <rect x="30" y="58" width="500" height="104" rx="10" class="accent-card"/>
+  <text x="52" y="90" class="heading">1 · ChatScreen（内嵌虚拟屏实时预览窗）</text>
+  <text x="52" y="118" class="body">顶部可折叠预览窗 + 内联手机审批卡 + 免费模型预设</text>
+  <text x="52" y="144" class="note">仅在工具完成或手动点击时刷新帧（空闲零后台轮询省电）</text>
+
+  <path d="M280 162 V198" class="edge" marker-end="url(#pr-ch16-arrow)"/>
+
+  <rect x="30" y="198" width="500" height="114" rx="10" class="card"/>
+  <text x="52" y="230" class="heading">2 · ChatEngine + TaskHost（手机逐次审批）</text>
+  <text x="52" y="258" class="body">瞬时 IO/5xx 自动短退避重试（最多 2 次）· 16 回合预算</text>
+  <text x="52" y="284" class="note">自动绑定当前虚拟屏 displayId + epoch，校验 SHA-256 目标</text>
+  <text x="52" y="302" class="note">工具：app.list_apps / open / observe / tap / swipe / input_text / press_key</text>
+
+  <path d="M155 312 V352" class="edge" marker-end="url(#pr-ch16-arrow)"/>
+  <path d="M405 312 V352" class="edge" marker-end="url(#pr-ch16-arrow)"/>
+
+  <rect x="30" y="352" width="236" height="106" rx="10" class="card"/>
+  <text x="48" y="384" class="heading">普通 App UID</text>
+  <text x="48" y="412" class="body">app.list_apps 目录查询</text>
+  <text x="48" y="438" class="note">&lt;queries&gt; 解析应用名 + 包名</text>
+
+  <rect x="294" y="352" width="236" height="106" rx="10" class="warm-card"/>
+  <text x="312" y="384" class="heading">UID 2000 Binder 后端</text>
+  <text x="312" y="412" class="body">IPrivilegedBackend 扩展</text>
+  <text x="312" y="438" class="note">死守 displayId &gt; 0，不触主屏</text>
+
+  <path d="M412 458 V498" class="edge" marker-end="url(#pr-ch16-arrow)"/>
+
+  <rect x="30" y="498" width="500" height="142" rx="10" class="warm-card"/>
+  <text x="52" y="530" class="heading">3 · 720×1280 隔离虚拟屏执行第三方 App</text>
+  <text x="52" y="558" class="body">• 启动：cmd package resolve-activity → am start --display</text>
+  <text x="52" y="584" class="body">• 观察：DisplayAutomation（跳过屏外倒置裁剪）→ 7.5 KiB 坐标摘要</text>
+  <text x="52" y="610" class="body">• 交互：多步插值滑动 / 按键 / 中文 ACTION_SET_TEXT 输入</text>
+  <text x="52" y="632" class="note">每步结束后捕获最新 JPEG 帧，自动推送给对话页顶部预览窗</text>
+
+  <text x="280" y="676" text-anchor="middle" class="note">用户在前台聊天与审批，第三方 App 在后台虚拟屏安静运行，互不抢屏。</text>
+</svg>

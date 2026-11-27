@@ -9,6 +9,18 @@ internal interface TaskHostDisplayPort {
     fun observeDemo(expected: DisplayTarget): DemoObservation = throw UnsupportedOperationException("Demo observation unavailable.")
     fun demoTap(expected: DisplayTarget, x: Int, y: Int): ToolResult
     fun demoText(expected: DisplayTarget, text: String): ToolResult
+    fun openApp(expected: DisplayTarget, packageName: String): ToolResult =
+        throw UnsupportedOperationException("General app launch unavailable.")
+    fun observeScreen(expected: DisplayTarget): ToolResult =
+        throw UnsupportedOperationException("General screen observation unavailable.")
+    fun appTap(expected: DisplayTarget, x: Int, y: Int): ToolResult =
+        throw UnsupportedOperationException("General app tap unavailable.")
+    fun appSwipe(expected: DisplayTarget, x1: Int, y1: Int, x2: Int, y2: Int, durationMs: Int): ToolResult =
+        throw UnsupportedOperationException("General app swipe unavailable.")
+    fun appInputText(expected: DisplayTarget, text: String): ToolResult =
+        throw UnsupportedOperationException("General app text input unavailable.")
+    fun appPressKey(expected: DisplayTarget, key: String): ToolResult =
+        throw UnsupportedOperationException("General app key press unavailable.")
     fun invalidate(expected: DisplayTarget)
     fun setDeathListener(listener: ((DisplayTarget) -> Unit)?)
 }

@@ -8,16 +8,16 @@
 
 在电脑上写一个 AI Agent 很容易——Node.js 调个大模型接口，再 `child_process` 跑几条命令就行了。但在 Android 手机上，普通 App 关在严格的沙箱里，既不能随便看别的 App 的屏幕，也无法直接像 Linux 桌面那样跑现成的命令行工具。
 
-PocketRun 用渐进式实战章节，带你一层层拆开这些系统限制，从底层内核一路做到可用的对话式 AI 助手产品（已更新至第 15 章）：
+PocketRun 用渐进式实战章节，带你一层层拆开这些系统限制，从底层内核一路做到可用的对话式 AI 助手产品（已更新至第 16 章）：
 
 | 部分 | 章节 | 你会亲手搭通的核心机制 |
 | --- | --- | --- |
 | **一、打通 Android 权限与屏幕控制** | 第 1—5 章 | TurboModule 桥接 Kotlin → App 自连本机无线 ADB → 拉起 UID 2000 独立 `app_process` 并交换 Binder → 创建隔离的 VirtualDisplay → 共享内存截图、UiAutomation 控件树与定向输入注入 |
 | **二、在 App 里跑起 Linux 与终端** | 第 6—8 章 | 私有工作目录与 `ProcessBuilder` 管道 → 绕开 Android W^X 限制跑起 PRoot + 最小 Alpine（BusyBox/musl）→ 通过 JNI 与 `/dev/ptmx` 实现真正的交互式 PTY 终端 |
 | **三、从受控工具到 AI Agent 完整闭环** | 第 9—13 章 | 确定性审批网关 `TaskHost` → 多步任务账本 `SingleTaskContext` → 真实模型循环 `AgentLoop` → 可管理的加密跨任务记忆 `MemoryStore` → 跨通道完整任务完成门与预写日志中断恢复 `TaskJournal` |
-| **四、走向真正的用户产品** | 第 14—15 章 | Gemini 风格多会话流式对话与 Markdown 渲染、OpenAI + Anthropic 双协议流式适配、加密历史存储 `ConversationStore`、内联审批卡片、内置「文件」工作区编辑器与受控 PRoot/Alpine `linux.run_shell` 工具 |
+| **四、走向真正的用户产品** | 第 14—16 章 | Gemini 风格多会话流式对话与 Markdown 渲染、OpenAI + Anthropic 双协议（含免费模型预设）、内置「文件」编辑器、受控 PRoot/Alpine `linux.run_shell`、**通用第三方 App 虚拟屏操控与对话页实时预览窗**、断网自动重试 |
 
-第 0—15 章全部对应仓库中的真实源码实现；历史章节快照见 [GitHub Releases](https://github.com/kkkhs/pocketrun/releases)，后续产品演进路线见 [Ditto 功能对照](website/docs/ditto-parity.md)。
+第 0—16 章全部对应仓库中的真实源码实现；历史章节快照见 [GitHub Releases](https://github.com/kkkhs/pocketrun/releases)，后续产品演进路线见 [Ditto 功能对照](website/docs/ditto-parity.md)。
 
 ## 目录结构
 
