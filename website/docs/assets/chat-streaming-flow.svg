@@ -1,0 +1,56 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 560 660" role="img" aria-labelledby="pr-ch14-title pr-ch14-desc" class="pr-ch14-diagram">
+  <title id="pr-ch14-title">第 14 章对话产品外壳与流式工具循环数据流</title>
+  <desc id="pr-ch14-desc">用户在 React Native 对话页发出消息后，通过 TurboModule 进入同一 App 进程内的 ChatEngine。ChatEngine 从独立加密的 ConversationStore 载入历史消息，经 ModelTransport 实时流式接收 TextDelta 并推给界面；遇到工具调用时走原 SingleTaskContext 和 TaskHost，敏感读写停在手机内联审批卡片，获批后在普通 App UID 执行通用私有工作区工具并写回加密会话存储。</desc>
+  <style>
+    .pr-ch14-diagram { --ink: var(--ifm-font-color-base, #1c1e21); --muted: var(--ifm-color-emphasis-700, #606770); --border: var(--ifm-color-emphasis-300, #dadde1); --panel: var(--ifm-background-surface-color, #fff); --accent: var(--app, #2a78d6); font-family: system-ui, -apple-system, "Segoe UI", sans-serif; }
+    .pr-ch14-diagram .heading { fill: var(--ink); font-size: 22px; font-weight: 650; }
+    .pr-ch14-diagram .body { fill: var(--ink); font-size: 19px; }
+    .pr-ch14-diagram .note { fill: var(--muted); font-size: 16.5px; }
+    .pr-ch14-diagram .card { fill: var(--panel); stroke: var(--border); stroke-width: 1.5; }
+    .pr-ch14-diagram .accent-card { fill: var(--panel); stroke: var(--accent); stroke-width: 2; }
+    .pr-ch14-diagram .edge { fill: none; stroke: var(--muted); stroke-width: 2; }
+  </style>
+  <defs>
+    <marker id="pr-ch14-arrow" markerWidth="9" markerHeight="8" refX="8" refY="4" orient="auto">
+      <path d="M0 0 9 4 0 8Z" fill="var(--muted)"/>
+    </marker>
+  </defs>
+  <text x="280" y="34" text-anchor="middle" class="heading">产品外壳 → ChatEngine → 流式回答与受控工具</text>
+
+  <rect x="30" y="58" width="500" height="96" rx="10" class="accent-card"/>
+  <text x="52" y="90" class="heading">1 · React Native 产品外壳（App.tsx）</text>
+  <text x="52" y="118" class="body">对话（ChatScreen）· 设置 · 实验室（第 1–13 章）</text>
+  <text x="52" y="142" class="note">轮询流式文本增量与待审批卡片，支持随时点击「停止」</text>
+
+  <path d="M280 154 V190" class="edge" marker-end="url(#pr-ch14-arrow)"/>
+
+  <rect x="30" y="190" width="500" height="114" rx="10" class="card"/>
+  <text x="52" y="222" class="heading">2 · ChatEngine + ConversationStore</text>
+  <text x="52" y="250" class="body">独立 Keystore 域（conversations.bin，上限 64 KiB）</text>
+  <text x="52" y="276" class="note">拼接多轮历史 + 可选长期记忆 → 发起流式 SSE 请求</text>
+  <text x="52" y="296" class="note">实时回调 TextDelta，最终把回复与工具轨迹原子落盘</text>
+
+  <path d="M160 304 V344" class="edge" marker-end="url(#pr-ch14-arrow)"/>
+  <path d="M400 304 V344" class="edge" marker-end="url(#pr-ch14-arrow)"/>
+
+  <rect x="30" y="344" width="235" height="112" rx="10" class="card"/>
+  <text x="48" y="376" class="heading">3a · 流式模型传输</text>
+  <text x="48" y="405" class="body">SSE 文本增量推送</text>
+  <text x="48" y="432" class="note">纯文本回答直接 end_turn</text>
+  <text x="48" y="450" class="note">安全释放空任务上下文</text>
+
+  <rect x="295" y="344" width="235" height="112" rx="10" class="card"/>
+  <text x="313" y="376" class="heading">3b · TaskHost 审批</text>
+  <text x="313" y="405" class="body">工具名 / 参数严格校验</text>
+  <text x="313" y="432" class="note">read_file / write_file</text>
+  <text x="313" y="450" class="note">停在手机内联确认卡</text>
+
+  <path d="M412 456 V496" class="edge" marker-end="url(#pr-ch14-arrow)"/>
+
+  <rect x="30" y="496" width="500" height="106" rx="10" class="card"/>
+  <text x="52" y="528" class="heading">4 · 通用私有工作区工具（普通 App UID）</text>
+  <text x="52" y="556" class="body">workspace.list_files / read_file / write_file</text>
+  <text x="52" y="582" class="note">CanonicalChildPath 防越界 · 12 KiB 上限 · 0600 原子写入与读回校验</text>
+
+  <text x="280" y="636" text-anchor="middle" class="note">工具结果回到 ChatEngine 进入下一回合，直至流式总结完成并加密持久化。</text>
+</svg>
