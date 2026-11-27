@@ -10,6 +10,7 @@ jest.mock(
   () => require('react-native-safe-area-context/jest/mock').default,
 );
 jest.mock('../ChatScreen', () => 'ChatScreen');
+jest.mock('../WorkspaceFilesScreen', () => 'WorkspaceFilesScreen');
 jest.mock('../SettingsScreen', () => 'SettingsScreen');
 jest.mock('../AdbPanel', () => 'AdbPanel');
 jest.mock('../BackendPanel', () => 'BackendPanel');
@@ -71,6 +72,10 @@ afterEach(async () => {
 
 test('launches into the Chat product shell by default and switches between tabs', async () => {
   expect(JSON.stringify(screen.toJSON())).toContain('ChatScreen');
+  await ReactTestRenderer.act(() => {
+    findTab('文件').props.onPress();
+  });
+  expect(JSON.stringify(screen.toJSON())).toContain('WorkspaceFilesScreen');
   await ReactTestRenderer.act(() => {
     findTab('设置').props.onPress();
   });

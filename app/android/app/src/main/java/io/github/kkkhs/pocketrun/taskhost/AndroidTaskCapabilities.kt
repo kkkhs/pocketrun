@@ -207,6 +207,30 @@ internal class AndroidTaskCapabilities(
     fun listWorkspaceFileSummaries(): List<Pair<String, Long>> =
         workspaceSession.listFiles().map { it.relativePath to it.bytes }
 
+    fun readWorkspaceFileDirect(relativePath: String): WorkspaceSession.WorkspaceReadResult =
+        workspaceSession.readTextFile(relativePath)
+
+    fun writeWorkspaceFileDirect(relativePath: String, content: String): WorkspaceSession.WorkspaceWriteResult =
+        workspaceSession.writeTextFile(relativePath, content)
+
+    fun deleteWorkspaceFileDirect(relativePath: String): Boolean =
+        workspaceSession.deleteTextFile(relativePath)
+
+    override fun ensureLinuxShellTarget(): LinuxTarget {
+        val existing = synchronized(lock) { linuxTarget }
+        if (existing != null) return currentLinuxTarget()
+        return prepareLinuxEnvironment()
+    }
+
+    override fun prepareLinuxShell(expected: LinuxTarget, command: String, timeoutSec: Int): OwnedExecution = synchronized(lock) {
+        check(!closeCoordinator.closing) { "TaskHost adapter is closing or disposed." }
+        val current = checkNotNull(linuxTarget) { "LinuxSession is not prepared." }
+        check(current == expected) { "Linux rootfs generation or App UID changed." }
+        check(activeLinux == null) { "A Linux execution still owns the adapter." }
+        LinuxCountExecution("taskhost-shell-${++sequence}", this, shellCommand = command, shellTimeoutMillis = timeoutSec * 1000L)
+            .also { activeLinux = it }
+    }
+
     override fun prepareWorkspaceList(expected: WorkspaceRootTarget): OwnedExecution = synchronized(lock) {
         check(!closeCoordinator.closing && currentWorkspaceRoot() == expected)
         GeneralWorkspaceExecution(expected) {
@@ -360,23 +384,37 @@ internal class AndroidTaskCapabilities(
             val target = checkNotNull(linuxTarget)
             check(target == currentLinuxTarget()) { "Linux target changed before start." }
             session = checkNotNull(linuxSession)
-            operation = session.reserve(execution.token)
+            operation = session.reserve(execution.token, execution.shellTimeoutMillis ?: io.github.kkkhs.pocketrun.CommandPipeline.TIMEOUT_MS)
             execution.operation = operation
             execution.started = true
         }
         try {
             worker.execute {
-                var result: LinuxSession.Result? = null
-                val outcome = try {
-                    result = session.runDemo(operation)
-                    linuxOutcome(checkNotNull(result))
-                } catch (error: Throwable) {
-                    ExecutionOutcome.Failure("LINUX_SOURCE_ERROR",
-                        error.message.orEmpty().take(256))
+                val cmd = execution.shellCommand
+                if (cmd != null) {
+                    var shellRes: LinuxSession.ShellResult? = null
+                    val outcome = try {
+                        shellRes = session.runShell(operation, cmd, execution.shellTimeoutMillis ?: 10_000L)
+                        linuxShellOutcome(checkNotNull(shellRes))
+                    } catch (error: Throwable) {
+                        ExecutionOutcome.Failure("LINUX_SHELL_ERROR", error.message.orEmpty().take(256))
+                    }
+                    execution.shellCleanupStatus = shellRes?.cleanupStatus
+                    execution.done.countDown()
+                    completion(outcome)
+                } else {
+                    var result: LinuxSession.Result? = null
+                    val outcome = try {
+                        result = session.runDemo(operation)
+                        linuxOutcome(checkNotNull(result))
+                    } catch (error: Throwable) {
+                        ExecutionOutcome.Failure("LINUX_SOURCE_ERROR",
+                            error.message.orEmpty().take(256))
+                    }
+                    execution.result = result
+                    execution.done.countDown()
+                    completion(outcome)
                 }
-                execution.result = result
-                execution.done.countDown()
-                completion(outcome)
             }
         } catch (error: RejectedExecutionException) {
             session.cancel(execution.token)
@@ -406,7 +444,8 @@ internal class AndroidTaskCapabilities(
             ownedSession::retryProcessCleanup) {
             val run = execution.runDirectory
             if (run == null) false else {
-                val recovered = if (execution.result?.cleanupStatus == "done") true
+                val cleanupAlreadyDone = execution.result?.cleanupStatus == "done" || execution.shellCleanupStatus == "done"
+                val recovered = if (cleanupAlreadyDone) true
                     else LinuxDirectoryLease.recoverOwned(run, LinuxDirectoryLease.Kind.RUN,
                         LinuxRecoveryProbe::isUnusedByAppProcesses)
                 recovered && LinuxDirectoryLease.readAttributes(run) == null
@@ -444,9 +483,12 @@ internal class AndroidTaskCapabilities(
     private class LinuxCountExecution(
         val token: String,
         private val owner: AndroidTaskCapabilities,
+        val shellCommand: String? = null,
+        val shellTimeoutMillis: Long? = null,
     ) : OwnedExecution {
         val done = CountDownLatch(1)
         @Volatile var result: LinuxSession.Result? = null
+        @Volatile var shellCleanupStatus: String? = null
         @Volatile var runDirectory: File? = null
         var operation: LinuxSession.Operation? = null
         var started = false
@@ -526,6 +568,29 @@ internal class AndroidTaskCapabilities(
     companion object {
         private const val LINUX_CLOSE_WAIT_MS = 6_000L
         private const val DISPLAY_CLOSE_WAIT_MS = 2_500L
+
+        internal fun linuxShellOutcome(result: LinuxSession.ShellResult): ExecutionOutcome {
+            val truncatedStdout = result.stdout.take(8_192)
+            val truncatedStderr = result.stderr.take(4_096)
+            val fields = linkedMapOf(
+                "installationGeneration" to result.installationGeneration,
+                "sourceStatus" to result.status,
+                "cleanupStatus" to result.cleanupStatus,
+                "stdout" to truncatedStdout,
+                "stderr" to truncatedStderr,
+                "exitCode" to result.exitCode.toString(),
+                "durationMillis" to result.durationMillis.toString(),
+                "packageUid" to result.appUid.toString(),
+            )
+            val output = ToolResult(fields)
+            val ok = result.cleanupStatus == "done" && result.status in setOf("completed", "failed") && result.exitCode >= 0
+            return if (ok) ExecutionOutcome.Success(output)
+            else ExecutionOutcome.Failure(
+                "LINUX_SHELL_FAILED",
+                "Linux shell status=${result.status}, exit=${result.exitCode}, cleanup=${result.cleanupStatus}.",
+                output,
+            )
+        }
 
         internal fun linuxOutcome(result: LinuxSession.Result): ExecutionOutcome {
             val fields = linkedMapOf(

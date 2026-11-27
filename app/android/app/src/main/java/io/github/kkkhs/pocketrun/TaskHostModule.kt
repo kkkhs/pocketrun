@@ -24,7 +24,9 @@ import io.github.kkkhs.pocketrun.taskhost.ConversationStore
 import io.github.kkkhs.pocketrun.taskhost.DisplayTarget
 import io.github.kkkhs.pocketrun.taskhost.ModelCredentialStore
 import io.github.kkkhs.pocketrun.taskhost.ModelMode
+import io.github.kkkhs.pocketrun.taskhost.ModelProtocol
 import io.github.kkkhs.pocketrun.taskhost.ModelSettings
+import io.github.kkkhs.pocketrun.taskhost.ModelTransports
 import io.github.kkkhs.pocketrun.taskhost.MemoryCodec
 import io.github.kkkhs.pocketrun.taskhost.MemorySelection
 import io.github.kkkhs.pocketrun.taskhost.MemorySnapshot
@@ -91,7 +93,20 @@ class TaskHostModule(context: ReactApplicationContext) : NativePocketRunTaskHost
     override fun saveModelConfiguration(endpoint: String, model: String, apiKey: String, promise: Promise) = executeModel(promise) {
         agent.cancel("MODEL_CONFIG_CHANGED")
         chatEngine.cancel("MODEL_CONFIG_CHANGED")
-        modelStore.save(ModelSettings(endpoint, model), apiKey)
+        modelStore.save(ModelSettings(endpoint, model, ModelProtocol.ANTHROPIC), apiKey)
+        modelConfigurationMap()
+    }
+
+    override fun saveModelConfigurationWithProtocol(
+        endpoint: String,
+        model: String,
+        apiKey: String,
+        protocol: String,
+        promise: Promise,
+    ) = executeModel(promise) {
+        agent.cancel("MODEL_CONFIG_CHANGED")
+        chatEngine.cancel("MODEL_CONFIG_CHANGED")
+        modelStore.save(ModelSettings(endpoint, model, ModelProtocol.fromWireName(protocol)), apiKey)
         modelConfigurationMap()
     }
 
@@ -144,7 +159,7 @@ class TaskHostModule(context: ReactApplicationContext) : NativePocketRunTaskHost
             val ready = adapter.readiness()
             val observation = "androidReady=true; workspaceReady=true; linuxReady=${ready.linuxReady}; " +
                 "displayReady=${ready.displayReady}; displayId=${ready.displayId}; displayEpoch=${ready.displayEpoch}"
-            val source = AnthropicModelTransport(credential, ModelMode.CHAT)
+            val source = ModelTransports.create(credential, ModelMode.CHAT)
             try {
                 chatRuntimeMap(chatEngine.send(conversationId.ifBlank { null }, prompt, source, observation, memory))
             } catch (error: Exception) {
@@ -169,6 +184,37 @@ class TaskHostModule(context: ReactApplicationContext) : NativePocketRunTaskHost
                 put(JSONObject().put("path", path).put("bytes", size))
             }
         }.toString().also { check(target.packageUid > 0) }
+    }
+
+    override fun readWorkspaceFileText(relativePath: String, promise: Promise) = execute(promise) {
+        val read = adapter.readWorkspaceFileDirect(relativePath)
+        Arguments.createMap().apply {
+            putString("path", read.relativePath)
+            putString("content", read.content)
+            putInt("bytes", read.bytes)
+            putString("sha256", read.sha256)
+        }
+    }
+
+    override fun writeWorkspaceFileText(relativePath: String, content: String, promise: Promise) = execute(promise) {
+        val written = adapter.writeWorkspaceFileDirect(relativePath, content)
+        val read = adapter.readWorkspaceFileDirect(written.relativePath)
+        Arguments.createMap().apply {
+            putString("path", read.relativePath)
+            putString("content", read.content)
+            putInt("bytes", read.bytes)
+            putString("sha256", read.sha256)
+        }
+    }
+
+    override fun deleteWorkspaceFile(relativePath: String, promise: Promise) = execute(promise) {
+        adapter.deleteWorkspaceFileDirect(relativePath)
+        val files = adapter.listWorkspaceFileSummaries()
+        JSONArray().apply {
+            files.forEach { (path, size) ->
+                put(JSONObject().put("path", path).put("bytes", size))
+            }
+        }.toString()
     }
 
     private fun executeChat(promise: Promise, action: () -> Any?) {
@@ -284,7 +330,7 @@ class TaskHostModule(context: ReactApplicationContext) : NativePocketRunTaskHost
         val credential = checkNotNull(modelStore.load()) { "MODEL_CREDENTIAL_REQUIRED" }
         if (memory != null || complete != null) check(credential.settings.endpoint == expectedEndpoint &&
             credential.settings.model == expectedModel) { "MODEL_TARGET_CHANGED" }
-        val source = AnthropicModelTransport(credential, complete != null)
+        val source = ModelTransports.create(credential, if (complete != null) ModelMode.COMPLETE else ModelMode.ORDINARY)
         return try {
             val ready = adapter.readiness()
             val observation = "linuxReady=${ready.linuxReady}; displayReady=${ready.displayReady}; " +
@@ -453,6 +499,7 @@ class TaskHostModule(context: ReactApplicationContext) : NativePocketRunTaskHost
             putString("endpoint", settings.endpoint)
             putString("model", settings.model)
             putBoolean("hasCredential", saved != null)
+            putString("protocol", settings.protocol.wireName)
         }
     }
 

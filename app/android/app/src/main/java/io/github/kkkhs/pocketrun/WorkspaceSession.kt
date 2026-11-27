@@ -157,6 +157,14 @@ class WorkspaceSession(
         }
     }
 
+    internal fun deleteTextFile(relativePath: String): Boolean {
+        val root = ensureRoot().toPath()
+        val resolved = CanonicalChildPath.existingRegularFile(root, relativePath)
+        val deleted = Files.deleteIfExists(resolved)
+        syncDirectory(checkNotNull(resolved.parent).toFile())
+        return deleted
+    }
+
     internal fun readDemoCsvBytes(): ByteArray {
         val root = demoRoot().toPath()
         val path = CanonicalChildPath.existingRegularFile(root, "items.csv")

@@ -248,7 +248,7 @@ internal class ChatEngine(
         pendingApproval = null
         streamingText = StringBuilder()
         rounds++
-        requestDeadline = clock.nowNanos() + TimeUnit.SECONDS.toNanos(25)
+        requestDeadline = clock.nowNanos() + TimeUnit.SECONDS.toNanos(65)
         val expected = ++generation
         request = checkNotNull(transport).requestStreaming(
             history = ArrayList(history),
@@ -474,6 +474,8 @@ internal class ChatEngine(
                 "已${if (fields["status"] == "created") "创建" else "更新"} ${fields["path"] ?: ""}（${fields["bytes"] ?: "0"} B）"
             PocketRunTool.LINUX_COUNT_DEMO_CSV.wireName ->
                 "CSV 共 ${fields["lineCount"] ?: "?"} 行"
+            PocketRunTool.LINUX_RUN_SHELL.wireName ->
+                "退出码 ${fields["exitCode"] ?: "?"}（${fields["cleanupStatus"] ?: "done"}）"
             else -> step.status.target.orEmpty().take(120)
         }.take(ConversationCodec.MAX_TOOL_SUMMARY_BYTES)
     }

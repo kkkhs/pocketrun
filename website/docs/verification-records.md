@@ -2,7 +2,7 @@
 sidebar_position: 3
 sidebar_label: 实机验收与工程档案
 title: 实机验收记录与工程档案
-description: 集中归档第 0—14 章的实机与模型验收批次、产物 SHA-256、历史失败留痕、第三方源码来源与依赖审计策略。
+description: 集中归档第 0—15 章的实机与模型验收批次、产物 SHA-256、历史失败留痕、第三方源码来源与依赖审计策略。
 ---
 
 为了保持教程正文清晰可读，我们将各章的**实机测试批次、APK 校验和、历史失败留痕、Instrumentation 命令、第三方开源许可与 npm 审计记录**统一集中归档在这里。
@@ -87,11 +87,12 @@ adb -s "$SERIAL" shell am instrument -w \
 | **第 12 章** | [chapter-12](https://github.com/kkkhs/pocketrun/releases/tag/chapter-12)（`6f4ee43`；检查点 [`de9cf23`](https://github.com/kkkhs/pocketrun/commit/de9cf23b75676dae52ee78de2eac3ac522ae904d)）· [#27](https://github.com/kkkhs/pocketrun/pull/27) | 2026-11-25—26，同一冻结正常包（Debug APK `26b16f6e0d97d47b99afa466f1644b767884c1a803c5ec4dd8189705985db847`，Test APK `a1111bcefc964bcef430a95ddc4cffe02ac2f5644d99b070bb5e469cfde01793`）：100 项 `taskhost` JVM、90 项 UI、ARM64 三构建、11 项 Android 测试（6 项隔离记忆存储 + 凭据/SDK/网关/上下文）通过；经本机兼容网关调用 Seed 2.1 Turbo 真实完成 Report A → 改写 B 并重启 App 重新选择（两次均 121 编码字节）→ 确认空快照后删除并重启 → 旧入口无记忆任务；恶意“自动批准 CSV”测试笔记仍停在手机审批，删笔记立即触发 `cancelled / MEMORY_CHANGED` | 保留原失败：空 JSON 误计 0 字节（实为 `[]` 占 2 字节）的初版断言错误、2 次 UI 驱动错过批准过期、1 项 UI 读取超时、1 项无记忆任务首轮 `MODEL_TRANSPORT_ERROR`、以及未等待删除提交即停 App 导致重启仍保留 B 的批次 |
 | **第 13 章** | [chapter-13](https://github.com/kkkhs/pocketrun/releases/tag/chapter-13)（`4310efa`；检查点 [`955f77a`](https://github.com/kkkhs/pocketrun/commit/955f77ac55a854766c1625392b04df680dd73467) / [`427c31c`](https://github.com/kkkhs/pocketrun/commit/427c31c4e1112fbfb99b79eb652ea3fd49040838) / [`5d7208e`](https://github.com/kkkhs/pocketrun/commit/5d7208e)）· [#28](https://github.com/kkkhs/pocketrun/pull/28) | 133 项选定 JVM、100 项 Jest、App check/audit 与 ARM64 三构建通过；7 项隔离 Android 检查（4 项加密 journal + 3 项真实 App UID 无覆盖发布/staging 阻断）在初版（Debug `70450378fb8e0ae5d66b303ddbab88d1f6809b28d76529440d81c207953d53d7`、Test `df270f8d01d13b3e404dd28ada166ca35dc123e42220d050b8ced3bdebd62625`、本地 Release `efc88f2a48990b1d3933ce12de2e8a2aefd7fc86241b2909ec2aee1176294f61`）与终版重建包（Debug `5d7e355fe44a1c01c46589f505012f762a85fcc7a7ab10a5dc1b8a2f8289a4bc`、Test `da0fe8956a606e218ffae73bbbd7ef89aa563024e7928890ff6ccba77d58cf5d`、本地 Release `ecc4b27902fde3edfef0d95c6ab842e69d59e51aa65453732c55aa2b7bdd9885`）均通过；专用 API 36 ARM64 模拟器 + 本机网关 Seed 2.1 Turbo 实测 6 步逐次审批完整闭环（`run_6a6f0e0b58ac4916acadaac13feeddc8`、`items=2;quantity=5`，输入 SHA `03a284b2a2b67203633c4574af106e9c9adbf6f314d8cac5547f90a834245d79`，输出 SHA `ca121741655dc1fab8d71525276a1302d27dd51357646d36487c11b90cc7c6d9`）；3 处中断（待审批、输入后未观察、经仅 AndroidTest 含有的 FileObserver/pidfd 助手命中发布窗口暂停并停 App）及新 run 核对（`run_774f2d8469d244e49c592a16fdecd466` 报告 `OUTPUT_ALREADY_PRESENT`、文件 inode/字节不变，且准确 Demo 现状仅用 3 步跳过重复输入）全部验证；源码 Release（564 文件，匿名下载 SHA `a24dcfb1a819525847f9d1dc2f59265b538db474d27d8b96a3c649cd56996b8b`）无 APK | 保留原失败：初版 JVM 夹具 wire 名/SDK 字段与常量编译错误；初版 UI 缺完成字段校验与解析失败残留审批按钮（已修）；实际预检曾遇 `DEMO_OBSERVATION_UNAVAILABLE`、第二 uiautomator 观察器驱动失败、`APPROVAL_EXPIRED`、测试助手初轮误判 `filesDir` 0771 权限、以及首次已有 Demo 任务两步后 `MODEL_TRANSPORT_ERROR` |
 
-## 第 14 章：对话产品外壳与通用工作区工具
+## 第 14—15 章：对话产品外壳、双协议与受控工作台
 
 | 章节 | 实现入口与检查范围 | 已记录结果 | 明确未测范围 / 边界说明 |
 | --- | --- | --- | --- |
-| **第 14 章** | `ChatScreen.tsx`、`SettingsScreen.tsx`、`App.tsx`、`ChatEngine.kt`、`ConversationStore.kt`、`ConversationCodec.kt`、`WorkspaceSession.kt`、通用工作区工具（`list_files / read_file / write_file`）与 SSE `TextDelta` 流式推送 | 2026-11-26：App TypeScript、ESLint（0 error / 0 warning）、14 套共 104 项 Jest（含 `App.test.tsx` 多标签切换与 `ChatScreen.test.tsx` 流式与内联审批卡片）、146 项选定 Kotlin JVM（含 `ConversationCodecTest` 与真实 `WorkspaceSession` + `TaskHost` 驱动的 `ChatEngineTest`）、ARM64 Debug / Release（含 `lintVitalRelease`）/ AndroidTest 三种 APK 构建、以及全套网站 Docusaurus 构建均通过；Ubuntu 完整 Android CI 与 Pages CI 见对应 PR 检查 | Jest 与 JVM 合成流式测试不替代真机/模拟器 GUI 实操与真实远端大模型端到端对话；通用受控 Shell、第三方 App 操控与多模态截图观察按路线图留待后续章节 |
+| **第 14 章** | `ChatScreen.tsx`、`SettingsScreen.tsx`、`App.tsx`、`ChatEngine.kt`、`ConversationStore.kt`、`ConversationCodec.kt`、`WorkspaceSession.kt`、通用工作区工具（`list_files / read_file / write_file`）与 SSE `TextDelta` 流式推送（[PR #31](https://github.com/kkkhs/pocketrun/pull/31)） | 2026-11-26：App TypeScript、ESLint（0 error / 0 warning）、14 套 104 项 Jest、146 项选定 Kotlin JVM、Ubuntu 完整 Android CI（5m50s）与 Pages CI 全部通过并合入 `main @ 869c0d5` | Jest 与 JVM 合成流式测试不替代真机/模拟器 GUI 实操与真实远端大模型端到端对话 |
+| **第 15 章** | `OpenAiModelTransport.kt`、`ModelTransports`、`LinuxSession.runShell`、`linux.run_shell` 工具、`WorkspaceFilesScreen.tsx`、`MarkdownView.tsx`、协议切换与快捷预设 | 2026-11-27：App TypeScript、ESLint（0 error / 0 warning）、16 套 107 项 Jest（含 `WorkspaceFilesScreen.test.tsx` 与 `MarkdownView.test.tsx`）、本地 Kotlin JVM（含 `OpenAiModelTransportTest` 本地回环 SSE 双向工具回放测试）与 ARM64 Debug/Release/AndroidTest 三构建通过；完整 Ubuntu Android CI 与 Pages CI 见对应 PR 检查 | 本地回环 SSE 与合成工具测试不替代真机/模拟器安装实操、真机 PRoot 命令执行与真实远端 OpenAI/Anthropic 联调 |
 
 ## 第三方源码来源与开源许可
 

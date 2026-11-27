@@ -7,6 +7,7 @@ import java.security.MessageDigest
 enum class PocketRunTool(val wireName: String) {
     ANDROID_DEVICE_INFO("android.device_info"),
     LINUX_COUNT_DEMO_CSV("linux.count_demo_csv"),
+    LINUX_RUN_SHELL("linux.run_shell"),
     WORKSPACE_READ_DEMO_CSV("workspace.read_demo_csv"),
     WORKSPACE_PUBLISH_DEMO_RESULT("workspace.publish_demo_result"),
     WORKSPACE_LIST_FILES("workspace.list_files"),
@@ -35,6 +36,11 @@ internal sealed interface ParsedAction {
 
     data object CountDemoCsv : ParsedAction {
         override val tool = PocketRunTool.LINUX_COUNT_DEMO_CSV
+        override val approvalRequired = true
+    }
+
+    data class RunLinuxShell(val command: String, val timeoutSec: Int) : ParsedAction {
+        override val tool = PocketRunTool.LINUX_RUN_SHELL
         override val approvalRequired = true
     }
 
@@ -136,6 +142,15 @@ internal object ToolSchema {
             PocketRunTool.LINUX_COUNT_DEMO_CSV -> {
                 exactKeys(copied, emptySet())
                 ParsedAction.CountDemoCsv
+            }
+            PocketRunTool.LINUX_RUN_SHELL -> {
+                val allowed = if (copied.containsKey("timeout_sec")) setOf("command", "timeout_sec") else setOf("command")
+                exactKeys(copied, allowed)
+                val command = strictString(copied, "command", 1024)
+                reject(command.isNotBlank() && !command.contains('\u0000'), "INVALID_COMMAND", "Shell command must be non-empty UTF-8 text.")
+                val timeoutSec = if (copied.containsKey("timeout_sec")) strictInt(copied, "timeout_sec") else 10
+                reject(timeoutSec in 1..15, "INVALID_TIMEOUT", "timeout_sec must be between 1 and 15.")
+                ParsedAction.RunLinuxShell(command, timeoutSec)
             }
             PocketRunTool.WORKSPACE_READ_DEMO_CSV -> {
                 exactKeys(copied, emptySet())

@@ -23,11 +23,27 @@ internal class LinuxSession(
         val stdout: String, val stderr: String, val exitCodes: List<Int>, val stageExitCodes: List<Int>,
         val durationMillis: Long, val appUid: Int, val alpineVersion: String?, val guestUid: Int?,
         val cwd: String?, val lineCount: Int?, val cleanupStatus: String = "unproven")
-    class Operation internal constructor(val token: String, internal val run: CommandPipeline.Run?, internal val owner: LinuxSession) {
+    data class ShellResult(
+        val token: String,
+        val installationGeneration: String,
+        val status: String,
+        val stdout: String,
+        val stderr: String,
+        val exitCode: Int,
+        val durationMillis: Long,
+        val appUid: Int,
+        val cleanupStatus: String = "unproven",
+    )
+    class Operation internal constructor(
+        val token: String,
+        internal val run: CommandPipeline.Run?,
+        internal val owner: LinuxSession,
+        timeoutMillis: Long = CommandPipeline.TIMEOUT_MS,
+    ) {
         internal val cancelled = AtomicBoolean(false)
         internal var finished = false
         internal var settled = false // guarded by the session lock; cancellation has a definite commit point.
-        internal val deadline = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(CommandPipeline.TIMEOUT_MS)
+        internal val deadline = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(timeoutMillis)
     }
     private val lock = Any()
     private val pipeline = CommandPipeline()
@@ -36,13 +52,14 @@ internal class LinuxSession(
     private var installation: RootfsInstaller.Installation? = null
     private val workspace = File(filesDirectory, "workspaces/demo")
 
-    fun reservePrepare(token: String): Operation = reserve(token, false)
-    fun reserve(token: String): Operation = reserve(token, true)
-    private fun reserve(token: String, command: Boolean): Operation = synchronized(lock) {
+    fun reservePrepare(token: String): Operation = reserve(token, false, CommandPipeline.TIMEOUT_MS)
+    fun reserve(token: String, timeoutMillis: Long = CommandPipeline.TIMEOUT_MS): Operation = reserve(token, true, timeoutMillis)
+    private fun reserve(token: String, command: Boolean, timeoutMillis: Long): Operation = synchronized(lock) {
         require(token.matches(Regex("[a-zA-Z0-9_.:-]{1,96}"))) { "Linux correlation token 无效。" }
+        require(timeoutMillis in 1..CommandPipeline.MAX_SHELL_TIMEOUT_MS) { "Linux 超时设置无效。" }
         check(!closed) { "Linux 会话已关闭。" }
         check(current == null) { "已有 Linux 操作正在运行。" }
-        Operation(token, if (command) pipeline.reserve() else null, this).also { current = it }
+        Operation(token, if (command) pipeline.reserve() else null, this, timeoutMillis).also { current = it }
     }
 
     fun prepare(operation: Operation): Info {
@@ -143,6 +160,97 @@ internal class LinuxSession(
         }
     }
 
+    fun runShell(operation: Operation, command: String, timeoutMillis: Long = 10_000L): ShellResult {
+        val started = System.nanoTime()
+        var owned: LinuxDirectoryLease? = null
+        var allocationAttempted = false
+        var pipelineCleanupProven = true
+        var reservationReleased = false
+        var cleanupAttempted = false
+        var primaryFailure: Throwable? = null
+        try {
+            val outcome = try {
+                guard(operation)
+                require(command.isNotBlank() && command.toByteArray(Charsets.UTF_8).size <= MAX_SHELL_COMMAND_BYTES &&
+                    !command.contains('\u0000')) { "Shell 命令无效或超过上限。" }
+                require(timeoutMillis in 1_000L..CommandPipeline.MAX_SHELL_TIMEOUT_MS) { "Shell 超时必须在 1..15 秒内。" }
+                val root = synchronized(lock) { checkNotNull(installation) { "请先准备 Linux 环境。" }.root }
+                installer.verifyArtifacts { guard(operation) }
+                installer.validateInstalled { guard(operation) }
+                require(workspace.isDirectory && workspace.canonicalFile == workspace.absoluteFile) { "私有工作目录无效。" }
+                val runs = File(filesDirectory, "linux/runs")
+                allocationAttempted = true
+                owned = LinuxDirectoryLease.allocate(runs, LinuxDirectoryLease.Kind.RUN,
+                    unused = { directory, budget -> pipelineCleanupProven && canRemoveRun(directory, budget) },
+                    guard = { guard(operation) })
+                val tmp = File(owned.directory, "tmp")
+                RootfsTar.privateDirectory(tmp)
+                beforeDemoExecution(owned.directory)
+                val controller = LinuxProcessControl(owned.directory, File(installer.nativeDirectory, "libproot.so"))
+                val argv = shellArgv(root, workspace, tmp, installer.nativeDirectory, installer.runtime.bindings, command)
+                val env = demoEnvironment(installer.nativeDirectory, tmp, parentPid, controller.tracerRecord)
+                val remaining = TimeUnit.NANOSECONDS.toMillis(operation.deadline - System.nanoTime())
+                if (remaining <= 0) throw TimeoutException()
+                pipelineCleanupProven = false
+                val result = pipeline.execute(
+                    checkNotNull(operation.run), workspace, listOf(argv),
+                    timeoutMillis = remaining.coerceAtMost(timeoutMillis), env = env,
+                    clearEnvironment = true, onStarted = controller::registerOwned,
+                    terminateOwned = controller::terminateOwned,
+                ) { guard(operation) }
+                pipelineCleanupProven = result.cleanupProven
+                val code = result.exitCodes.firstOrNull() ?: -1
+                ShellResult(
+                    token = operation.token,
+                    installationGeneration = installer.runtime.generation,
+                    status = result.status,
+                    stdout = result.stdout,
+                    stderr = result.stderr,
+                    exitCode = code,
+                    durationMillis = elapsed(started),
+                    appUid = appUid,
+                )
+            } catch (error: Exception) {
+                val status = when (error) {
+                    is CancellationException -> "cancelled"
+                    is TimeoutException -> "timeout"
+                    else -> "failed"
+                }
+                ShellResult(operation.token, installer.runtime.generation, status, "",
+                    error.message.orEmpty().take(256), -1, elapsed(started), appUid)
+            }
+            val originalRun = checkNotNull(operation.run)
+            pipeline.abandon(originalRun)
+            reservationReleased = true
+            cleanupAttempted = true
+            val actualProcessCleanup = originalRun.cleanupProven && originalRun.ioCleanupProven
+            val proven = if (allocationAttempted && owned == null) false else try {
+                owned?.close()
+                pipelineCleanupProven && actualProcessCleanup && (owned == null || owned.cleanupProven)
+            } catch (_: Exception) { false }
+            val cleaned = outcome.copy(cleanupStatus = if (proven) "done" else "unproven", durationMillis = elapsed(started))
+            return synchronized(lock) {
+                operation.settled = true
+                if (operation.cancelled.get() || closed) cleaned.copy(status = "cancelled") else cleaned
+            }
+        } catch (error: Throwable) {
+            primaryFailure = error
+            throw error
+        } finally {
+            try {
+                if (!reservationReleased) pipeline.abandon(checkNotNull(operation.run))
+            } catch (cleanup: Throwable) {
+                if (primaryFailure != null) primaryFailure.addSuppressed(cleanup) else { primaryFailure = cleanup; throw cleanup }
+            } finally {
+                try {
+                    if (!cleanupAttempted) owned?.close()
+                } catch (cleanup: Throwable) {
+                    if (primaryFailure != null) primaryFailure.addSuppressed(cleanup) else throw cleanup
+                } finally { finish(operation) }
+            }
+        }
+    }
+
     fun cancel(token: String): Boolean = synchronized(lock) {
         val operation = current ?: return false
         if (operation.token != token || closed || operation.settled) return false
@@ -201,6 +309,15 @@ internal class LinuxSession(
             "c=\$(cat /tmp/pocketrun-cat.exit) || exit 125; " +
             "printf 'PR_EXITS:%s,%s,%s,%s,%s\\n' \"\$v\" \"\$p\" \"\$u\" \"\$c\" \"\$w\"; " +
             "[ \"\$v,\$p,\$u,\$c,\$w\" = '0,0,0,0,0' ]"
+        internal const val MAX_SHELL_COMMAND_BYTES = 1024
+        internal fun shellArgv(
+            root: File, workspace: File, tmp: File, native: File,
+            bindings: List<LinuxBinding>, command: String,
+        ): List<String> =
+            listOf(File(native, "libproot.so").path, "--kill-on-exit", "-r", root.path, "-w", "/workspace") +
+                bindings.flatMap { listOf("-b", "${File(native, it.name).path}:${it.guestPath}") } +
+                listOf("-b", "${workspace.path}:/workspace", "-b", "${tmp.path}:/tmp", "-b", "/proc:/proc",
+                    "-b", "/dev/null:/dev/null", "/bin/busybox", "sh", "-c", command)
         internal fun demoArgv(root: File, workspace: File, tmp: File, native: File, bindings: List<LinuxBinding>): List<String> =
             listOf(File(native, "libproot.so").path, "--kill-on-exit", "-r", root.path, "-w", "/workspace") +
                 bindings.flatMap { listOf("-b", "${File(native, it.name).path}:${it.guestPath}") } +

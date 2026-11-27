@@ -13,6 +13,7 @@ import NativeTaskHost, {
   type ChatRuntimeState,
   type ModelConfiguration,
 } from './specs/NativePocketRunTaskHost';
+import MarkdownView from './MarkdownView';
 
 export type ThemeColors = {
   background: string;
@@ -56,7 +57,7 @@ const SUGGESTIONS = [
   '查看当前手机的系统版本、API 和 CPU 架构',
   '列出私有工作区里有哪些文件',
   '读取 items.csv 并把汇总结果写入 summary.md',
-  '介绍一下你目前支持哪些工具与安全审批规则',
+  '用 PRoot Linux 命令查看 /etc/alpine-release 和工作区文件列表',
 ];
 
 function parseSummaries(raw: string): ConversationSummary[] {
@@ -90,6 +91,8 @@ function toolDisplayName(wireName: string): string {
       return '写入工作区文件';
     case 'linux.count_demo_csv':
       return 'PRoot 统计演示 CSV';
+    case 'linux.run_shell':
+      return 'PRoot/Alpine 执行命令';
     case 'android.virtual_display_observe_or_demo_input':
       return '虚拟屏观察 / 输入';
     default:
@@ -100,9 +103,13 @@ function toolDisplayName(wireName: string): string {
 export default function ChatScreen({
   colors,
   onOpenSettings,
+  initialPrompt,
+  onConsumeInitialPrompt,
 }: {
   colors: ThemeColors;
   onOpenSettings: () => void;
+  initialPrompt?: string | null;
+  onConsumeInitialPrompt?: () => void;
 }) {
   const [conversations, setConversations] = useState<ConversationSummary[]>([]);
   const [currentId, setCurrentId] = useState<string | null>(null);
@@ -123,6 +130,13 @@ export default function ChatScreen({
   const scrollRef = useRef<ComponentRef<typeof ScrollView> | null>(null);
 
   currentIdRef.current = currentId;
+
+  useEffect(() => {
+    if (initialPrompt) {
+      setDraft(initialPrompt);
+      onConsumeInitialPrompt?.();
+    }
+  }, [initialPrompt, onConsumeInitialPrompt]);
 
   const loadConversation = useCallback(async (id: string) => {
     if (!NativeTaskHost) return;
@@ -518,9 +532,7 @@ export default function ChatScreen({
                       ))}
                     </View>
                   )}
-                  <Text selectable style={[styles.assistantText, { color: colors.text }]}>
-                    {msg.text}
-                  </Text>
+                  <MarkdownView text={msg.text} colors={colors} />
                   {msg.outputTokens > 0 && (
                     <Text style={[styles.metaFooter, { color: colors.muted }]}>
                       {msg.outputTokens} output tokens
@@ -608,9 +620,7 @@ export default function ChatScreen({
               ) : (
                 <View style={styles.streamingBox}>
                   {runtime.streamingText ? (
-                    <Text selectable style={[styles.assistantText, { color: colors.text }]}>
-                      {runtime.streamingText}
-                    </Text>
+                    <MarkdownView text={runtime.streamingText} colors={colors} />
                   ) : (
                     <View style={styles.thinkingRow}>
                       <ActivityIndicator size="small" color={colors.accent} />
@@ -677,7 +687,9 @@ export default function ChatScreen({
             </Text>
           </Pressable>
           <Text numberOfLines={1} style={[styles.modelTag, { color: colors.muted }]}>
-            {config?.hasCredential ? config.model : '未配置模型'}
+            {config?.hasCredential
+              ? `${config.protocol === 'openai' ? 'OpenAI' : 'Anthropic'} · ${config.model}`
+              : '未配置模型'}
           </Text>
         </View>
 

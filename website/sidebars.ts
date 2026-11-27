@@ -44,6 +44,7 @@ const sidebars: SidebarsConfig = {
       collapsed: false,
       items: [
         'chapter-14',
+        'chapter-15',
       ],
     },
     {

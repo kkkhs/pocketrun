@@ -33,6 +33,7 @@ internal object ModelToolSurface {
     private val names = mapOf(
         "android_device_info" to PocketRunTool.ANDROID_DEVICE_INFO.wireName,
         "linux_count_demo_csv" to PocketRunTool.LINUX_COUNT_DEMO_CSV.wireName,
+        "linux_run_shell" to PocketRunTool.LINUX_RUN_SHELL.wireName,
         "android_virtual_display" to PocketRunTool.ANDROID_VIRTUAL_DISPLAY.wireName,
         "workspace_read_demo_csv" to PocketRunTool.WORKSPACE_READ_DEMO_CSV.wireName,
         "workspace_publish_demo_result" to PocketRunTool.WORKSPACE_PUBLISH_DEMO_RESULT.wireName,
@@ -47,6 +48,7 @@ internal object ModelToolSurface {
         "workspace_list_files",
         "workspace_read_file",
         "workspace_write_file",
+        "linux_run_shell",
         "linux_count_demo_csv",
         "android_virtual_display",
     )
@@ -84,6 +86,11 @@ internal object ModelToolSurface {
                     "path" to mapOf("type" to "string", "maxLength" to 128),
                     "content" to mapOf("type" to "string", "maxLength" to 12288),
                 ), listOf("path", "content")),
+            tool("linux_run_shell", "Run a shell command in the App's sandboxed PRoot/Alpine BusyBox environment with cwd=/workspace (ordinary App UID, no root); requires phone approval.",
+                mapOf(
+                    "command" to mapOf("type" to "string", "maxLength" to 1024),
+                    "timeout_sec" to mapOf("type" to "integer", "minimum" to 1, "maximum" to 15),
+                ), listOf("command")),
             tool("linux_count_demo_csv", "Count lines in private demo items.csv via PRoot/Alpine; requires phone approval.", emptyMap(), emptyList()),
             displayTool(listOf("observe", "demo_tap", "demo_text")),
         )
@@ -146,6 +153,7 @@ internal object ModelToolSurface {
         val allow = when (step.call.tool) {
             PocketRunTool.ANDROID_DEVICE_INFO.wireName -> setOf("androidVersion", "apiLevel", "supportedAbis")
             PocketRunTool.LINUX_COUNT_DEMO_CSV.wireName -> setOf("lineCount", "exitCodes", "stageExitCodes", "sourceStatus", "cleanupStatus")
+            PocketRunTool.LINUX_RUN_SHELL.wireName -> if (mode == ModelMode.CHAT) setOf("exitCode", "stdout", "stderr", "sourceStatus", "cleanupStatus") else emptySet()
             PocketRunTool.WORKSPACE_READ_DEMO_CSV.wireName -> if (mode == ModelMode.COMPLETE) setOf("source", "csvText", "inputDigest") else emptySet()
             PocketRunTool.WORKSPACE_PUBLISH_DEMO_RESULT.wireName -> if (mode == ModelMode.COMPLETE) setOf("source", "inputDigest", "publicationStatus", "outputDigest") else emptySet()
             PocketRunTool.WORKSPACE_LIST_FILES.wireName -> if (mode == ModelMode.CHAT) setOf("count", "files") else emptySet()
@@ -160,7 +168,8 @@ internal object ModelToolSurface {
             val max = when (key) {
                 "csvText" -> DemoCsvReport.MAX_BYTES
                 "content" -> ToolSchema.MAX_WRITE_CONTENT_BYTES
-                "files" -> 4096
+                "stdout" -> 8_192
+                "stderr", "files" -> 4_096
                 else -> 256
             }
             value.toByteArray(Charsets.UTF_8).size <= max

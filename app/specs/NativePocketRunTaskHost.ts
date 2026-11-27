@@ -43,6 +43,14 @@ export type ModelConfiguration = {
   endpoint: string;
   model: string;
   hasCredential: boolean;
+  protocol?: string;
+};
+
+export type WorkspaceFileContent = {
+  path: string;
+  content: string;
+  bytes: number;
+  sha256: string;
 };
 
 export type AgentLoopState = {
@@ -121,6 +129,15 @@ export interface Spec extends TurboModule {
   getChatRuntimeState(): Promise<ChatRuntimeState>;
   cancelChatTurn(): Promise<ChatRuntimeState>;
   listWorkspaceFiles(): Promise<string>;
+  readWorkspaceFileText(relativePath: string): Promise<WorkspaceFileContent>;
+  writeWorkspaceFileText(relativePath: string, content: string): Promise<WorkspaceFileContent>;
+  deleteWorkspaceFile(relativePath: string): Promise<string>;
+  saveModelConfigurationWithProtocol(
+    endpoint: string,
+    model: string,
+    apiKey: string,
+    protocol: string,
+  ): Promise<ModelConfiguration>;
   getCompleteTaskState(): Promise<CompleteTaskState>;
   prepareCompleteTask(): Promise<CompleteTaskState>;
   beginCompleteTask(expectedRunId: string, expectedDisplayId: number,

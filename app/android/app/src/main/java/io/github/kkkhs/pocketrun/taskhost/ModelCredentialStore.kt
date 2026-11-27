@@ -15,7 +15,8 @@ internal class ModelCredentialStore(context: Context, private val alias: String 
             val decoded = EncryptedSnapshotFile.read(file, alias, AAD, MAX_FILE_BYTES - 29) ?: return null
             try {
                 val value = JSONObject(String(decoded, Charsets.UTF_8))
-                val settings = ModelSettings(value.getString("endpoint"), value.getString("model"))
+                val protocol = ModelProtocol.fromWireName(value.optString("protocol", "anthropic"))
+                val settings = ModelSettings(value.getString("endpoint"), value.getString("model"), protocol)
                 val credential = value.getString("apiKey")
                 ModelSettings.validateCredential(credential)
                 ModelCredential(settings, credential)
@@ -30,8 +31,13 @@ internal class ModelCredentialStore(context: Context, private val alias: String 
         val credential = if (suppliedKey.isEmpty()) load()?.apiKey
             ?: throw IllegalStateException("MODEL_CREDENTIAL_REQUIRED") else suppliedKey
         ModelSettings.validateCredential(credential)
-        val plaintext = JSONObject().put("endpoint", settings.endpoint).put("model", settings.model)
-            .put("apiKey", credential).toString().toByteArray(Charsets.UTF_8)
+        val plaintext = JSONObject()
+            .put("endpoint", settings.endpoint)
+            .put("model", settings.model)
+            .put("protocol", settings.protocol.wireName)
+            .put("apiKey", credential)
+            .toString()
+            .toByteArray(Charsets.UTF_8)
         try { EncryptedSnapshotFile.write(file, alias, AAD, plaintext, MAX_FILE_BYTES - 29) }
         finally { plaintext.fill(0) }
     }

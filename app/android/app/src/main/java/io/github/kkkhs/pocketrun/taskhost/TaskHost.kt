@@ -295,7 +295,11 @@ class TaskHost private constructor(
         if (request.action.approvalRequired && expireApprovalLocked(request)) return null
         executionSequence = Math.addExact(executionSequence, 1L)
         request.executionEpoch = executionSequence
-        request.executionDeadlineNanos = boundedDeadline(request, executionTimeoutNanos)
+        val effectiveTimeoutNanos = when (val act = request.action) {
+            is ParsedAction.RunLinuxShell -> maxOf(executionTimeoutNanos, TimeUnit.SECONDS.toNanos(act.timeoutSec.toLong() + 3L))
+            else -> executionTimeoutNanos
+        }
+        request.executionDeadlineNanos = boundedDeadline(request, effectiveTimeoutNanos)
         request.preparing = true
         status = view(request, HostPhase.EXECUTING, deadline = request.executionDeadlineNanos)
         return Launch(request, executionSequence)
@@ -306,6 +310,7 @@ class TaskHost private constructor(
             when (val binding = launch.request.binding) {
                 is Binding.Device -> capabilities.prepareDeviceInfo(binding.target)
                 is Binding.Linux -> capabilities.prepareCountDemoCsv(binding.target, binding.csv)
+                is Binding.LinuxShell -> capabilities.prepareLinuxShell(binding.target, binding.command, binding.timeoutSec)
                 is Binding.Workspace -> when (val action = binding.action) {
                     ParsedAction.ReadDemoCsv -> capabilities.prepareReadDemoCsv(binding.target)
                     is ParsedAction.PublishDemoResult -> capabilities.preparePublishDemoResult(binding.target, action.text) {
@@ -550,6 +555,20 @@ class TaskHost private constructor(
                 CanonicalChildPath.DEMO_RELATIVE_PATH)
             Binding.Linux(target.copy(workspaceRoot = target.workspaceRoot.toAbsolutePath().normalize()), csv)
         }
+        is ParsedAction.RunLinuxShell -> {
+            val target = snapshot("Linux shell") { capabilities.ensureLinuxShellTarget() }
+            requireUid(target.packageUid)
+            validateGeneration(target.rootfsGeneration)
+            if (!target.backendAlive) throw ToolValidationException("BACKEND_NOT_READY", "Linux backend is unavailable.")
+            if (!target.verifiedLinuxSession) {
+                throw ToolValidationException("LINUX_SESSION_NOT_VERIFIED", "LinuxSession has not verified this rootfs.")
+            }
+            Binding.LinuxShell(
+                target.copy(workspaceRoot = target.workspaceRoot.toAbsolutePath().normalize()),
+                action.command,
+                action.timeoutSec,
+            )
+        }
         ParsedAction.ReadDemoCsv, is ParsedAction.PublishDemoResult -> {
             val target = snapshot("Private workspace") { capabilities.currentWorkspaceTarget() }
             requireUid(target.packageUid)
@@ -627,6 +646,17 @@ class TaskHost private constructor(
                     else -> null
                 }
             }
+            is Binding.LinuxShell -> {
+                val current = capabilities.ensureLinuxShellTarget()
+                when {
+                    !current.backendAlive -> "BACKEND_DEATH"
+                    !current.verifiedLinuxSession -> "SESSION_INVALIDATED"
+                    current.rootfsGeneration != binding.target.rootfsGeneration ||
+                        current.packageUid != binding.target.packageUid ||
+                        current.workspaceRoot.toAbsolutePath().normalize() != binding.target.workspaceRoot -> "TARGET_CHANGED"
+                    else -> null
+                }
+            }
             is Binding.Workspace -> if (capabilities.currentWorkspaceTarget() == binding.target) null else "INPUT_CHANGED"
             is Binding.WorkspaceGeneral -> {
                 val current = capabilities.currentWorkspaceRoot()
@@ -671,6 +701,13 @@ class TaskHost private constructor(
                 "rootfsGeneration" to binding.target.rootfsGeneration,
                 "guestPath" to CanonicalChildPath.DEMO_GUEST_PATH,
                 "hostPath" to binding.csv.toString(),
+            )
+            is Binding.LinuxShell -> parts += listOf(
+                "packageUid" to binding.target.packageUid.toString(),
+                "rootfsGeneration" to binding.target.rootfsGeneration,
+                "workspaceRoot" to binding.target.workspaceRoot.toString(),
+                "command" to binding.command,
+                "timeoutSec" to binding.timeoutSec.toString(),
             )
             is Binding.Workspace -> {
                 parts += listOf("packageUid" to binding.target.packageUid.toString(), "root" to binding.target.root.toString(),
@@ -748,6 +785,7 @@ class TaskHost private constructor(
     private fun ActiveRequest.targetLabel(): String = when (val value = binding) {
         is Binding.Device -> "PocketRun App UID ${value.target.packageUid}"
         is Binding.Linux -> "${CanonicalChildPath.DEMO_GUEST_PATH} · rootfs ${value.target.rootfsGeneration} · UID ${value.target.packageUid}"
+        is Binding.LinuxShell -> "PRoot/Alpine Shell（/workspace · 超时 ${value.timeoutSec}s）· UID ${value.target.packageUid}"
         is Binding.Workspace -> "private ${if (value.action == ParsedAction.ReadDemoCsv) "items.csv disclosure" else "result.txt no-overwrite publication"} · input ${value.target.inputDigest} · UID ${value.target.packageUid}"
         is Binding.WorkspaceGeneral -> when (val act = value.action) {
             ParsedAction.ListWorkspaceFiles -> "工作区文件列表 · UID ${value.target.packageUid}"
@@ -778,6 +816,9 @@ class TaskHost private constructor(
             override val backendEpoch = "app:${target.packageUid}"
         }
         data class Linux(val target: LinuxTarget, val csv: Path) : Binding {
+            override val backendEpoch = "rootfs:${target.rootfsGeneration}:${target.packageUid}"
+        }
+        data class LinuxShell(val target: LinuxTarget, val command: String, val timeoutSec: Int) : Binding {
             override val backendEpoch = "rootfs:${target.rootfsGeneration}:${target.packageUid}"
         }
         data class Workspace(val target: WorkspaceTarget, val action: ParsedAction) : Binding {
