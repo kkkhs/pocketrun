@@ -117,6 +117,7 @@ export type ChatRuntimeState = {
   outputTokens: number;
   code: string | null;
   errorMessage: string | null;
+  latestPreviewUri?: string | null;
 };
 
 export interface Spec extends TurboModule {

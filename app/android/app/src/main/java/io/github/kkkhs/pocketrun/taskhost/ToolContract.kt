@@ -13,6 +13,13 @@ enum class PocketRunTool(val wireName: String) {
     WORKSPACE_LIST_FILES("workspace.list_files"),
     WORKSPACE_READ_FILE("workspace.read_file"),
     WORKSPACE_WRITE_FILE("workspace.write_file"),
+    APP_LIST_APPS("app.list_apps"),
+    APP_OPEN("app.open"),
+    APP_OBSERVE("app.observe"),
+    APP_TAP("app.tap"),
+    APP_SWIPE("app.swipe"),
+    APP_INPUT_TEXT("app.input_text"),
+    APP_PRESS_KEY("app.press_key"),
     ANDROID_VIRTUAL_DISPLAY("android.virtual_display_observe_or_demo_input");
 
     companion object {
@@ -69,6 +76,41 @@ internal sealed interface ParsedAction {
         override val approvalRequired = true
     }
 
+    data class ListApps(val query: String?) : ParsedAction {
+        override val tool = PocketRunTool.APP_LIST_APPS
+        override val approvalRequired = false
+    }
+
+    data class OpenApp(val packageName: String) : ParsedAction {
+        override val tool = PocketRunTool.APP_OPEN
+        override val approvalRequired = true
+    }
+
+    data object ObserveApp : ParsedAction {
+        override val tool = PocketRunTool.APP_OBSERVE
+        override val approvalRequired = true
+    }
+
+    data class AppTap(val x: Int, val y: Int) : ParsedAction {
+        override val tool = PocketRunTool.APP_TAP
+        override val approvalRequired = true
+    }
+
+    data class AppSwipe(val x1: Int, val y1: Int, val x2: Int, val y2: Int, val durationMs: Int) : ParsedAction {
+        override val tool = PocketRunTool.APP_SWIPE
+        override val approvalRequired = true
+    }
+
+    data class AppInputText(val text: String) : ParsedAction {
+        override val tool = PocketRunTool.APP_INPUT_TEXT
+        override val approvalRequired = true
+    }
+
+    data class AppPressKey(val key: String) : ParsedAction {
+        override val tool = PocketRunTool.APP_PRESS_KEY
+        override val approvalRequired = true
+    }
+
     sealed interface Display : ParsedAction {
         val expectedDisplayId: Int
         val expectedDisplayEpoch: Long
@@ -116,6 +158,9 @@ internal object ToolSchema {
     private const val MAX_KEY_BYTES = 64
     private const val MAX_ARGUMENTS = 8
     private const val MAX_TEXT_BYTES = 64
+    private const val MAX_APP_TEXT_CHARS = 256
+    private val PACKAGE_PATTERN = Regex("[A-Za-z][A-Za-z0-9_]*(\\.[A-Za-z0-9_]+)+")
+    private val ALLOWED_APP_KEYS = setOf("BACK", "HOME", "ENTER", "DEL", "TAB", "UP", "DOWN", "LEFT", "RIGHT")
     private val DISPLAY_BASE = setOf("action", "expectedDisplayId", "expectedDisplayEpoch")
 
     fun validate(call: RawToolCall): ParsedAction {
@@ -181,6 +226,63 @@ internal object ToolSchema {
                 reject(path.isNotBlank() && !path.contains('\u0000'), "INVALID_PATH", "Invalid workspace file path.")
                 reject(!content.contains('\u0000'), "INVALID_TEXT", "File content must be valid UTF-8 text.")
                 ParsedAction.WriteWorkspaceFile(path, content)
+            }
+            PocketRunTool.APP_LIST_APPS -> {
+                val allowed = if (copied.containsKey("query")) setOf("query") else emptySet()
+                exactKeys(copied, allowed)
+                val query = if (copied.containsKey("query")) {
+                    strictString(copied, "query", 64).trim().ifEmpty { null }
+                } else null
+                ParsedAction.ListApps(query)
+            }
+            PocketRunTool.APP_OPEN -> {
+                exactKeys(copied, setOf("package_name"))
+                val pkg = strictString(copied, "package_name", 128)
+                reject(pkg.length in 3..128 && PACKAGE_PATTERN.matches(pkg), "INVALID_PACKAGE", "Invalid Android package name.")
+                ParsedAction.OpenApp(pkg)
+            }
+            PocketRunTool.APP_OBSERVE -> {
+                exactKeys(copied, emptySet())
+                ParsedAction.ObserveApp
+            }
+            PocketRunTool.APP_TAP -> {
+                exactKeys(copied, setOf("x", "y"))
+                val x = strictInt(copied, "x")
+                val y = strictInt(copied, "y")
+                reject(x in 0 until 720 && y in 0 until 1280, "INVALID_TAP", "Tap coordinate is outside virtual display.")
+                ParsedAction.AppTap(x, y)
+            }
+            PocketRunTool.APP_SWIPE -> {
+                val allowed = if (copied.containsKey("duration_ms")) {
+                    setOf("x1", "y1", "x2", "y2", "duration_ms")
+                } else {
+                    setOf("x1", "y1", "x2", "y2")
+                }
+                exactKeys(copied, allowed)
+                val x1 = strictInt(copied, "x1")
+                val y1 = strictInt(copied, "y1")
+                val x2 = strictInt(copied, "x2")
+                val y2 = strictInt(copied, "y2")
+                val durationMs = if (copied.containsKey("duration_ms")) strictInt(copied, "duration_ms") else 320
+                reject(
+                    x1 in 0 until 720 && y1 in 0 until 1280 && x2 in 0 until 720 && y2 in 0 until 1280,
+                    "INVALID_SWIPE",
+                    "Swipe coordinates are outside virtual display.",
+                )
+                reject(durationMs in 100..1500, "INVALID_SWIPE", "duration_ms must be between 100 and 1500.")
+                ParsedAction.AppSwipe(x1, y1, x2, y2, durationMs)
+            }
+            PocketRunTool.APP_INPUT_TEXT -> {
+                exactKeys(copied, setOf("text"))
+                val text = strictString(copied, "text", 1024)
+                reject(text.length in 1..MAX_APP_TEXT_CHARS && !text.contains('\u0000'), "INVALID_TEXT", "Text must be 1..256 UTF-8 chars.")
+                ParsedAction.AppInputText(text)
+            }
+            PocketRunTool.APP_PRESS_KEY -> {
+                exactKeys(copied, setOf("key"))
+                val key = strictString(copied, "key", 16).uppercase()
+                reject(key in ALLOWED_APP_KEYS, "INVALID_KEY", "Unsupported key name.")
+                ParsedAction.AppPressKey(key)
             }
             PocketRunTool.ANDROID_VIRTUAL_DISPLAY -> parseDisplay(copied)
         }

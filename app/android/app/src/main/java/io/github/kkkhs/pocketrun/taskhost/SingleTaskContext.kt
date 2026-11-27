@@ -40,6 +40,7 @@ class SingleTaskContext(
     private val lock = Any()
     private var sequence = 0L
     private var closed = false
+    private var activeBudget = budget
     private var taskId: String? = null
     private var goal: String? = null
     private var phase = ContextPhase.IDLE
@@ -49,13 +50,16 @@ class SingleTaskContext(
     private var pendingNumber: Int? = null
     private var complete: CompleteTaskContract? = null
 
-    fun begin(value: String): ContextStatus = synchronized(lock) { beginLocked(value, null) }
+    fun begin(value: String): ContextStatus = synchronized(lock) { beginLocked(value, null, budget) }
+
+    internal fun beginWithBudget(value: String, customBudget: ContextBudget): ContextStatus =
+        synchronized(lock) { beginLocked(value, null, customBudget) }
 
     internal fun beginComplete(value: String, contract: CompleteTaskContract): ContextStatus = synchronized(lock) {
-        beginLocked(value, contract)
+        beginLocked(value, contract, budget)
     }
 
-    private fun beginLocked(value: String, contract: CompleteTaskContract?): ContextStatus {
+    private fun beginLocked(value: String, contract: CompleteTaskContract?, nextBudget: ContextBudget): ContextStatus {
         refreshLocked()
         check(!closed) { "Task context is closed." }
         if (isActive() || hostOwnsSlot()) throw HostBusyException()
@@ -63,13 +67,14 @@ class SingleTaskContext(
         require(bytes(nextGoal) in 1..1024) { "Task goal must be 1..1024 UTF-8 bytes." }
         host.installCompleteContract(contract)
         complete = contract
+        activeBudget = nextBudget
         taskId = "task-${Math.addExact(sequence, 1L).also { sequence = it }}"
         goal = nextGoal
         steps.clear()
         pendingNumber = null
         code = null
         phase = ContextPhase.READY
-        deadline = clock.nowNanos() + TimeUnit.MILLISECONDS.toNanos(budget.maxDurationMillis)
+        deadline = clock.nowNanos() + TimeUnit.MILLISECONDS.toNanos(activeBudget.maxDurationMillis)
         return snapshot()
     }
 
@@ -77,7 +82,7 @@ class SingleTaskContext(
         requireCurrent(expectedTaskId)
         refreshLocked()
         check(phase == ContextPhase.READY && pendingNumber == null) { "Task is not ready for another step." }
-        if (steps.size >= budget.maxSteps) return stopLocked(ContextPhase.BUDGET_EXHAUSTED, "STEP_BUDGET")
+        if (steps.size >= activeBudget.maxSteps) return stopLocked(ContextPhase.BUDGET_EXHAUSTED, "STEP_BUDGET")
         val copied: RawToolCall
         try {
             ToolSchema.validate(call)
@@ -87,7 +92,7 @@ class SingleTaskContext(
         }
         // Reserve metadata space before requesting any capability or approval.
         val inputBytes = bytes(copied.tool) + copied.arguments.entries.sumOf { bytes(it.key) + bytes(it.value.toString()) }
-        if (measuredBytes() + inputBytes + STEP_METADATA_RESERVE > budget.maxContextBytes) {
+        if (measuredBytes() + inputBytes + STEP_METADATA_RESERVE > activeBudget.maxContextBytes) {
             return stopLocked(ContextPhase.BUDGET_EXHAUSTED, "CONTEXT_BUDGET")
         }
         val number = steps.size + 1
@@ -178,7 +183,7 @@ class SingleTaskContext(
         }
         val outputBytes = current.result?.fields?.entries?.sumOf { bytes(it.key) + bytes(it.value) } ?: 0
         var retained = current
-        if (outputBytes > budget.maxResultBytes) {
+        if (outputBytes > activeBudget.maxResultBytes) {
             retained = current.copy(result = null)
             if (isActive()) {
                 phase = ContextPhase.BUDGET_EXHAUSTED
@@ -186,7 +191,7 @@ class SingleTaskContext(
             }
         }
         steps[index] = previous.copy(status = retained)
-        if (measuredBytes() > budget.maxContextBytes) {
+        if (measuredBytes() > activeBudget.maxContextBytes) {
             steps[index] = previous.copy(status = retained.copy(result = null))
             if (isActive()) {
                 phase = ContextPhase.BUDGET_EXHAUSTED
@@ -250,7 +255,7 @@ class SingleTaskContext(
     }
 
     private fun snapshot() = ContextStatus(taskId, goal, phase,
-        Collections.unmodifiableList(ArrayList(steps)), budget, measuredBytes(), code)
+        Collections.unmodifiableList(ArrayList(steps)), activeBudget, measuredBytes(), code)
 
     companion object {
         private const val STEP_METADATA_RESERVE = 768

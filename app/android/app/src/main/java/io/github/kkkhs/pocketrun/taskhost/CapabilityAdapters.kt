@@ -106,6 +106,9 @@ interface TaskCapabilities {
     fun ensureLinuxShellTarget(): LinuxTarget = currentLinuxTarget()
     fun prepareLinuxShell(expected: LinuxTarget, command: String, timeoutSec: Int): OwnedExecution =
         throw UnsupportedOperationException("Linux shell execution unavailable.")
+
+    fun prepareListApps(expected: DeviceInfoTarget, query: String?): OwnedExecution =
+        throw UnsupportedOperationException("Installed apps query unavailable.")
 }
 
 sealed interface DisplayAction {
@@ -113,6 +116,12 @@ sealed interface DisplayAction {
     data object ObserveDemo : DisplayAction
     data class DemoTap(val x: Int, val y: Int) : DisplayAction
     data class DemoText(val text: String) : DisplayAction
+    data class OpenApp(val packageName: String) : DisplayAction
+    data object ObserveScreen : DisplayAction
+    data class AppTap(val x: Int, val y: Int) : DisplayAction
+    data class AppSwipe(val x1: Int, val y1: Int, val x2: Int, val y2: Int, val durationMs: Int) : DisplayAction
+    data class AppInputText(val text: String) : DisplayAction
+    data class AppPressKey(val key: String) : DisplayAction
 }
 
 /** Fixed guest path is /workspace/items.csv; host path must remain a real child without symlinks. */

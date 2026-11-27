@@ -2,6 +2,9 @@ import { type ComponentRef, useCallback, useEffect, useRef, useState } from 'rea
 import {
   ActivityIndicator,
   Alert,
+  Image,
+  KeyboardAvoidingView,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -9,9 +12,11 @@ import {
   TextInput,
   View,
 } from 'react-native';
+import NativeAdb from './specs/NativePocketRunAdb';
 import NativeTaskHost, {
   type ChatRuntimeState,
   type ModelConfiguration,
+  type TaskHostReadiness,
 } from './specs/NativePocketRunTaskHost';
 import MarkdownView from './MarkdownView';
 
@@ -55,9 +60,9 @@ type MessageItem = {
 
 const SUGGESTIONS = [
   '查看当前手机的系统版本、API 和 CPU 架构',
-  '列出私有工作区里有哪些文件',
   '读取 items.csv 并把汇总结果写入 summary.md',
   '用 PRoot Linux 命令查看 /etc/alpine-release 和工作区文件列表',
+  '在虚拟屏打开系统设置，观察界面后汇报你看到的主要设置项',
 ];
 
 function parseSummaries(raw: string): ConversationSummary[] {
@@ -93,6 +98,20 @@ function toolDisplayName(wireName: string): string {
       return 'PRoot 统计演示 CSV';
     case 'linux.run_shell':
       return 'PRoot/Alpine 执行命令';
+    case 'app.list_apps':
+      return '列出已安装应用';
+    case 'app.open':
+      return '虚拟屏打开应用';
+    case 'app.observe':
+      return '观察虚拟屏界面';
+    case 'app.tap':
+      return '虚拟屏点击';
+    case 'app.swipe':
+      return '虚拟屏滑动';
+    case 'app.input_text':
+      return '虚拟屏输入文字';
+    case 'app.press_key':
+      return '虚拟屏按键';
     case 'android.virtual_display_observe_or_demo_input':
       return '虚拟屏观察 / 输入';
     default:
@@ -103,11 +122,13 @@ function toolDisplayName(wireName: string): string {
 export default function ChatScreen({
   colors,
   onOpenSettings,
+  onOpenLab,
   initialPrompt,
   onConsumeInitialPrompt,
 }: {
   colors: ThemeColors;
   onOpenSettings: () => void;
+  onOpenLab?: () => void;
   initialPrompt?: string | null;
   onConsumeInitialPrompt?: () => void;
 }) {
@@ -117,6 +138,10 @@ export default function ChatScreen({
   const [messages, setMessages] = useState<MessageItem[]>([]);
   const [runtime, setRuntime] = useState<ChatRuntimeState | null>(null);
   const [config, setConfig] = useState<ModelConfiguration | null>(null);
+  const [readiness, setReadiness] = useState<TaskHostReadiness | null>(null);
+  const [previewUri, setPreviewUri] = useState<string | null>(null);
+  const [previewExpanded, setPreviewExpanded] = useState(false);
+  const [previewBusy, setPreviewBusy] = useState(false);
   const [memoryCount, setMemoryCount] = useState(0);
   const [includeMemory, setIncludeMemory] = useState(false);
   const [draft, setDraft] = useState('');
@@ -151,9 +176,10 @@ export default function ChatScreen({
     async (selectId?: string | null) => {
       if (!NativeTaskHost) return;
       try {
-        const [listRes, cfg, memSnap, rt] = await Promise.all([
+        const [listRes, cfg, ready, memSnap, rt] = await Promise.all([
           NativeTaskHost.listConversations(),
           NativeTaskHost.getModelConfiguration().catch(() => null),
+          NativeTaskHost.getHostReadiness().catch(() => null),
           NativeTaskHost.getMemorySnapshot().catch(() => null),
           NativeTaskHost.getChatRuntimeState().catch(() => null),
         ]);
@@ -161,6 +187,10 @@ export default function ChatScreen({
         const list = parseSummaries(listRes.conversationsJson);
         setConversations(list);
         if (cfg) setConfig(cfg);
+        if (ready) {
+          setReadiness(ready);
+          if (!ready.displayReady) setPreviewUri(null);
+        }
         if (memSnap) {
           try {
             const notes = JSON.parse(memSnap.notesJson);
@@ -169,7 +199,12 @@ export default function ChatScreen({
             setMemoryCount(0);
           }
         }
-        if (rt) setRuntime(rt);
+        if (rt) {
+          setRuntime(rt);
+          if (rt.latestPreviewUri) {
+            setPreviewUri(rt.latestPreviewUri);
+          }
+        }
         const target = selectId !== undefined ? selectId : currentIdRef.current ?? list[0]?.id ?? null;
         if (target && list.some(item => item.id === target)) {
           await loadConversation(target);
@@ -196,6 +231,14 @@ export default function ChatScreen({
         const rt = await NativeTaskHost.getChatRuntimeState();
         if (!live.current) return;
         setRuntime(rt);
+        if (rt.latestPreviewUri) {
+          setPreviewUri(prev => {
+            if (prev !== rt.latestPreviewUri) {
+              setPreviewExpanded(true);
+            }
+            return rt.latestPreviewUri ?? prev;
+          });
+        }
         const activeNow =
           rt.phase === 'streaming' ||
           rt.phase === 'waiting_approval' ||
@@ -326,11 +369,32 @@ export default function ChatScreen({
     }
   }
 
+  async function handleRefreshPreview() {
+    if (!NativeAdb || !readiness?.displayReady || !readiness.displayId || previewBusy) return;
+    setPreviewBusy(true);
+    try {
+      const shot = await NativeAdb.captureScreenshot(readiness.displayId);
+      if (live.current && shot?.uri) {
+        setPreviewUri(shot.uri);
+        setPreviewExpanded(true);
+      }
+    } catch (failure) {
+      if (live.current) {
+        setError(failure instanceof Error ? failure.message : '刷新虚拟屏画面失败。');
+      }
+    } finally {
+      if (live.current) setPreviewBusy(false);
+    }
+  }
+
   const activeTraces = runtime ? parseTraces(runtime.activeToolsJson) : [];
   const showActiveTurn = active && (!currentId || runtime?.conversationId === currentId);
 
   return (
-    <View style={[styles.container, { backgroundColor: colors.background }]}>
+    <KeyboardAvoidingView
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      style={[styles.container, { backgroundColor: colors.background }]}
+    >
       <View style={[styles.header, { borderBottomColor: colors.border }]}>
         <Pressable
           accessibilityRole="button"
@@ -436,6 +500,86 @@ export default function ChatScreen({
         </View>
       )}
 
+      {readiness?.displayReady && readiness.displayId ? (
+        <View
+          style={[
+            styles.vdBar,
+            { backgroundColor: colors.surface, borderBottomColor: colors.border },
+          ]}
+        >
+          <View style={styles.vdBarHeader}>
+            <Text numberOfLines={1} style={[styles.vdBarTitle, { color: colors.text }]}>
+              ● 虚拟屏 #{readiness.displayId} 已就绪（后台操控第三方 App）
+            </Text>
+            <View style={styles.vdBarActions}>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="刷新虚拟屏画面"
+                disabled={previewBusy}
+                onPress={handleRefreshPreview}
+                style={[styles.vdActionBtn, { backgroundColor: colors.surfaceAlt }]}
+              >
+                <Text style={[styles.vdActionText, { color: colors.text }]}>
+                  {previewBusy ? '刷新中…' : '刷新画面'}
+                </Text>
+              </Pressable>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={previewExpanded ? '收起虚拟屏预览' : '展开虚拟屏预览'}
+                onPress={() => {
+                  const next = !previewExpanded;
+                  setPreviewExpanded(next);
+                  if (next && !previewUri) {
+                    handleRefreshPreview();
+                  }
+                }}
+                style={[styles.vdActionBtn, { backgroundColor: colors.accentSoft }]}
+              >
+                <Text style={[styles.vdActionText, { color: colors.accent }]}>
+                  {previewExpanded ? '收起' : '预览'}
+                </Text>
+              </Pressable>
+            </View>
+          </View>
+          {previewExpanded && previewUri ? (
+            <View
+              style={[
+                styles.vdPreviewFrame,
+                { backgroundColor: colors.surfaceAlt, borderColor: colors.border },
+              ]}
+            >
+              <Image
+                accessibilityLabel="虚拟屏实时预览画面"
+                source={{ uri: previewUri }}
+                resizeMode="contain"
+                style={styles.vdPreviewImage}
+              />
+            </View>
+          ) : null}
+        </View>
+      ) : onOpenLab ? (
+        <View
+          style={[
+            styles.vdBar,
+            { backgroundColor: colors.surface, borderBottomColor: colors.border },
+          ]}
+        >
+          <View style={styles.vdBarHeader}>
+            <Text numberOfLines={1} style={[styles.vdBarMuted, { color: colors.muted }]}>
+              虚拟屏未连接 · 连接后可操控任意第三方 App
+            </Text>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="前往实验室连接虚拟屏"
+              onPress={onOpenLab}
+              style={[styles.vdActionBtn, { backgroundColor: colors.accentSoft }]}
+            >
+              <Text style={[styles.vdActionText, { color: colors.accent }]}>去连接</Text>
+            </Pressable>
+          </View>
+        </View>
+      ) : null}
+
       <ScrollView
         ref={scrollRef}
         style={styles.feed}
@@ -455,7 +599,7 @@ export default function ChatScreen({
               先配置模型，再开始对话
             </Text>
             <Text style={[styles.setupDesc, { color: colors.muted }]}>
-              填写你有权使用的 Anthropic 兼容 API 地址、模型名和 API Key（由 Android Keystore 加密保存）。
+              支持 Anthropic 与 OpenAI 兼容协议（含智谱 GLM-4-Flash、Gemini 等免费额度），凭据由 Android Keystore 加密保存。
             </Text>
             <Pressable
               accessibilityRole="button"
@@ -737,7 +881,7 @@ export default function ChatScreen({
           )}
         </View>
       </View>
-    </View>
+    </KeyboardAvoidingView>
   );
 }
 
@@ -783,6 +927,36 @@ const styles = StyleSheet.create({
   drawerItemSub: { fontSize: 12 },
   drawerDeleteBtn: { paddingHorizontal: 8, paddingVertical: 4 },
   drawerDeleteText: { fontSize: 12, fontWeight: '600' },
+  vdBar: {
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderBottomWidth: 1,
+    gap: 8,
+  },
+  vdBarHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 8,
+  },
+  vdBarTitle: { flex: 1, fontSize: 12, fontWeight: '700' },
+  vdBarMuted: { flex: 1, fontSize: 12 },
+  vdBarActions: { flexDirection: 'row', gap: 6 },
+  vdActionBtn: {
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 12,
+  },
+  vdActionText: { fontSize: 12, fontWeight: '600' },
+  vdPreviewFrame: {
+    borderWidth: 1,
+    borderRadius: 12,
+    overflow: 'hidden',
+    alignItems: 'center',
+    justifyContent: 'center',
+    height: 220,
+  },
+  vdPreviewImage: { width: '100%', height: '100%' },
   feed: { flex: 1 },
   feedContent: { padding: 16, gap: 14, paddingBottom: 24 },
   setupBanner: {

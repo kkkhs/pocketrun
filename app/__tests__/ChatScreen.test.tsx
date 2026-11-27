@@ -1,9 +1,17 @@
 import React from 'react';
 import ReactTestRenderer from 'react-test-renderer';
 import ChatScreen, { type ThemeColors } from '../ChatScreen';
+import NativeAdb from '../specs/NativePocketRunAdb';
 import NativeTaskHost, {
   type ChatRuntimeState,
 } from '../specs/NativePocketRunTaskHost';
+
+jest.mock('../specs/NativePocketRunAdb', () => ({
+  __esModule: true,
+  default: {
+    captureScreenshot: jest.fn(),
+  },
+}));
 
 jest.mock('../specs/NativePocketRunTaskHost', () => ({
   __esModule: true,
@@ -16,12 +24,14 @@ jest.mock('../specs/NativePocketRunTaskHost', () => ({
     getChatRuntimeState: jest.fn(),
     cancelChatTurn: jest.fn(),
     getModelConfiguration: jest.fn(),
+    getHostReadiness: jest.fn(),
     getMemorySnapshot: jest.fn(),
     decideFromAppUi: jest.fn(),
   },
 }));
 
 const mockHost = NativeTaskHost as jest.Mocked<NonNullable<typeof NativeTaskHost>>;
+const mockAdb = NativeAdb as jest.Mocked<NonNullable<typeof NativeAdb>>;
 
 const colors: ThemeColors = {
   background: '#ffffff',
@@ -62,6 +72,14 @@ beforeEach(() => {
     endpoint: 'https://api.anthropic.com',
     model: 'claude-opus-5-5',
     hasCredential: true,
+  });
+  mockHost.getHostReadiness.mockResolvedValue({
+    packageUid: 10150,
+    linuxReady: true,
+    rootfsGeneration: 'v1',
+    displayReady: false,
+    displayEpoch: null,
+    displayId: null,
   });
   mockHost.getMemorySnapshot.mockResolvedValue({
     revision: 'r_00000000000000000000000000000001',
@@ -243,5 +261,43 @@ test('new chat button clears current thread and creates a fresh conversation on 
   });
 
   expect(mockHost.sendChatMessage).toHaveBeenCalledWith('', '你好', false);
+  await ReactTestRenderer.act(async () => screen.unmount());
+});
+
+test('renders virtual display preview bar and refreshes live frame on demand', async () => {
+  mockHost.getHostReadiness.mockResolvedValueOnce({
+    packageUid: 10150,
+    linuxReady: true,
+    rootfsGeneration: 'v1',
+    displayReady: true,
+    displayEpoch: '5',
+    displayId: 2,
+  });
+  mockAdb.captureScreenshot.mockResolvedValueOnce({
+    displayId: 2,
+    width: 720,
+    height: 1280,
+    frameTimestampNanos: '12345',
+    uri: 'file:///cache/vd-live.jpg',
+  });
+
+  let screen!: ReactTestRenderer.ReactTestRenderer;
+  await ReactTestRenderer.act(async () => {
+    screen = ReactTestRenderer.create(
+      <ChatScreen colors={colors} onOpenSettings={jest.fn()} onOpenLab={jest.fn()} />,
+    );
+  });
+
+  const treeJson = JSON.stringify(screen.toJSON());
+  expect(treeJson).toContain('● 虚拟屏 #');
+  expect(treeJson).toContain('已就绪（后台操控第三方 App）');
+  const refreshBtn = screen.root.find(node => node.props.accessibilityLabel === '刷新虚拟屏画面');
+  await ReactTestRenderer.act(async () => {
+    await refreshBtn.props.onPress();
+  });
+
+  expect(mockAdb.captureScreenshot).toHaveBeenCalledWith(2);
+  const preview = screen.root.find(node => node.props.accessibilityLabel === '虚拟屏实时预览画面');
+  expect(preview.props.source).toEqual({ uri: 'file:///cache/vd-live.jpg' });
   await ReactTestRenderer.act(async () => screen.unmount());
 });

@@ -205,6 +205,31 @@ object PrivilegedBackendMain {
             return asShell { displaySession.injectText(expectedDisplayId, text, appUid) }
         }
 
+        override fun launchAppOnDisplay(expectedDisplayId: Int, packageName: String): Boolean {
+            enforceClient()
+            return asShell { displaySession.launchApp(expectedDisplayId, packageName) }
+        }
+
+        override fun injectAppTap(expectedDisplayId: Int, x: Int, y: Int): Boolean {
+            enforceClient()
+            return asShell { displaySession.injectAppTap(expectedDisplayId, x, y, appUid) }
+        }
+
+        override fun injectAppSwipe(expectedDisplayId: Int, x1: Int, y1: Int, x2: Int, y2: Int, durationMs: Int): Boolean {
+            enforceClient()
+            return asShell { displaySession.injectAppSwipe(expectedDisplayId, x1, y1, x2, y2, durationMs, appUid) }
+        }
+
+        override fun injectAppKey(expectedDisplayId: Int, keyCode: Int): Boolean {
+            enforceClient()
+            return asShell { displaySession.injectAppKey(expectedDisplayId, keyCode, appUid) }
+        }
+
+        override fun injectAppText(expectedDisplayId: Int, text: String): Boolean {
+            enforceClient()
+            return asShell { displaySession.injectAppText(expectedDisplayId, text, appUid) }
+        }
+
         override fun releaseDisplay() {
             enforceClient()
             asShell { displaySession.close() }

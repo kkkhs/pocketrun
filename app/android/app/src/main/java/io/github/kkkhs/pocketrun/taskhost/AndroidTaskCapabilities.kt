@@ -1,6 +1,7 @@
 package io.github.kkkhs.pocketrun.taskhost
 
 import android.content.Context
+import android.content.Intent
 import android.os.Build
 import android.os.Process
 import io.github.kkkhs.pocketrun.LinuxDirectoryLease
@@ -136,6 +137,48 @@ internal class AndroidTaskCapabilities(
                 "supportedAbis" to Build.SUPPORTED_ABIS.joinToString(","),
                 "packageUid" to packageUid.toString(),
                 "packageName" to context.packageName,
+            ))
+        }
+    }
+
+    override fun prepareListApps(expected: DeviceInfoTarget, query: String?): OwnedExecution {
+        synchronized(lock) {
+            check(!closeCoordinator.closing && expected == DeviceInfoTarget(packageUid)) { "App-list binding changed." }
+        }
+        return ImmediateExecution {
+            val pm = context.packageManager
+            val intent = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER)
+            val resolved = pm.queryIntentActivities(intent, 0)
+            val filter = query?.trim()?.lowercase().orEmpty()
+            val allApps = linkedMapOf<String, String>()
+            val matched = linkedMapOf<String, String>()
+            for (info in resolved) {
+                val pkg = info.activityInfo?.packageName?.trim().orEmpty()
+                if (pkg.isEmpty() || pkg in allApps) continue
+                val label = runCatching { info.loadLabel(pm)?.toString()?.trim().orEmpty() }
+                    .getOrDefault("")
+                    .replace('\n', ' ')
+                    .take(48)
+                val display = if (label.isNotEmpty() && label != pkg) "$label ($pkg)" else pkg
+                allApps[pkg] = display
+                if (filter.isEmpty() || display.lowercase().contains(filter)) {
+                    matched[pkg] = display
+                }
+            }
+            val chosen = if (matched.isNotEmpty() || filter.isEmpty()) matched.values.sorted() else allApps.values.sorted()
+            val out = StringBuilder()
+            var count = 0
+            for (entry in chosen) {
+                if (count >= 64) break
+                val line = if (out.isEmpty()) entry else "\n$entry"
+                if (out.toString().toByteArray(Charsets.UTF_8).size + line.toByteArray(Charsets.UTF_8).size > 3_800) break
+                out.append(line)
+                count++
+            }
+            ToolResult(linkedMapOf(
+                "source" to "android-package-manager",
+                "count" to count.toString(),
+                "apps" to if (out.isEmpty()) "(none)" else out.toString(),
             ))
         }
     }
@@ -537,6 +580,12 @@ internal class AndroidTaskCapabilities(
                             DisplayAction.ObserveDemo -> ToolResult(OwnedDemoObservation.fields(port.observeDemo(expected)))
                             is DisplayAction.DemoTap -> port.demoTap(expected, value.x, value.y)
                             is DisplayAction.DemoText -> port.demoText(expected, value.text)
+                            is DisplayAction.OpenApp -> port.openApp(expected, value.packageName)
+                            DisplayAction.ObserveScreen -> port.observeScreen(expected)
+                            is DisplayAction.AppTap -> port.appTap(expected, value.x, value.y)
+                            is DisplayAction.AppSwipe -> port.appSwipe(expected, value.x1, value.y1, value.x2, value.y2, value.durationMs)
+                            is DisplayAction.AppInputText -> port.appInputText(expected, value.text)
+                            is DisplayAction.AppPressKey -> port.appPressKey(expected, value.key)
                         }
                         check(!cancelled.get() && port.snapshot() == expected) { "Display result became stale." }
                         ExecutionOutcome.Success(result)

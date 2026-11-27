@@ -6,6 +6,7 @@ import com.anthropic.models.messages.MessageParam
 import com.anthropic.models.messages.ToolResultBlockParam
 import com.anthropic.models.messages.ToolUseBlock
 import java.io.Closeable
+import java.io.IOException
 import java.util.Collections
 import java.util.concurrent.Executors
 import java.util.concurrent.RejectedExecutionException
@@ -42,6 +43,7 @@ internal data class ChatRuntimeStatus(
     val outputTokens: Long,
     val code: String?,
     val errorMessage: String?,
+    val latestPreviewUri: String? = null,
 )
 
 /**
@@ -64,10 +66,13 @@ internal class ChatEngine(
     private var request: Closeable? = null
     private var requestDeadline = 0L
     private var deadline = 0L
+    private var retryAttempts = 0
+    private var retryAtNanos = 0L
     private var rounds = 0
     private var outputTokens = 0L
     private var streamingText = StringBuilder()
     private var pendingApproval: PendingChatApproval? = null
+    private var latestPreviewUri: String? = null
     private val activeTools = mutableListOf<ChatToolTrace>()
     private var code: String? = null
     private var errorMessage: String? = null
@@ -113,7 +118,7 @@ internal class ChatEngine(
         store.appendMessage(conversation.id, userMessage, autoTitlePrompt = cleanPrompt)
 
         val goalLabel = ConversationCodec.autoTitle(cleanPrompt)
-        val begun = task.begin("对话：$goalLabel")
+        val begun = task.beginWithBudget("对话：$goalLabel", CHAT_TASK_BUDGET)
         generation++
         conversationId = conversation.id
         taskId = begun.taskId
@@ -122,6 +127,8 @@ internal class ChatEngine(
         phase = ChatPhase.STREAMING
         code = null
         errorMessage = null
+        retryAttempts = 0
+        retryAtNanos = 0L
         rounds = 0
         outputTokens = 0L
         streamingText = StringBuilder()
@@ -135,7 +142,7 @@ internal class ChatEngine(
         executedAnyTool = false
 
         buildInitialHistoryLocked(priorMessages, cleanPrompt, observations, memory)
-        deadline = clock.nowNanos() + TimeUnit.SECONDS.toNanos(120)
+        deadline = clock.nowNanos() + TimeUnit.SECONDS.toNanos(180)
         if (contextBytes() > MAX_MODEL_CONTEXT_BYTES) {
             stopLocked(ChatPhase.BUDGET_EXHAUSTED, "MODEL_CONTEXT_BUDGET", "当前对话上下文已超出单次请求上限，请开启新对话。")
             return@synchronized snapshot()
@@ -201,7 +208,7 @@ internal class ChatEngine(
         if (!active()) return@synchronized
         try {
             if (clock.nowNanos() - deadline >= 0) {
-                stopLocked(ChatPhase.BUDGET_EXHAUSTED, "TIME_BUDGET", "本轮对话已达到 120 秒总时长上限。")
+                stopLocked(ChatPhase.BUDGET_EXHAUSTED, "TIME_BUDGET", "本轮对话已达到 180 秒总时长上限。")
                 return@synchronized
             }
             val context = task.state()
@@ -229,7 +236,12 @@ internal class ChatEngine(
                 stopLocked(nextPhase, context.code ?: "TASK_INVALIDATED", friendly)
                 return@synchronized
             }
-            if (phase == ChatPhase.STREAMING && clock.nowNanos() - requestDeadline >= 0) {
+            if (phase == ChatPhase.STREAMING && request == null && retryAtNanos > 0L) {
+                if (clock.nowNanos() - retryAtNanos >= 0) {
+                    retryAtNanos = 0L
+                    requestModelLocked()
+                }
+            } else if (phase == ChatPhase.STREAMING && clock.nowNanos() - requestDeadline >= 0) {
                 stopLocked(ChatPhase.BUDGET_EXHAUSTED, "MODEL_REQUEST_TIMEOUT", "模型响应超时，请稍后重试。")
             } else if (phase == ChatPhase.WAITING_APPROVAL || phase == ChatPhase.TOOL_EXECUTING) {
                 advanceToolsLocked(context)
@@ -240,12 +252,13 @@ internal class ChatEngine(
     }
 
     private fun requestModelLocked() {
-        if (rounds >= 8 || outputTokens >= 32_768 || contextBytes() > MAX_MODEL_CONTEXT_BYTES) {
+        if (rounds >= MAX_ROUNDS || outputTokens >= 32_768 || contextBytes() > MAX_MODEL_CONTEXT_BYTES) {
             stopLocked(ChatPhase.BUDGET_EXHAUSTED, "MODEL_BUDGET", "本轮请求已达到模型回合或上下文预算上限。")
             return
         }
         phase = ChatPhase.STREAMING
         pendingApproval = null
+        retryAtNanos = 0L
         streamingText = StringBuilder()
         rounds++
         requestDeadline = clock.nowNanos() + TimeUnit.SECONDS.toNanos(65)
@@ -270,8 +283,19 @@ internal class ChatEngine(
                                 stopLocked(ChatPhase.BUDGET_EXHAUSTED, "LATE_MODEL_RESULT", "模型响应已超时。")
                             } else {
                                 request = null
-                                outcome.fold(::acceptMessageLocked) {
-                                    stopLocked(ChatPhase.FAILED, "MODEL_TRANSPORT_ERROR", "连接模型服务失败，请检查网络或配置。")
+                                outcome.fold(::acceptMessageLocked) { failure ->
+                                    if (canRetryNetworkLocked(failure)) {
+                                        retryAttempts++
+                                        rounds = maxOf(0, rounds - 1)
+                                        val delaySec = retryAttempts * 2L
+                                        retryAtNanos = clock.nowNanos() + TimeUnit.SECONDS.toNanos(delaySec)
+                                        requestDeadline = deadline
+                                        streamingText = StringBuilder(
+                                            "网络波动，${delaySec} 秒后自动重连（第 $retryAttempts/$MAX_NETWORK_RETRIES 次）…",
+                                        )
+                                    } else {
+                                        stopLocked(ChatPhase.FAILED, "MODEL_TRANSPORT_ERROR", "连接模型服务失败，请检查网络或配置。")
+                                    }
                                 }
                             }
                         }
@@ -281,8 +305,16 @@ internal class ChatEngine(
         )
     }
 
+    private fun canRetryNetworkLocked(failure: Throwable): Boolean {
+        if (retryAttempts >= MAX_NETWORK_RETRIES) return false
+        if (deadline - clock.nowNanos() <= TimeUnit.SECONDS.toNanos(15)) return false
+        return isTransientNetworkFailure(failure)
+    }
+
     private fun acceptMessageLocked(message: Message) {
         try {
+            retryAttempts = 0
+            retryAtNanos = 0L
             val reason = message.stopReason().orElseThrow().asString()
             if (reason !in setOf("tool_use", "end_turn")) {
                 val msg = if (reason == "refusal") "模型拒绝回答该请求。" else "模型回复被截断或未正常结束（$reason）。"
@@ -365,6 +397,9 @@ internal class ChatEngine(
             }
             val settled = checkNotNull(step)
             require(settled.status.phase == HostPhase.SUCCEEDED && settled.status.cleanupState == CleanupState.PROVEN)
+            settled.status.result?.fields?.get("screenshotUri")?.takeIf { it.isNotBlank() }?.let {
+                latestPreviewUri = it
+            }
             pendingApproval = null
             phase = ChatPhase.TOOL_EXECUTING
             activeTools += ChatToolTrace(
@@ -440,6 +475,8 @@ internal class ChatEngine(
         code = reason
         errorMessage = friendlyMessage
         pendingApproval = null
+        retryAttempts = 0
+        retryAtNanos = 0L
         try { request?.close() } catch (_: Exception) { /* transport.close retains cancellation */ }
         request = null
         taskId?.let {
@@ -476,6 +513,20 @@ internal class ChatEngine(
                 "CSV 共 ${fields["lineCount"] ?: "?"} 行"
             PocketRunTool.LINUX_RUN_SHELL.wireName ->
                 "退出码 ${fields["exitCode"] ?: "?"}（${fields["cleanupStatus"] ?: "done"}）"
+            PocketRunTool.APP_LIST_APPS.wireName ->
+                "发现 ${fields["count"] ?: "0"} 个可启动应用"
+            PocketRunTool.APP_OPEN.wireName ->
+                "已在虚拟屏 #${fields["displayId"] ?: "?"} 启动 ${fields["packageName"] ?: ""}"
+            PocketRunTool.APP_OBSERVE.wireName ->
+                "${fields["topPackage"]?.ifBlank { "虚拟屏" } ?: "虚拟屏"} · ${fields["nodeCount"] ?: "0"} 个控件"
+            PocketRunTool.APP_TAP.wireName ->
+                "已点击 (${step.call.arguments["x"]},${step.call.arguments["y"]})"
+            PocketRunTool.APP_SWIPE.wireName ->
+                "已滑动 (${step.call.arguments["x1"]},${step.call.arguments["y1"]})→(${step.call.arguments["x2"]},${step.call.arguments["y2"]})"
+            PocketRunTool.APP_INPUT_TEXT.wireName ->
+                "已输入文本"
+            PocketRunTool.APP_PRESS_KEY.wireName ->
+                "已按下 ${fields["key"] ?: step.call.arguments["key"] ?: ""}"
             else -> step.status.target.orEmpty().take(120)
         }.take(ConversationCodec.MAX_TOOL_SUMMARY_BYTES)
     }
@@ -494,12 +545,34 @@ internal class ChatEngine(
         outputTokens = outputTokens,
         code = code,
         errorMessage = errorMessage,
+        latestPreviewUri = latestPreviewUri,
     )
 
     companion object {
         const val MAX_PROMPT_BYTES = 2_048
+        private const val MAX_ROUNDS = 16
+        private const val MAX_NETWORK_RETRIES = 2
         private const val MAX_PRIOR_HISTORY_BYTES = 24_576
-        private const val MAX_MODEL_CONTEXT_BYTES = 65_536
+        private const val MAX_MODEL_CONTEXT_BYTES = 98_304
         private const val MAX_STREAM_CHARS = 8_192
+        private val CHAT_TASK_BUDGET = ContextBudget(
+            maxSteps = 16,
+            maxContextBytes = 98_304,
+            maxResultBytes = 16_384,
+            maxDurationMillis = 180_000,
+        )
+
+        internal fun isTransientNetworkFailure(error: Throwable): Boolean {
+            var cur: Throwable? = error
+            var depth = 0
+            while (cur != null && depth++ < 8) {
+                if (cur is IOException) return true
+                val msg = cur.message.orEmpty()
+                if (msg.startsWith("OPENAI_HTTP_5") || msg == "OPENAI_HTTP_429") return true
+                if (msg.startsWith("OPENAI_HTTP_4") || msg.contains("BUDGET") || msg.contains("CANCELLED")) return false
+                cur = cur.cause
+            }
+            return false
+        }
     }
 }

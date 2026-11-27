@@ -274,6 +274,54 @@ class PrivilegedBackendController(private val context: Context) : Closeable {
         return result
     }
 
+    fun launchAppOnDisplay(expectedDisplayId: Int, packageName: String, expectedGeneration: Long = queryGeneration()): Boolean {
+        VirtualDisplaySession.requireValidPackageName(packageName)
+        val snapshot = querySession(expectedDisplayId, expectedGeneration)
+        val result = snapshot.service.launchAppOnDisplay(expectedDisplayId, packageName)
+        synchronized(lock) { checkSessionLocked(snapshot) }
+        return result
+    }
+
+    fun injectAppTap(expectedDisplayId: Int, x: Int, y: Int, expectedGeneration: Long = queryGeneration()): Boolean {
+        require(DisplayInputPolicy.acceptsTap(x, y)) { "点击坐标超出虚拟屏。" }
+        val snapshot = querySession(expectedDisplayId, expectedGeneration)
+        val result = snapshot.service.injectAppTap(expectedDisplayId, x, y)
+        synchronized(lock) { checkSessionLocked(snapshot) }
+        return result
+    }
+
+    fun injectAppSwipe(
+        expectedDisplayId: Int,
+        x1: Int,
+        y1: Int,
+        x2: Int,
+        y2: Int,
+        durationMs: Int,
+        expectedGeneration: Long = queryGeneration(),
+    ): Boolean {
+        require(DisplayInputPolicy.acceptsSwipe(x1, y1, x2, y2, durationMs)) { "滑动坐标或时长无效。" }
+        val snapshot = querySession(expectedDisplayId, expectedGeneration)
+        val result = snapshot.service.injectAppSwipe(expectedDisplayId, x1, y1, x2, y2, durationMs)
+        synchronized(lock) { checkSessionLocked(snapshot) }
+        return result
+    }
+
+    fun injectAppKey(expectedDisplayId: Int, keyCode: Int, expectedGeneration: Long = queryGeneration()): Boolean {
+        require(DisplayInputPolicy.acceptsKeyCode(keyCode)) { "不支持的按键编码。" }
+        val snapshot = querySession(expectedDisplayId, expectedGeneration)
+        val result = snapshot.service.injectAppKey(expectedDisplayId, keyCode)
+        synchronized(lock) { checkSessionLocked(snapshot) }
+        return result
+    }
+
+    fun injectAppText(expectedDisplayId: Int, text: String, expectedGeneration: Long = queryGeneration()): Boolean {
+        require(DisplayInputPolicy.acceptsAppText(text)) { "文本长度须在 1..256 字符之间。" }
+        val snapshot = querySession(expectedDisplayId, expectedGeneration)
+        val result = snapshot.service.injectAppText(expectedDisplayId, text)
+        synchronized(lock) { checkSessionLocked(snapshot) }
+        return result
+    }
+
     fun invalidateQueries() {
         val notification = synchronized(lock) {
             val event = lastDisplayId.takeIf { it > 0 }?.let { CapabilityDeath(it, generation) }

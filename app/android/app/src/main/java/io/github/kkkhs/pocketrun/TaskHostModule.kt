@@ -271,6 +271,7 @@ class TaskHostModule(context: ReactApplicationContext) : NativePocketRunTaskHost
         putDouble("outputTokens", value.outputTokens.toDouble())
         putNullableString("code", value.code)
         putNullableString("errorMessage", value.errorMessage)
+        putNullableString("latestPreviewUri", value.latestPreviewUri)
     }
 
     override fun getMemorySnapshot(promise: Promise) = executeMemory(promise) { memoryMap(memoryStore.snapshot()) }

@@ -297,6 +297,8 @@ class TaskHost private constructor(
         request.executionEpoch = executionSequence
         val effectiveTimeoutNanos = when (val act = request.action) {
             is ParsedAction.RunLinuxShell -> maxOf(executionTimeoutNanos, TimeUnit.SECONDS.toNanos(act.timeoutSec.toLong() + 3L))
+            is ParsedAction.OpenApp -> maxOf(executionTimeoutNanos, TimeUnit.SECONDS.toNanos(12L))
+            ParsedAction.ObserveApp, is ParsedAction.AppSwipe -> maxOf(executionTimeoutNanos, TimeUnit.SECONDS.toNanos(8L))
             else -> executionTimeoutNanos
         }
         request.executionDeadlineNanos = boundedDeadline(request, effectiveTimeoutNanos)
@@ -309,6 +311,7 @@ class TaskHost private constructor(
         val delegate = try {
             when (val binding = launch.request.binding) {
                 is Binding.Device -> capabilities.prepareDeviceInfo(binding.target)
+                is Binding.AppList -> capabilities.prepareListApps(binding.target, binding.query)
                 is Binding.Linux -> capabilities.prepareCountDemoCsv(binding.target, binding.csv)
                 is Binding.LinuxShell -> capabilities.prepareLinuxShell(binding.target, binding.command, binding.timeoutSec)
                 is Binding.Workspace -> when (val action = binding.action) {
@@ -589,6 +592,34 @@ class TaskHost private constructor(
             }
             Binding.WorkspaceGeneral(target.copy(root = normalizedRoot), action)
         }
+        is ParsedAction.ListApps -> {
+            val target = snapshot("Device info") { capabilities.currentDeviceInfoTarget() }
+            requireUid(target.packageUid)
+            if (!target.available) throw ToolValidationException("BACKEND_NOT_READY", "Installed apps query is unavailable.")
+            Binding.AppList(target, action.query)
+        }
+        is ParsedAction.OpenApp,
+        ParsedAction.ObserveApp,
+        is ParsedAction.AppTap,
+        is ParsedAction.AppSwipe,
+        is ParsedAction.AppInputText,
+        is ParsedAction.AppPressKey -> {
+            val target = snapshot("Typed Binder virtual display") { capabilities.currentDisplayTarget() }
+            requireUid(target.packageUid)
+            if (!target.backendReady || target.displayId <= 0 || target.displayEpoch <= 0) {
+                throw ToolValidationException("DISPLAY_NOT_READY", "Virtual display is not active; connect wireless ADB and start a virtual display first.")
+            }
+            val displayAction = when (action) {
+                is ParsedAction.OpenApp -> DisplayAction.OpenApp(action.packageName)
+                ParsedAction.ObserveApp -> DisplayAction.ObserveScreen
+                is ParsedAction.AppTap -> DisplayAction.AppTap(action.x, action.y)
+                is ParsedAction.AppSwipe -> DisplayAction.AppSwipe(action.x1, action.y1, action.x2, action.y2, action.durationMs)
+                is ParsedAction.AppInputText -> DisplayAction.AppInputText(action.text)
+                is ParsedAction.AppPressKey -> DisplayAction.AppPressKey(action.key)
+                else -> error("General display action was bound")
+            }
+            Binding.Display(target, displayAction)
+        }
         is ParsedAction.Display -> {
             val target = snapshot("Typed Binder virtual display") { capabilities.currentDisplayTarget() }
             requireUid(target.packageUid)
@@ -626,6 +657,14 @@ class TaskHost private constructor(
         if (input.isNotEmpty() && capabilities.currentWorkspaceTarget().inputDigest != input) "INPUT_CHANGED"
         else when (val binding = request.binding) {
             is Binding.Device -> {
+                val current = capabilities.currentDeviceInfoTarget()
+                when {
+                    !current.available -> "BACKEND_DEATH"
+                    current != binding.target -> "TARGET_CHANGED"
+                    else -> null
+                }
+            }
+            is Binding.AppList -> {
                 val current = capabilities.currentDeviceInfoTarget()
                 when {
                     !current.available -> "BACKEND_DEATH"
@@ -696,6 +735,10 @@ class TaskHost private constructor(
         complete?.snapshot()?.let { parts += listOf("completeRunId" to it.runId, "inputDigest" to it.inputDigest) }
         when (binding) {
             is Binding.Device -> parts += "packageUid" to binding.target.packageUid.toString()
+            is Binding.AppList -> parts += listOf(
+                "packageUid" to binding.target.packageUid.toString(),
+                "query" to binding.query.orEmpty(),
+            )
             is Binding.Linux -> parts += listOf(
                 "packageUid" to binding.target.packageUid.toString(),
                 "rootfsGeneration" to binding.target.rootfsGeneration,
@@ -739,6 +782,23 @@ class TaskHost private constructor(
                         "y" to displayAction.y.toString())
                     is DisplayAction.DemoText -> parts += listOf(
                         "action" to "demo_text", "text" to displayAction.text)
+                    is DisplayAction.OpenApp -> parts += listOf(
+                        "action" to "app_open", "packageName" to displayAction.packageName)
+                    DisplayAction.ObserveScreen -> parts += "action" to "app_observe"
+                    is DisplayAction.AppTap -> parts += listOf(
+                        "action" to "app_tap", "x" to displayAction.x.toString(), "y" to displayAction.y.toString())
+                    is DisplayAction.AppSwipe -> parts += listOf(
+                        "action" to "app_swipe",
+                        "x1" to displayAction.x1.toString(),
+                        "y1" to displayAction.y1.toString(),
+                        "x2" to displayAction.x2.toString(),
+                        "y2" to displayAction.y2.toString(),
+                        "durationMs" to displayAction.durationMs.toString(),
+                    )
+                    is DisplayAction.AppInputText -> parts += listOf(
+                        "action" to "app_input_text", "text" to displayAction.text)
+                    is DisplayAction.AppPressKey -> parts += listOf(
+                        "action" to "app_press_key", "key" to displayAction.key)
                 }
             }
         }
@@ -784,6 +844,7 @@ class TaskHost private constructor(
 
     private fun ActiveRequest.targetLabel(): String = when (val value = binding) {
         is Binding.Device -> "PocketRun App UID ${value.target.packageUid}"
+        is Binding.AppList -> "已安装可启动应用列表 · UID ${value.target.packageUid}"
         is Binding.Linux -> "${CanonicalChildPath.DEMO_GUEST_PATH} · rootfs ${value.target.rootfsGeneration} · UID ${value.target.packageUid}"
         is Binding.LinuxShell -> "PRoot/Alpine Shell（/workspace · 超时 ${value.timeoutSec}s）· UID ${value.target.packageUid}"
         is Binding.Workspace -> "private ${if (value.action == ParsedAction.ReadDemoCsv) "items.csv disclosure" else "result.txt no-overwrite publication"} · input ${value.target.inputDigest} · UID ${value.target.packageUid}"
@@ -793,7 +854,15 @@ class TaskHost private constructor(
             is ParsedAction.WriteWorkspaceFile -> "写入工作区文件 ${act.path}（${act.content.toByteArray(Charsets.UTF_8).size} 字节） · UID ${value.target.packageUid}"
             else -> "工作区 · UID ${value.target.packageUid}"
         }
-        is Binding.Display -> "virtual display ${value.target.displayId} · epoch ${value.target.displayEpoch} · PocketRun UID ${value.target.packageUid}"
+        is Binding.Display -> when (val act = value.action) {
+            is DisplayAction.OpenApp -> "虚拟屏 #${value.target.displayId} · 打开应用 ${act.packageName} · epoch ${value.target.displayEpoch}"
+            DisplayAction.ObserveScreen -> "虚拟屏 #${value.target.displayId} · 读取界面控件与画面 · epoch ${value.target.displayEpoch}"
+            is DisplayAction.AppTap -> "虚拟屏 #${value.target.displayId} · 点击 (${act.x}, ${act.y}) · epoch ${value.target.displayEpoch}"
+            is DisplayAction.AppSwipe -> "虚拟屏 #${value.target.displayId} · 滑动 (${act.x1},${act.y1})→(${act.x2},${act.y2}) · epoch ${value.target.displayEpoch}"
+            is DisplayAction.AppInputText -> "虚拟屏 #${value.target.displayId} · 输入文本（${act.text.length} 字）· epoch ${value.target.displayEpoch}"
+            is DisplayAction.AppPressKey -> "虚拟屏 #${value.target.displayId} · 按下按键 ${act.key} · epoch ${value.target.displayEpoch}"
+            else -> "virtual display ${value.target.displayId} · epoch ${value.target.displayEpoch} · PocketRun UID ${value.target.packageUid}"
+        }
     }
 
     private fun requireUid(uid: Int) {
@@ -813,6 +882,9 @@ class TaskHost private constructor(
         val backendEpoch: String
 
         data class Device(val target: DeviceInfoTarget) : Binding {
+            override val backendEpoch = "app:${target.packageUid}"
+        }
+        data class AppList(val target: DeviceInfoTarget, val query: String?) : Binding {
             override val backendEpoch = "app:${target.packageUid}"
         }
         data class Linux(val target: LinuxTarget, val csv: Path) : Binding {
