@@ -73,7 +73,7 @@ class CommandPipeline : Closeable {
             run.ioExecutor = io
         }
         try {
-            require(timeoutMillis in 1..TIMEOUT_MS) { "管道超时时间无效。" }
+            require(timeoutMillis in 1..MAX_SHELL_TIMEOUT_MS) { "管道超时时间无效。" }
             require(directory.isDirectory && commands.size in 1..2) { "管道工作目录或阶段无效。" }
             validate()
             commands.forEach { require(it.isNotEmpty() && it.size <= 96 && it.all { value -> value.isNotEmpty() && 0.toChar() !in value }) }
@@ -314,5 +314,6 @@ class CommandPipeline : Closeable {
     companion object {
         const val MAX_OUTPUT_BYTES = 64 * 1024
         const val TIMEOUT_MS = 5000L
+        const val MAX_SHELL_TIMEOUT_MS = 15_000L
     }
 }

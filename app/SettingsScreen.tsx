@@ -18,6 +18,39 @@ import NativeWorkspace from './specs/NativePocketRunWorkspace';
 
 type MemoryItem = { id: string; text: string };
 type WorkspaceFileSummary = { path: string; bytes: number };
+type ProtocolType = 'anthropic' | 'openai';
+
+const PRESETS: ReadonlyArray<{
+  label: string;
+  protocol: ProtocolType;
+  endpoint: string;
+  model: string;
+}> = [
+  {
+    label: 'Anthropic',
+    protocol: 'anthropic',
+    endpoint: 'https://api.anthropic.com',
+    model: 'claude-opus-5-5',
+  },
+  {
+    label: 'OpenAI',
+    protocol: 'openai',
+    endpoint: 'https://api.openai.com/v1',
+    model: 'gpt-4o-mini',
+  },
+  {
+    label: 'DeepSeek',
+    protocol: 'openai',
+    endpoint: 'https://api.deepseek.com/v1',
+    model: 'deepseek-chat',
+  },
+  {
+    label: '本地 Debug',
+    protocol: 'anthropic',
+    endpoint: 'http://127.0.0.1:8790',
+    model: 'claude-doubao-seed-2-1-turbo',
+  },
+];
 
 export default function SettingsScreen({
   colors,
@@ -27,6 +60,7 @@ export default function SettingsScreen({
   onOpenLab: () => void;
 }) {
   const [config, setConfig] = useState<ModelConfiguration | null>(null);
+  const [protocol, setProtocol] = useState<ProtocolType>('anthropic');
   const [endpoint, setEndpoint] = useState('https://api.anthropic.com');
   const [model, setModel] = useState('claude-opus-5-5');
   const [apiKey, setApiKey] = useState('');
@@ -52,6 +86,7 @@ export default function SettingsScreen({
       if (!live.current) return;
       if (cfg) {
         setConfig(cfg);
+        setProtocol(cfg.protocol === 'openai' ? 'openai' : 'anthropic');
         setEndpoint(cfg.endpoint);
         setModel(cfg.model);
       }
@@ -92,13 +127,15 @@ export default function SettingsScreen({
     setError(null);
     setNotice(null);
     try {
-      const saved = await NativeTaskHost.saveModelConfiguration(
+      const saved = await NativeTaskHost.saveModelConfigurationWithProtocol(
         endpoint.trim(),
         model.trim(),
         apiKey.trim(),
+        protocol,
       );
       if (!live.current) return;
       setConfig(saved);
+      setProtocol(saved.protocol === 'openai' ? 'openai' : 'anthropic');
       setApiKey('');
       setNotice('模型配置已通过 Android Keystore 加密保存。');
     } catch (failure) {
@@ -243,8 +280,66 @@ export default function SettingsScreen({
       >
         <Text style={[styles.cardTitle, { color: colors.text }]}>大模型配置</Text>
         <Text style={[styles.cardDesc, { color: colors.muted }]}>
-          状态：{config?.hasCredential ? '已加密保存凭据' : '尚未配置'}
+          状态：{config?.hasCredential ? '已加密保存凭据' : '尚未配置'} · 协议：
+          {protocol === 'openai' ? 'OpenAI Chat Completions' : 'Anthropic Messages'}
         </Text>
+        <View style={styles.row}>
+          {(
+            [
+              ['anthropic', 'Anthropic 协议'],
+              ['openai', 'OpenAI 兼容协议'],
+            ] as const
+          ).map(([key, label]) => {
+            const selected = protocol === key;
+            return (
+              <Pressable
+                key={key}
+                accessibilityRole="radio"
+                accessibilityLabel={label}
+                accessibilityState={{ selected }}
+                onPress={() => setProtocol(key)}
+                style={[
+                  styles.protocolBtn,
+                  styles.bordered,
+                  {
+                    backgroundColor: selected ? colors.accentSoft : colors.surfaceAlt,
+                    borderColor: selected ? colors.accent : colors.border,
+                  },
+                ]}
+              >
+                <Text
+                  style={[
+                    styles.protocolText,
+                    { color: selected ? colors.accent : colors.muted },
+                  ]}
+                >
+                  {label}
+                </Text>
+              </Pressable>
+            );
+          })}
+        </View>
+        <View style={styles.presetRow}>
+          {PRESETS.map(preset => (
+            <Pressable
+              key={preset.label}
+              accessibilityRole="button"
+              accessibilityLabel={`预设 ${preset.label}`}
+              onPress={() => {
+                setProtocol(preset.protocol);
+                setEndpoint(preset.endpoint);
+                setModel(preset.model);
+              }}
+              style={[
+                styles.presetChip,
+                styles.bordered,
+                { backgroundColor: colors.surfaceAlt, borderColor: colors.border },
+              ]}
+            >
+              <Text style={[styles.presetText, { color: colors.text }]}>{preset.label}</Text>
+            </Pressable>
+          ))}
+        </View>
         <TextInput
           accessibilityLabel="设置模型地址"
           value={endpoint}
@@ -516,6 +611,22 @@ const styles = StyleSheet.create({
   noteText: { flex: 1, fontSize: 14 },
   deleteChip: { paddingHorizontal: 6, paddingVertical: 4 },
   deleteChipText: { fontSize: 12, fontWeight: '600' },
+  protocolBtn: {
+    flex: 1,
+    minHeight: 40,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 8,
+  },
+  protocolText: { fontSize: 13, fontWeight: '700' },
+  presetRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  presetChip: {
+    borderRadius: 14,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+  },
+  presetText: { fontSize: 12, fontWeight: '600' },
   bordered: { borderWidth: 1 },
   dimmed: { opacity: 0.45 },
 });

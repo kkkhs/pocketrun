@@ -37,10 +37,10 @@ internal class AnthropicModelTransport(
         this(credential, client, if (completeTask) ModelMode.COMPLETE else ModelMode.ORDINARY)
 
     constructor(credential: ModelCredential, completeTask: Boolean = false) :
-        this(credential, buildClient(credential), if (completeTask) ModelMode.COMPLETE else ModelMode.ORDINARY)
+        this(credential, buildClient(credential, if (completeTask) ModelMode.COMPLETE else ModelMode.ORDINARY), if (completeTask) ModelMode.COMPLETE else ModelMode.ORDINARY)
 
     constructor(credential: ModelCredential, mode: ModelMode) :
-        this(credential, buildClient(credential), mode)
+        this(credential, buildClient(credential, mode), mode)
 
     private val worker = Executors.newSingleThreadExecutor { Thread(it, "PocketRun-ModelTransport") }
     private val closed = AtomicBoolean(false)
@@ -119,9 +119,10 @@ internal class AnthropicModelTransport(
     }
 
     companion object {
-        private fun buildClient(credential: ModelCredential): AnthropicClientAsync =
+        private fun buildClient(credential: ModelCredential, mode: ModelMode = ModelMode.ORDINARY): AnthropicClientAsync =
             AnthropicOkHttpClientAsync.builder()
                 .apiKey(credential.apiKey).baseUrl(credential.settings.endpoint)
-                .timeout(Duration.ofSeconds(20)).maxRetries(0).logLevel(LogLevel.OFF).openTelemetry(false).build()
+                .timeout(Duration.ofSeconds(if (mode == ModelMode.CHAT) 60 else 20))
+                .maxRetries(0).logLevel(LogLevel.OFF).openTelemetry(false).build()
     }
 }

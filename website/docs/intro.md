@@ -38,7 +38,7 @@ import figureStyles from '@site/src/css/tutorial-figures.module.css';
 2. **一个本地工作台**：能存放文件、跑命令脚本，甚至在需要时打开一个真正的交互式 Linux 终端。
 3. **一个有刹车的大脑**：能把目标和观测结果交给大模型，让它决定下一步调什么工具；但凡涉及高风险动作，必须停下来等用户在手机上点“同意”。
 
-目前发布的**第 1—13 章**已经完整搭通了底层执行内核、真实大模型循环、可管理的加密跨任务记忆，以及导读里这条“读 CSV → 填虚拟屏 Demo → 原子写 `result.txt`”跨通道任务与中断恢复闭环；而全新的**[第 14 章](chapter-14.md)**则正式把内核装进了像 Gemini 一样的多会话流式对话产品外壳，并开放了通用私有工作区文件读写工具。完整产品演进规划详见[Ditto 功能对照与后续路线](ditto-parity.md)。
+目前发布的**第 1—13 章**完整搭通了底层执行内核、真实大模型循环、可管理的加密跨任务记忆，以及跨通道完整任务与中断恢复闭环；**第 14—15 章**进一步把内核装进了 Gemini 风格的多会话流式对话产品外壳，支持 **Anthropic + OpenAI 双协议**、Markdown 代码块渲染、内置工作区文件编辑器以及受控的 PRoot/Alpine `linux.run_shell` 工具。完整演进路线见[Ditto 功能对照与后续路线](ditto-parity.md)。
 
 ## 全书路线图
 
@@ -84,6 +84,7 @@ import figureStyles from '@site/src/css/tutorial-figures.module.css';
 | 章节 | 核心问题 | 你会解锁的能力 |
 | --- | --- | --- |
 | [第 14 章：把内核装进真正的对话助手产品](chapter-14.md) | 怎样从开发者调试面板变成普通人天天想用的 AI 助手？ | Gemini 风格多会话对话壳、SSE 实时流式输出、加密历史存储、内联手机审批卡片与通用工作区读写工具 |
+| [第 15 章：双协议模型、受控 Shell 与文件编辑器](chapter-15.md) | 怎么兼容 OpenAI/DeepSeek、在聊天里跑 Linux 命令并直接改文件？ | OpenAI + Anthropic 双协议流式适配、手机审批 `linux.run_shell`、内置「文件」编辑器与零依赖 Markdown 渲染 |
 
 :::tip 阅读建议
 - **只想先懂原理**：按第 1 章到第 13 章顺着读下来就行。每章都会用你熟悉的 React / TypeScript 概念做类比，再带你走一遍真实源码，**不装环境也能完全读懂**。想先鸟瞰全局，可以先花 5 分钟看看[系统全景](architecture.md)。

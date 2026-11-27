@@ -121,9 +121,9 @@ stream.subscribe { event ->
 
 第 14 章是 PocketRun 从**“技术教学内核”**跨向**“真正可用的个人 Android AI 助手”**的关键转折点：我们保留了前 13 章全部安全、审批、隔离与可验证底线，同时第一次把它们装进了一个干净、流畅、支持多轮流式对话与通用工作区文件工具的现代产品外壳里。
 
-接下来顺着 [Ditto 功能对照与路线](ditto-parity.md) 继续往前走，两个最令人期待的升级方向已经水到渠成：
-- **第 15 章**：为聊天助手开放受控的 **PRoot / Alpine 通用 Shell 命令工具**（经手机审批执行命令并安全回传有界输出），让它在手机里真正能跑脚本处理数据；
-- **第 16 章**：把虚拟屏通道从固定 Demo 升级为**通用第三方 App 操控 + 多模态观察协议 + 对话页内嵌虚拟屏实时预览**，再配合引导式一键无线 ADB 配对，让它真正成为装在口袋里的全能 AI 助手！
+接下来顺着 [Ditto 功能对照与路线](ditto-parity.md) 继续往前走：
+- **[第 15 章](chapter-15.md)**：接入 **OpenAI + Anthropic 双协议流式适配**、开放经手机审批的 **PRoot/Alpine `linux.run_shell` 命令工具**、新增内置 **「文件」工作区编辑器**与零依赖 **Markdown 渲染**；
+- **第 16 章（规划）**：把虚拟屏通道从固定 Demo 升级为**通用第三方 App 操控 + 多模态观察协议 + 对话页内嵌虚拟屏实时预览**，再配合引导式一键无线 ADB 配对！
 
 - **核心源码入口**：[App.tsx](https://github.com/kkkhs/pocketrun/blob/main/app/App.tsx) · [ChatScreen.tsx](https://github.com/kkkhs/pocketrun/blob/main/app/ChatScreen.tsx) · [SettingsScreen.tsx](https://github.com/kkkhs/pocketrun/blob/main/app/SettingsScreen.tsx) · [ChatEngine.kt](https://github.com/kkkhs/pocketrun/blob/main/app/android/app/src/main/java/io/github/kkkhs/pocketrun/taskhost/ChatEngine.kt) · [ConversationStore.kt](https://github.com/kkkhs/pocketrun/blob/main/app/android/app/src/main/java/io/github/kkkhs/pocketrun/taskhost/ConversationStore.kt)
 - **测试与验证档案**：[实机验收与工程档案](verification-records.md)

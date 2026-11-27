@@ -25,12 +25,13 @@ import AgentLoopPanel from './AgentLoopPanel';
 import MemoryPanel from './MemoryPanel';
 import CompleteTaskPanel from './CompleteTaskPanel';
 import ChatScreen, { type ThemeColors } from './ChatScreen';
+import WorkspaceFilesScreen from './WorkspaceFilesScreen';
 import SettingsScreen from './SettingsScreen';
 import NativePocketRunDevice, {
   type DeviceInfo,
 } from './specs/NativePocketRunDevice';
 
-type TabKey = 'chat' | 'settings' | 'lab';
+type TabKey = 'chat' | 'files' | 'settings' | 'lab';
 
 export default function App() {
   return (
@@ -72,6 +73,7 @@ function PocketRunShell() {
       };
 
   const [tab, setTab] = useState<TabKey>('chat');
+  const [queuedPrompt, setQueuedPrompt] = useState<string | null>(null);
 
   return (
     <View
@@ -96,6 +98,7 @@ function PocketRunShell() {
           {(
             [
               ['chat', '对话'],
+              ['files', '文件'],
               ['settings', '设置'],
               ['lab', '实验室'],
             ] as const
@@ -129,7 +132,20 @@ function PocketRunShell() {
 
       <View style={styles.body}>
         {tab === 'chat' ? (
-          <ChatScreen colors={colors} onOpenSettings={() => setTab('settings')} />
+          <ChatScreen
+            colors={colors}
+            onOpenSettings={() => setTab('settings')}
+            initialPrompt={queuedPrompt}
+            onConsumeInitialPrompt={() => setQueuedPrompt(null)}
+          />
+        ) : tab === 'files' ? (
+          <WorkspaceFilesScreen
+            colors={colors}
+            onAskInChat={prompt => {
+              setQueuedPrompt(prompt);
+              setTab('chat');
+            }}
+          />
         ) : tab === 'settings' ? (
           <SettingsScreen colors={colors} onOpenLab={() => setTab('lab')} />
         ) : (

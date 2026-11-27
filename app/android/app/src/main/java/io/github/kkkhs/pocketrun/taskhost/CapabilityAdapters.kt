@@ -102,6 +102,10 @@ interface TaskCapabilities {
     fun prepareWorkspaceRead(expected: WorkspaceRootTarget, relativePath: String): OwnedExecution = throw UnsupportedOperationException("Workspace read unavailable.")
     fun prepareWorkspaceWrite(expected: WorkspaceRootTarget, relativePath: String, content: String): OwnedExecution =
         throw UnsupportedOperationException("Workspace write unavailable.")
+
+    fun ensureLinuxShellTarget(): LinuxTarget = currentLinuxTarget()
+    fun prepareLinuxShell(expected: LinuxTarget, command: String, timeoutSec: Int): OwnedExecution =
+        throw UnsupportedOperationException("Linux shell execution unavailable.")
 }
 
 sealed interface DisplayAction {
