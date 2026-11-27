@@ -5,6 +5,14 @@ title: 第 14 章：把内核装进真正的对话助手产品
 description: 从 13 个开发者调试面板迈向真正的用户产品：构建 Gemini 风格多会话流式对话界面、独立加密会话存储与通用的私有工作区读写工具。
 ---
 
+import useBaseUrl from '@docusaurus/useBaseUrl';
+import ChatStreamingFlow from './assets/chat-streaming-flow.svg';
+import welcomeImg from './assets/chapter-14-welcome.png';
+import approvalImg from './assets/chapter-14-approval.png';
+import chatDoneImg from './assets/chapter-14-chat-done.png';
+import sessionsImg from './assets/chapter-14-sessions.png';
+import figureStyles from '@site/src/css/tutorial-figures.module.css';
+
 走完第 1—13 章，PocketRun 已经拥有了一颗相当硬核的“执行内核”：无线 ADB、UID 2000 虚拟屏后端、PRoot/Alpine 与 JNI 终端、带手机审批的 `TaskHost`、多步账本、官方大模型 SDK 循环、加密记忆和预写运行日志。
 
 但老实说，如果你把第 13 章的 App 交给一个普通用户，对方打开屏幕看到的是一条竖着排开 13 个测试面板的长页面，满屏都是“初始化工作目录”“读取固定演示 CSV”“刷新完整任务记录”——**它还只是一个开发者实验室，而不是一个真正能用来日常交流的产品。**
@@ -20,20 +28,10 @@ description: 从 13 个开发者调试面板迈向真正的用户产品：构建
 
 这一章没有推翻前 13 章的任何安全边界，而是在 `TaskHost` 和 `SingleTaskContext` 之上架起了一层面向真实对话场景的编排器 **`ChatEngine`** 与持久化仓库 **`ConversationStore`**：
 
-```text
-React Native 产品外壳（App.tsx）
- ├── 对话（ChatScreen）   ──▶ 多会话抽屉、实时流式气泡、内联工具轨迹与审批卡片
- ├── 设置（SettingsScreen）──▶ 模型 Keystore 配置、工作区文件一览、长期记忆管理
- └── 实验室（LabScreen）   ──▶ 完整保留第 1—13 章教学与调试面板
-          │
-          ▼ TurboModule（PocketRunTaskHost）
- App Kotlin（同一普通 App 进程）
- ├── ConversationStore   ──▶ 独立 Keystore 别名与 AAD 域加密保存多段聊天
- ├── ChatEngine          ──▶ 多轮历史装配 + SSE 实时文本增量 + 工具循环
- └── SingleTaskContext + TaskHost（复用第 9—10 章）
-      ├── android.device_info / linux.count_demo_csv / virtual_display
-      └── 新增通用工作区工具：workspace.list_files / read_file / write_file
-```
+<figure style={{margin: '1.25rem 0', maxWidth: 560}}>
+  <ChatStreamingFlow className={`pr-ch14-diagram ${figureStyles.diagram}`} role="img" aria-labelledby="pr-ch14-title" aria-describedby="pr-ch14-desc" style={{display: 'block', width: '100%', height: 'auto'}} />
+  <figcaption>第 14 章架构分层：React Native 对话外壳通过 TurboModule 调用同一普通 App 进程内的 ChatEngine 与独立加密 ConversationStore，底层继续复用 TaskHost 手机审批与普通 App UID 私有工作区。</figcaption>
+</figure>
 
 下面我们顺着四块新代码，看清每一环是怎么设计落地的。
 
@@ -105,6 +103,45 @@ stream.subscribe { event ->
   - 对话流内完整呈现右对齐用户气泡、带折叠式工具执行徽章（`✓ 列出工作区文件 · 共 1 个文件`）的助手卡片、实时流式输出区以及**内联手机审批卡片**。
 - **设置（[`SettingsScreen.tsx`](https://github.com/kkkhs/pocketrun/blob/main/app/SettingsScreen.tsx)）**：集中管理大模型 Keystore 加密配置、查看私有工作区当前文件列表与设备就绪状态、以及快速增删长期偏好记忆。
 - **实验室（`LabScreen`）**：完整保留第 1—13 章的全部逐章演示与调试面板，既方便老读者按章动手练习，也便于在需要无线 ADB 配对或虚拟屏调试时一键直达。
+
+## 实机运行截图与完整操作录屏
+
+下面四张截图与完整录屏实拍于专用 **Android 16（API 36）ARM64 模拟器（`pocketrun-ch1-api36`）**，运行包含第 14—15 章完整代码的 [`main @ 61c851d`](https://github.com/kkkhs/pocketrun/commit/61c851d) Debug 包（因此顶栏同时带有第 15 章新增的「文件」标签与 Markdown 代码块渲染），经本机兼容网关调用 `claude-doubao-seed-2-1-turbo` 跑完真实多步工作区任务：
+
+<div style={{display: 'flex', gap: '1.5rem', flexWrap: 'wrap', margin: '1.25rem 0', alignItems: 'flex-start'}}>
+  <figure style={{margin: 0, flex: '1 1 260px', minWidth: 0, maxWidth: 340}}>
+    <img src={welcomeImg} alt="PocketRun 对话欢迎页，显示顶部产品导航、会话抽屉入口、4 个快捷提问芯片与底部模型信息栏" style={{display: 'block', width: '100%', height: 'auto', borderRadius: 12, border: '1px solid var(--ifm-color-emphasis-300)'}} />
+    <figcaption>默认打开即是干净的「对话」首页，列出 4 条一键快捷提问并自动识别已加密保存的模型配置。</figcaption>
+  </figure>
+  <figure style={{margin: 0, flex: '1 1 260px', minWidth: 0, maxWidth: 340}}>
+    <img src={approvalImg} alt="聊天流中依次完成列出文件与读取 items.csv，并在写入 summary.md 前停在手机内联审批卡片" style={{display: 'block', width: '100%', height: 'auto', borderRadius: 12, border: '1px solid var(--ifm-color-emphasis-300)'}} />
+    <figcaption>模型先自动列出目录、获批读出 <code>items.csv</code>（31 B），在写入 <code>summary.md</code>（212 字节 · UID 10150）前原地弹出手机审批卡。</figcaption>
+  </figure>
+</div>
+
+<div style={{display: 'flex', gap: '1.5rem', flexWrap: 'wrap', margin: '1.25rem 0', alignItems: 'flex-start'}}>
+  <figure style={{margin: 0, flex: '1 1 260px', minWidth: 0, maxWidth: 340}}>
+    <img src={chatDoneImg} alt="三次工具调用全部完成并流式输出带代码块和列表的最终汇总回复" style={{display: 'block', width: '100%', height: 'auto', borderRadius: 12, border: '1px solid var(--ifm-color-emphasis-300)'}} />
+    <figcaption>全部 3 条工作区工具依次留痕，模型流式输出汇总结果（403 output tokens）并持久化至加密会话库。</figcaption>
+  </figure>
+  <figure style={{margin: 0, flex: '1 1 260px', minWidth: 0, maxWidth: 340}}>
+    <img src={sessionsImg} alt="打开历史会话抽屉，展示两段已加密保存在本地的多轮对话与删除入口" style={{display: 'block', width: '100%', height: 'auto', borderRadius: 12, border: '1px solid var(--ifm-color-emphasis-300)'}} />
+    <figcaption>展开「会话」抽屉可随时在多段本地加密对话间切换或删除，重启 App 后记录保持完整。</figcaption>
+  </figure>
+</div>
+
+<figure style={{margin: '1.5rem 0', maxWidth: 380}}>
+  <video
+    controls
+    playsInline
+    preload="metadata"
+    poster={chatDoneImg}
+    style={{display: 'block', width: '100%', height: 'auto', borderRadius: 12, border: '1px solid var(--ifm-color-emphasis-300)', background: '#000'}}
+  >
+    <source src={useBaseUrl('/media/chapter-14-15-demo.mp4')} type="video/mp4" />
+  </video>
+  <figcaption>Android 16 ARM64 实机连续录屏（74.6 秒，无剪辑）：完整演示第 14 章工作区多步对话审批、第 15 章「文件」编辑器打开 <code>summary.md</code> 并一键发往对话、PRoot/Alpine 命令审批执行、多会话抽屉与「设置」页。</figcaption>
+</figure>
 
 ## 动手体验一下
 

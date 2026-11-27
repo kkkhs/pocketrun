@@ -1,0 +1,63 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 560 680" role="img" aria-labelledby="pr-ch15-title pr-ch15-desc" class="pr-ch15-diagram">
+  <title id="pr-ch15-title">第 15 章双协议适配、受控 PRoot Shell 与工作区编辑器架构</title>
+  <desc id="pr-ch15-desc">用户在设置页选择 Anthropic 或 OpenAI 兼容协议后，ModelTransports 工厂按协议创建对应的流式传输器，统一输出标准 Message 给同一套 ChatEngine。对话界面用零依赖 MarkdownView 渲染代码块和列表；工具层复用 TaskHost 审批把关通用文件读写与 PRoot Alpine linux.run_shell，并与独立的文件标签页共享同一私有工作区。</desc>
+  <style>
+    .pr-ch15-diagram { --ink: var(--ifm-font-color-base, #1c1e21); --muted: var(--ifm-color-emphasis-700, #606770); --border: var(--ifm-color-emphasis-300, #dadde1); --panel: var(--ifm-background-surface-color, #fff); --accent: var(--app, #2a78d6); --warm: var(--shell, #eb6834); font-family: system-ui, -apple-system, "Segoe UI", sans-serif; }
+    .pr-ch15-diagram .heading { fill: var(--ink); font-size: 21.5px; font-weight: 650; }
+    .pr-ch15-diagram .body { fill: var(--ink); font-size: 18.5px; }
+    .pr-ch15-diagram .note { fill: var(--muted); font-size: 16px; }
+    .pr-ch15-diagram .card { fill: var(--panel); stroke: var(--border); stroke-width: 1.5; }
+    .pr-ch15-diagram .accent-card { fill: var(--panel); stroke: var(--accent); stroke-width: 2; }
+    .pr-ch15-diagram .warm-card { fill: var(--panel); stroke: var(--warm); stroke-width: 2; }
+    .pr-ch15-diagram .edge { fill: none; stroke: var(--muted); stroke-width: 2; }
+  </style>
+  <defs>
+    <marker id="pr-ch15-arrow" markerWidth="9" markerHeight="8" refX="8" refY="4" orient="auto">
+      <path d="M0 0 9 4 0 8Z" fill="var(--muted)"/>
+    </marker>
+  </defs>
+  <text x="280" y="34" text-anchor="middle" class="heading">双协议流式适配 + 受控 Shell + 工作区协同</text>
+
+  <rect x="30" y="58" width="240" height="104" rx="10" class="accent-card"/>
+  <text x="48" y="90" class="heading">对话（MarkdownView）</text>
+  <text x="48" y="118" class="body">零依赖标题/列表/代码块</text>
+  <text x="48" y="144" class="note">流式增量渲染 · 内联审批卡</text>
+
+  <rect x="290" y="58" width="240" height="104" rx="10" class="accent-card"/>
+  <text x="308" y="90" class="heading">文件 &amp; 设置标签页</text>
+  <text x="308" y="118" class="body">编辑器新建/改/删 + 跳对话</text>
+  <text x="308" y="144" class="note">协议切换 + 4 组快捷预设</text>
+
+  <path d="M150 162 V202" class="edge" marker-end="url(#pr-ch15-arrow)"/>
+  <path d="M410 162 V202" class="edge" marker-end="url(#pr-ch15-arrow)"/>
+
+  <rect x="30" y="202" width="500" height="96" rx="10" class="card"/>
+  <text x="52" y="234" class="heading">统一编排器：ChatEngine → ModelTransports</text>
+  <text x="52" y="262" class="body">一套多轮状态机、60s/65s 超时、取消与响应预算守卫</text>
+  <text x="52" y="286" class="note">按 Keystore 中保存的 protocol 动态路由传输适配器</text>
+
+  <path d="M155 298 V338" class="edge" marker-end="url(#pr-ch15-arrow)"/>
+  <path d="M405 298 V338" class="edge" marker-end="url(#pr-ch15-arrow)"/>
+
+  <rect x="30" y="338" width="238" height="108" rx="10" class="card"/>
+  <text x="48" y="369" class="heading">AnthropicTransport</text>
+  <text x="48" y="396" class="body">官方 Java SDK SSE</text>
+  <text x="48" y="422" class="note">Anthropic Messages 协议</text>
+  <text x="48" y="440" class="note">兼容本机调试网关</text>
+
+  <rect x="292" y="338" width="238" height="108" rx="10" class="card"/>
+  <text x="310" y="369" class="heading">OpenAiModelTransport</text>
+  <text x="310" y="396" class="body">OkHttp + Jackson SSE</text>
+  <text x="310" y="422" class="note">自动拼接 /chat/completions</text>
+  <text x="310" y="440" class="note">还原分片 tool_calls 为 Message</text>
+
+  <path d="M280 446 V488" class="edge" marker-end="url(#pr-ch15-arrow)"/>
+
+  <rect x="30" y="488" width="500" height="132" rx="10" class="warm-card"/>
+  <text x="52" y="520" class="heading">受控本机执行面（TaskHost 强制手机审批）</text>
+  <text x="52" y="550" class="body">• WorkspaceSession：workspaces/demo 原子读写与删除</text>
+  <text x="52" y="578" class="body">• LinuxSession.runShell：PRoot + Alpine 3.22.8（/workspace）</text>
+  <text x="52" y="604" class="note">1–15s 动态超时 · SHA-256 目标绑定 · 8K/4K 输出上限 · cleanupStatus 核验</text>
+
+  <text x="280" y="654" text-anchor="middle" class="note">「文件」编辑器与 PRoot /workspace 映射同一私有目录，人机双向协作。</text>
+</svg>

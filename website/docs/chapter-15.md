@@ -5,6 +5,15 @@ title: 第 15 章：双协议模型、受控 Shell、工作区编辑器与 Markd
 description: 把 PocketRun 推向日常可用产品：接入 OpenAI + Anthropic 双协议流式适配、开放经手机审批的 PRoot/Alpine Shell 工具、内置工作区文件编辑器与零依赖 Markdown 渲染。
 ---
 
+import useBaseUrl from '@docusaurus/useBaseUrl';
+import DualProtocolWorkbench from './assets/dual-protocol-workbench.svg';
+import filesListImg from './assets/chapter-15-files-list.png';
+import filesEditorImg from './assets/chapter-15-files-editor.png';
+import shellApprovalImg from './assets/chapter-15-shell-approval.png';
+import shellDoneImg from './assets/chapter-15-shell-done.png';
+import settingsImg from './assets/chapter-15-settings.png';
+import figureStyles from '@site/src/css/tutorial-figures.module.css';
+
 上一章我们把 PocketRun 装进了 Gemini 风格的多会话对话外壳。但如果你真的把它装到自己手机上试五分钟，马上会撞上四个非常现实的“产品级卡点”：
 
 1. **手头的 API Key 不一定是 Anthropic 协议**：很多人日常用的是 DeepSeek、OpenAI、火山方舟/豆包、OpenRouter 或 Gemini 的 OpenAI 兼容接口（`/v1/chat/completions`），而且慢思考模型经常要思考超过 25 秒。
@@ -20,14 +29,10 @@ description: 把 PocketRun 推向日常可用产品：接入 OpenAI + Anthropic 
 
 正确的架构是**适配器模式**：保持 `ChatEngine` 和 `ModelTransport` 接口纹丝不动，只在传输层新增一个 [`OpenAiModelTransport.kt`](https://github.com/kkkhs/pocketrun/blob/main/app/android/app/src/main/java/io/github/kkkhs/pocketrun/taskhost/OpenAiModelTransport.kt)，直接复用依赖树里现成的 OkHttp 和 Jackson：
 
-```text
-ChatEngine（一套状态机、一套预算与取消逻辑）
-    │  ModelTransport.requestStreaming(history, onTextDelta, completion)
-    ▼
-ModelTransports.create(credential, mode)
- ├── protocol == ANTHROPIC ──▶ AnthropicModelTransport（官方 Java SDK SSE）
- └── protocol == OPENAI    ──▶ OpenAiModelTransport（OkHttp SSE + 协议适配）
-```
+<figure style={{margin: '1.25rem 0', maxWidth: 560}}>
+  <DualProtocolWorkbench className={`pr-ch15-diagram ${figureStyles.diagram}`} role="img" aria-labelledby="pr-ch15-title" aria-describedby="pr-ch15-desc" style={{display: 'block', width: '100%', height: 'auto'}} />
+  <figcaption>第 15 章产品架构：通过 ModelTransports 统一适配 Anthropic 与 OpenAI 两种流式协议，并把受控 PRoot/Alpine Shell、工作区文件编辑器与 Markdown 渲染收进同一套安全闭环。</figcaption>
+</figure>
 
 `OpenAiModelTransport` 在底层默默扛下了四个容易踩坑的细节：
 
@@ -36,7 +41,12 @@ ModelTransports.create(credential, mode)
 3. **统一收敛回 `Message` 模型**：整轮流结束后，把拼好的文本、`tool_use` 块、`stop_reason` 和 Token 用量转换成统一的 `Message` 对象交回 `ChatEngine`——上层的整回合校验、工具审批和历史回放一行代码都不用改！
 4. **放宽合理超时 + 保持安全红线**：对话模式读超时放宽到 **60 秒**（控制器单回合等待 65 秒），从容应对慢思考模型；同时依然死守 Release 仅限 HTTPS、禁用 HTTP 自动重定向（防止 API Key 泄露给跳转主机）、512 KiB 流预算以及 `call.cancel()` 秒级取消。
 
-在 `ModelCredentialStore` 里，旧版配置文件自动向后兼容为 `anthropic`，并在「设置」页提供了 **Anthropic / OpenAI 兼容** 协议切换和 4 个一键预设芯片（Anthropic、OpenAI、DeepSeek、本地 Debug）。
+在 `ModelCredentialStore` 里，旧版配置文件自动向后兼容为 `anthropic`，并在「设置」页提供了 **Anthropic / OpenAI 兼容** 协议切换和 4 个一键预设芯片（Anthropic、OpenAI、DeepSeek、本地 Debug）：
+
+<figure style={{margin: '1.25rem 0', maxWidth: 340}}>
+  <img src={settingsImg} alt="设置页实机截图，展示 Anthropic 与 OpenAI 兼容协议切换、4 个一键预设芯片、加密凭据状态与私有工作区文件清单" style={{display: 'block', width: '100%', height: 'auto', borderRadius: 12, border: '1px solid var(--ifm-color-emphasis-300)'}} />
+  <figcaption>Android 16 实机「设置」页：支持协议切换与一键预设，API Key 加密保存后输入框保持留空脱敏，下方实时显示 App UID、Linux 就绪态与工作区文件清单。</figcaption>
+</figure>
 
 ## 2. 把 PRoot/Alpine 接进对话：受控 `linux.run_shell`
 
@@ -65,6 +75,19 @@ PocketRunTool.LINUX_RUN_SHELL -> {
 第 9—13 章的默认工具执行超时是 5 秒；如果用户在聊天里批准了一条 `timeout_sec = 10` 的 Shell 命令，沿用 5 秒死线会在命令跑一半时误杀它。因此 `TaskHost` 只对 `RunLinuxShell` 动态把执行窗口扩为 `timeoutSec + 3` 秒，既不破坏旧章节的 5 秒契约，又能让批准的命令完整收尾和清理。
 :::
 
+下面两张截图来自 Android 16 ARM64 实机运行：模型提出调用 `linux.run_shell` 查看 `/etc/alpine-release` 与 `/workspace`，先在聊天气泡内停在琥珀色确认卡，点击「允许执行」后 PRoot/Alpine 真正跑出 `3.22.8` 与文件列表并返回 `退出码 0 (done)`：
+
+<div style={{display: 'flex', gap: '1.5rem', flexWrap: 'wrap', margin: '1.25rem 0', alignItems: 'flex-start'}}>
+  <figure style={{margin: 0, flex: '1 1 260px', minWidth: 0, maxWidth: 340}}>
+    <img src={shellApprovalImg} alt="聊天流弹出 PRoot/Alpine Shell 手机审批卡，显示具体命令、10 秒超时与 UID 10150" style={{display: 'block', width: '100%', height: 'auto', borderRadius: 12, border: '1px solid var(--ifm-color-emphasis-300)'}} />
+    <figcaption>每次 <code>linux.run_shell</code> 调用都会把完整命令、工作目录、超时秒数与 App UID 展示在审批卡里，批准前绝不拉起 PRoot。</figcaption>
+  </figure>
+  <figure style={{margin: 0, flex: '1 1 260px', minWidth: 0, maxWidth: 340}}>
+    <img src={shellDoneImg} alt="PRoot/Alpine 命令执行成功返回退出码 0，界面渲染出 Alpine 3.22.8 代码块与工作区 3 个文件的权限信息" style={{display: 'block', width: '100%', height: 'auto', borderRadius: 12, border: '1px solid var(--ifm-color-emphasis-300)'}} />
+    <figcaption>实机执行完成（<code>退出码 0 (done)</code>）：准确读出内置 Alpine 版本 <code>3.22.8</code>、<code>/workspace</code> 下的 3 个文件以及目录属主 <code>UID 10150</code>。</figcaption>
+  </figure>
+</div>
+
 ## 3. 内置工作区文件管理器与编辑器：`WorkspaceFilesScreen`
 
 从这一章开始，顶部导航栏升级为四个真正像产品的标签：**`对话` | `文件` | `设置` | `实验室`**。
@@ -75,6 +98,17 @@ PocketRunTool.LINUX_RUN_SHELL -> {
 - **内置等宽编辑器**：点开任意 UTF-8 文本文件直接查看和修改，顶部实时显示 UTF-8 字节数（上限 12 KiB），保存时走 `WorkspaceSession.writeTextFile()` 的原子临时文件 + `fsync` + 写后读回校验；删除走 `deleteTextFile()` 且经 `CanonicalChildPath` 严格拒绝越界路径和符号链接。
 - **一键联动对话**：编辑器底部提供 **「在对话中处理此文件」** 按钮，点一下直接切回「对话」页并把提示词预填进输入框，让助手读文件或用 PRoot 命令加工它！
 
+<div style={{display: 'flex', gap: '1.5rem', flexWrap: 'wrap', margin: '1.25rem 0', alignItems: 'flex-start'}}>
+  <figure style={{margin: 0, flex: '1 1 260px', minWidth: 0, maxWidth: 340}}>
+    <img src={filesListImg} alt="文件标签页列出私有工作区中的 items.csv、result.txt 与模型刚写入的 summary.md" style={{display: 'block', width: '100%', height: 'auto', borderRadius: 12, border: '1px solid var(--ifm-color-emphasis-300)'}} />
+    <figcaption>切到「文件」页，模型刚在对话里创建的 <code>summary.md</code>（212 B）已立刻同步显示在列表里。</figcaption>
+  </figure>
+  <figure style={{margin: 0, flex: '1 1 260px', minWidth: 0, maxWidth: 340}}>
+    <img src={filesEditorImg} alt="内置文件编辑器打开 summary.md，顶部显示 UTF-8 字节计数，底部提供在对话中处理此文件与删除按钮" style={{display: 'block', width: '100%', height: 'auto', borderRadius: 12, border: '1px solid var(--ifm-color-emphasis-300)'}} />
+    <figcaption>点开 <code>summary.md</code> 可直接编辑并原子保存（实时提示 <code>212 / 12288 字节</code>），或一键发回「对话」继续处理。</figcaption>
+  </figure>
+</div>
+
 ## 4. 零依赖 Markdown 与代码块渲染：`MarkdownView`
 
 为了让助手的回答真正具备 Gemini / Claude 级别的阅读质感，我们没有引入沉重的 WebView 或复杂原生依赖，而是用 200 行干净的 TypeScript 写出了 [`MarkdownView.tsx`](https://github.com/kkkhs/pocketrun/blob/main/app/MarkdownView.tsx)：
@@ -83,6 +117,24 @@ PocketRunTool.LINUX_RUN_SHELL -> {
 - 支持行内 **`**加粗**`** 与 **`` `行内代码` ``** 高亮；
 - 支持围栏代码块（```` ```kotlin ... ``` ````），自带语言角标头栏、独立底色卡片、等宽字体与横向滚动；
 - **流式友好**：就算模型正在流式输出代码块、结束的 ```` ``` ```` 还没到达，也能立刻优雅地渲染为代码块，不会把页面闪乱！
+- **实机边界观察**：正如上方 PRoot 输出截图中看到的，当前轻量解析器尚未单独绘制 GFM Markdown 表格，遇到 `| 列 |` 语法时会安全降级为带行内代码高亮的可读文本行，不会丢内容或撑破布局（后续可按需补表格视图）。
+
+## 实机完整操作录屏
+
+下面这段 **74.6 秒无剪辑 Android 16 ARM64 实机录屏** 完整串联了第 14—15 章的全部交互：从空白对话页发起工作区读写审批 → 切入「文件」页打开刚生成的 `summary.md` 并点击「在对话中处理此文件」跳回对话 → 新建第二段会话并批准执行 `linux.run_shell` 查看 Alpine `3.22.8` → 核查多会话抽屉与「设置」双协议页：
+
+<figure style={{margin: '1.25rem 0', maxWidth: 380}}>
+  <video
+    controls
+    playsInline
+    preload="metadata"
+    poster={shellDoneImg}
+    style={{display: 'block', width: '100%', height: 'auto', borderRadius: 12, border: '1px solid var(--ifm-color-emphasis-300)', background: '#000'}}
+  >
+    <source src={useBaseUrl('/media/chapter-14-15-demo.mp4')} type="video/mp4" />
+  </video>
+  <figcaption>Android 16（API 36 ARM64）实机演示录屏（<code>main @ 61c851d</code> Debug 包 + 本机兼容网关 <code>claude-doubao-seed-2-1-turbo</code>）。OpenAI 兼容协议的流式 SSE 与工具回放另由 <code>OpenAiModelTransportTest</code> 本地回环测试核验，尚未直连商业远端 HTTPS API。</figcaption>
+</figure>
 
 ## 动手试一遍
 
